@@ -116,17 +116,22 @@ const CONFIG = {
   },
 
   // Velocidad horizontal en "anchos de pantalla por segundo"
-  speed: { start: 0.50, max: 1.20, rampDistance: 3500 },
+  // Inspirado en el Dinosaurio de Google: arranque accesible y aceleración continua
+  speed: {
+    start: 0.32,          // arranca un poco más lento (antes 0.50) para ritmo cómodo al inicio
+    max: 1.15,            // velocidad máxima desafiante
+    rampDistance: 4500    // distancia a la que se escala progresivamente la velocidad
+  },
 
   // Spawner (huecos en SEGUNDOS => la dificultad es justa en cualquier resolución)
   spawn: {
-    firstDelayFrac: 0.35,                 // primer obstáculo a 0.35 W de distancia extra
-    gapMin: [1.30, 0.85],                 // [inicio, final] de la rampa
-    gapMax: [2.20, 1.40],
-    horseExtraGap: 0.25,
-    horseChance: [0.25, 0.45],
-    doubleBookChance: [0.10, 0.35],
-    safeObstacles: 2                      // los primeros 2 son siempre libros
+    firstDelayFrac: 0.50,                 // margen inicial cómodo para que el jugador se acomode
+    gapMin: [1.45, 0.85],                 // huecos iniciales más holgados
+    gapMax: [2.35, 1.35],
+    horseExtraGap: 0.30,
+    horseChance: [0.15, 0.50],            // al inicio casi puros libros simples, luego más caballos
+    doubleBookChance: [0.05, 0.35],       // libros dobles aparecen más adelante
+    safeObstacles: 3                      // los primeros 3 obstáculos son siempre libros simples
   },
 
   points: { toast: 100, tortilla: 200 },
@@ -210,6 +215,7 @@ const Sfx = {
       case 'doubleJump': this.tone(480, 980, 0.18); this.tone(720, 1200, 0.12, 'square', 0.05, 0.06); break;
       case 'pickup':     this.tone(880, 1320, 0.09, 'triangle', 0.1); this.tone(1320, 1760, 0.12, 'triangle', 0.1, 0.08); break;
       case 'hit':        this.tone(220, 40, 0.4, 'sawtooth', 0.14); break;
+      case 'milestone':  this.tone(660, 660, 0.05, 'square', 0.08); this.tone(880, 880, 0.08, 'square', 0.08, 0.07); break;
     }
   }
 };
@@ -460,7 +466,8 @@ const world = {
   dist: 0, bonus: 0, speed: 0, p: 0, time: 0,
   spawnDist: 0, spawned: 0,
   score: 0, newRecord: false,
-  deadAt: 0, deadT: 0, pausedAt: 0
+  deadAt: 0, deadT: 0, pausedAt: 0,
+  milestoneT: 0
 };
 
 function gateDims() {
@@ -479,6 +486,7 @@ function resetRun() {
   world.popups.length = 0;
   world.groundScroll = 0;
   world.dist = 0; world.bonus = 0; world.p = 0; world.time = 0; world.score = 0;
+  world.milestoneT = 0;
   world.speed = W * CONFIG.speed.start;
   world.spawnDist = W * CONFIG.spawn.firstDelayFrac;
   world.spawned = 0;
@@ -721,7 +729,16 @@ function update(dt) {
 
   world.groundScroll += dx;
   world.dist += (world.speed / W) * 100 * dt;
+
+  const prev100 = Math.floor(world.score / 100);
   world.score = Math.floor(world.dist / 5) + world.bonus;
+  const new100 = Math.floor(world.score / 100);
+  if (new100 > prev100 && world.score >= 100) {
+    Sfx.play('milestone');
+    world.milestoneT = 1.0;
+  }
+  if (world.milestoneT > 0) world.milestoneT -= dt;
+
   world.gateX -= dx;
 
   // --- Héroe ---
@@ -789,7 +806,7 @@ function heroSprite() {
   }
   // 5) aterrizaje: vuelve al frame agachado
   if (hero.landT > 0) return set.jumpTakeoff;
-  const frameDur = lerp(0.14, 0.08, world.p);
+  const frameDur = lerp(0.18, 0.08, world.p);
   const frames = set.run;
   return frames && frames.length ? frames[Math.floor(hero.animT / frameDur) % frames.length] : set.idle;
 }
@@ -878,7 +895,11 @@ function drawHUD() {
   const size = clamp(U * 0.2, 14, 28);
   const y = safeTop + 14 + size / 2;
   const m = 14;
-  drawText('PUNTOS ' + pad(world.score), m, y, size, { align: 'left' });
+  const isMilestone = world.milestoneT > 0 && Math.floor(world.milestoneT * 6) % 2 === 0;
+  drawText('PUNTOS ' + pad(world.score), m, y, size, {
+    align: 'left',
+    color: isMilestone ? '#ffd34d' : '#fff'
+  });
   drawText('RÉCORD ' + pad(Math.max(hiScore, world.score)), W - m, y, size,
            { align: 'right', color: '#ffd34d' });
 }
