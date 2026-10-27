@@ -31,28 +31,29 @@ const ASSETS = {
   },
 
   // Personajes disponibles (se elige en la pantalla de inicio)
-  //   idle      : parado (también se usa de referencia de escala)
-  //   run       : 2 frames de carrera (se alternan)
-  //   jumpPrep  : agachado (despegue / aterrizaje)
-  //   jumpUp    : subiendo
-  //   jumpTop   : apex / cayendo
-  //   jumpTuck  : piernas recogidas (inicio del doble salto)
+  //   idle        : parado (también se usa de referencia de escala)
+  //   run         : 2 frames de carrera (se alternan)
+  // Secuencia del salto:  [1] despegue -> [2] subida -> [3] apex -> [4] caída -> [1] aterrizaje
+  //   jumpTakeoff : 1) agachado (despegue y aterrizaje)
+  //   jumpRise    : 2) subiendo
+  //   jumpApex    : 3) punto más alto
+  //   jumpFall    : 4) cayendo
   characters: {
     chica: {
-      idle:     'ASSETS/chicaquieta.png',
-      run:      ['ASSETS/chicacorreder.png', 'ASSETS/chicacorreizq.png'],
-      jumpPrep: 'ASSETS/chicasalto1.png',
-      jumpUp:   'ASSETS/chicasalto2.png',
-      jumpTop:  'ASSETS/chicasalto3.png',
-      jumpTuck: 'ASSETS/chicasalto.png'
+      idle:        'ASSETS/chicaquieta.png',
+      run:         ['ASSETS/chicacorreder.png', 'ASSETS/chicacorreizq.png'],
+      jumpTakeoff: 'ASSETS/chicasalto.png',
+      jumpRise:    'ASSETS/chicasalto1.png',
+      jumpApex:    'ASSETS/chicasalto2.png',
+      jumpFall:    'ASSETS/chicasalto3.png'
     },
     chico: {
-      idle:     'ASSETS/chicoquieto.png',
-      run:      ['ASSETS/chicocorreder.png', 'ASSETS/chicocorreizq.png'],
-      jumpPrep: 'ASSETS/chicosalto1.png',
-      jumpUp:   'ASSETS/chicosalto2.png',
-      jumpTop:  'ASSETS/chicosalto3.png',
-      jumpTuck: 'ASSETS/chicosalto.png'
+      idle:        'ASSETS/chicoquieto.png',
+      run:         ['ASSETS/chicocorreder.png', 'ASSETS/chicocorreizq.png'],
+      jumpTakeoff: 'ASSETS/chicosalto.png',
+      jumpRise:    'ASSETS/chicosalto1.png',
+      jumpApex:    'ASSETS/chicosalto2.png',
+      jumpFall:    'ASSETS/chicosalto3.png'
     }
   },
 
@@ -615,16 +616,22 @@ function update(dt) {
 /* =============================================================================
  * 6) RENDER
  * ============================================================================= */
+const JUMP_APEX_BAND = 1.8;   // |vy| (U/s) por debajo del cual se muestra el frame de apex
+
 function heroSprite() {
   const set = IMG.chars[character];
   if (!set) return null;
   if (state === 'menu' || state === 'loading') return set.idle;
   if (!hero.grounded) {
-    if (hero.jumps === 2 && hero.sinceDouble < 0.28) return set.jumpTuck;
-    if (hero.sinceJump < 0.06) return set.jumpPrep;
-    return hero.vy > 1 ? set.jumpUp : set.jumpTop;
+    // 1) despegue agachado (también al iniciar el doble salto)
+    if (hero.sinceJump < 0.07 || (hero.jumps === 2 && hero.sinceDouble < 0.08)) return set.jumpTakeoff;
+    // 2) subiendo  3) apex (velocidad vertical cercana a 0)  4) cayendo
+    if (hero.vy > JUMP_APEX_BAND) return set.jumpRise;
+    if (hero.vy >= -JUMP_APEX_BAND) return set.jumpApex;
+    return set.jumpFall;
   }
-  if (hero.landT > 0) return set.jumpPrep;
+  // 5) aterrizaje: vuelve al frame agachado
+  if (hero.landT > 0) return set.jumpTakeoff;
   const frameDur = lerp(0.14, 0.08, world.p);
   const frames = set.run;
   return frames && frames.length ? frames[Math.floor(hero.animT / frameDur) % frames.length] : set.idle;
