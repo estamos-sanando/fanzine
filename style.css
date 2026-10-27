@@ -186,6 +186,33 @@ img { -webkit-user-drag: none; user-select: none; pointer-events: none; }
 }
 
 .overlay__hint { margin: 0; font-size: 13px; color: rgba(246, 243, 234, .85); }
+
+/* Tabla de puntajes estilo arcade */
+.scores { width: min(78vw, 260px); margin-top: 2px; }
+.scores[hidden] { display: none; }
+.scores__title {
+  margin: 0 0 6px;
+  font-size: 12px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.scores__list { list-style: none; margin: 0; padding: 0; font-size: 14px; font-weight: 700; }
+.scores__list li {
+  display: grid;
+  grid-template-columns: 2.2em 1fr auto;
+  gap: 6px;
+  padding: 2px 0;
+  text-align: left;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, .7);
+}
+.scores__list .rank { opacity: .65; }
+.scores__list .name { letter-spacing: .18em; }
+.scores__list .pts  { font-variant-numeric: tabular-nums; }
+.scores__list li:nth-child(1) { color: #ffd34d; }
+.scores__list li:nth-child(2) { color: #d9dee8; }
+.scores__list li:nth-child(3) { color: #e0a070; }
+
 .overlay__hint b { color: var(--accent); }
 .overlay__hint--small { font-size: 11px; opacity: .6; }
 
@@ -207,6 +234,7 @@ img { -webkit-user-drag: none; user-select: none; pointer-events: none; }
   .picker__btn img { height: 48px; }
   .overlay__start { padding: 9px 20px; font-size: 14px; }
   .overlay__hint--small { display: none; }
+  .scores { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

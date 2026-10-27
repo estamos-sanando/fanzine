@@ -75,7 +75,10 @@ const ASSETS = {
  * ============================================================================= */
 const CONFIG = {
   debug: /[?&]debug\b/.test(location.search),   // ?debug muestra hitboxes
-  storageHi:   'fanzine_runner_hi',
+  storageScores:   'fanzine_runner_scores',     // tabla de puntajes (top 10)
+  storageInitials: 'fanzine_runner_initials',   // últimas iniciales usadas
+  maxScores: 10,
+  initialsLength: 3,
   storageChar: 'fanzine_runner_char',
   defaultCharacter: 'chica',
 
@@ -147,7 +150,9 @@ const dom = {
   label:   $('start-label'),
   toast:   $('toast'),
   probe:   $('safe-probe'),
-  pickers: Array.from(document.querySelectorAll('.picker__btn'))
+  pickers: Array.from(document.querySelectorAll('.picker__btn')),
+  scoresBox:  $('hiscores-box'),
+  scoresList: $('hiscores')
 };
 const ctx = dom.canvas.getContext('2d', { alpha: true });
 
@@ -353,11 +358,90 @@ function buildGroundTile() {
 /* =============================================================================
  * 5) ESTADO, ENTRADAS, FÍSICA, SPAWNER, COLISIONES
  * ============================================================================= */
-let state = 'loading';          // loading | menu | running | paused | dead
+let state = 'loading';          // loading | menu | running | paused | entry | dead
 const savedCharacter = storageGet(CONFIG.storageChar, '');
 let character = ASSETS.characters[savedCharacter] ? savedCharacter : CONFIG.defaultCharacter;
 
-let hiScore = parseInt(storageGet(CONFIG.storageHi, '0'), 10) || 0;
+/* ---------- Tabla de puntajes estilo arcade (persistente en localStorage) ---------- */
+const NAME_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+const cleanName = (s) =>
+  String(s || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, CONFIG.initialsLength)
+    .padEnd(CONFIG.initialsLength, 'A');
+
+const DEFAULT_SCORES = [
+  { name: 'UNL', score: 500 },
+  { name: 'MAT', score: 350 },
+  { name: 'FAN', score: 200 },
+  { name: 'RUN', score: 100 },
+  { name: 'BOY', score: 50 }
+];
+
+const Scores = {
+  list: [],                                   // [{ name, score }] ordenado de mayor a menor
+  load() {
+    try {
+      const raw = JSON.parse(storageGet(CONFIG.storageScores, '[]'));
+      this.list = (Array.isArray(raw) ? raw : [])
+        .filter((e) => e && Number.isFinite(e.score) && e.score > 0)
+        .map((e) => ({ name: cleanName(e.name), score: Math.floor(e.score) }))
+        .sort((a, b) => b.score - a.score)
+        .slice(0, CONFIG.maxScores);
+    } catch (_) { this.list = []; }
+
+    // Migración retrocompatible o tabla arcade clásica inicial
+    if (this.list.length === 0) {
+      const oldHi = parseInt(storageGet('fanzine_runner_hi', '0'), 10) || 0;
+      if (oldHi > 0) {
+        this.list = [{ name: 'AAA', score: oldHi }, ...DEFAULT_SCORES.slice(1)];
+      } else {
+        this.list = DEFAULT_SCORES.map((e) => ({ ...e }));
+      }
+      this.save();
+    }
+  },
+  save() { storageSet(CONFIG.storageScores, JSON.stringify(this.list)); },
+  best() { return this.list.length ? this.list[0].score : 0; },
+  qualifies(score) {
+    return score > 0 && (this.list.length < CONFIG.maxScores ||
+                         score > this.list[this.list.length - 1].score);
+  },
+  rankFor(score) {                            // puesto (1..n) que ocuparía; empates van abajo
+    let i = 0;
+    while (i < this.list.length && this.list[i].score >= score) i++;
+    return i + 1;
+  },
+  add(name, score) {
+    const rank = this.rankFor(score);
+    this.list.splice(rank - 1, 0, { name: cleanName(name), score: Math.floor(score) });
+    this.list.length = Math.min(this.list.length, CONFIG.maxScores);
+    this.save();
+    return rank;
+  }
+};
+Scores.load();
+
+let hiScore = Scores.best();
+let initials = cleanName(storageGet(CONFIG.storageInitials, 'AAA'));
+
+// Estado de la pantalla de ingreso de iniciales
+const entryUI = { letters: initials.split(''), slot: 0, rank: 1, hits: [] };
+
+/* Lista de mejores puntajes en la pantalla de inicio (DOM) */
+function renderOverlayScores() {
+  if (!dom.scoresList) return;
+  dom.scoresList.textContent = '';
+  Scores.list.slice(0, 5).forEach((e, i) => {
+    const li = document.createElement('li');
+    [(i + 1) + '.', e.name, pad(e.score)].forEach((txt, j) => {
+      const s = document.createElement('span');
+      s.className = ['rank', 'name', 'pts'][j];
+      s.textContent = txt;
+      li.appendChild(s);
+    });
+    dom.scoresList.appendChild(li);
+  });
+  dom.scoresBox.hidden = Scores.list.length === 0;
+}
 
 const P = CONFIG.physics;
 const GRAV = P.gravity;
@@ -467,15 +551,84 @@ function onPress() {
   }
 }
 
+/* ---------- Ingreso de iniciales (arcade) ---------- */
+const ENTRY_READY_AT = 0.55;                    // s: el panel aparece tras el golpe
+
+function entryBlip() { Sfx.tone(700, 700, 0.04, 'square', 0.05); }
+
+function cycleLetter(i, dir) {
+  const idx = NAME_CHARS.indexOf(entryUI.letters[i]);
+  entryUI.letters[i] = NAME_CHARS[(idx + dir + NAME_CHARS.length) % NAME_CHARS.length];
+  entryUI.slot = i;
+  entryBlip();
+}
+
+function confirmEntry() {
+  initials = entryUI.letters.join('');
+  storageSet(CONFIG.storageInitials, initials);
+  world.addedRank = Scores.add(initials, world.score);
+  hiScore = Scores.best();
+  renderOverlayScores();
+  entryUI.hits = [];
+  state = 'dead';
+  world.deadAt = performance.now();             // evita reinicio accidental con el mismo toque
+  Sfx.play('pickup');
+}
+
+function handleEntryPointer(clientX, clientY) {
+  if (world.deadT < ENTRY_READY_AT) return;
+  const rect = dom.canvas.getBoundingClientRect();
+  const x = clientX - rect.left;
+  const y = clientY - rect.top;
+  for (const h of entryUI.hits) {
+    if (x < h.x || x > h.x + h.w || y < h.y || y > h.y + h.h) continue;
+    if (h.type === 'up') cycleLetter(h.i, 1);
+    else if (h.type === 'down') cycleLetter(h.i, -1);
+    else if (h.type === 'slot') { entryUI.slot = h.i; entryBlip(); }
+    else if (h.type === 'ok') confirmEntry();
+    return;
+  }
+}
+
+function handleEntryKey(e) {
+  if (world.deadT < ENTRY_READY_AT) return;
+  const last = CONFIG.initialsLength - 1;
+  if (/^[a-zA-Z]$/.test(e.key)) {
+    e.preventDefault();
+    entryUI.letters[entryUI.slot] = e.key.toUpperCase();
+    entryUI.slot = Math.min(entryUI.slot + 1, last);
+    entryBlip();
+  } else if (e.key === 'Backspace') {
+    e.preventDefault();
+    entryUI.slot = Math.max(entryUI.slot - 1, 0);
+  } else if (e.key === 'ArrowLeft') {
+    e.preventDefault(); entryUI.slot = Math.max(entryUI.slot - 1, 0);
+  } else if (e.key === 'ArrowRight') {
+    e.preventDefault(); entryUI.slot = Math.min(entryUI.slot + 1, last);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault(); cycleLetter(entryUI.slot, 1);
+  } else if (e.key === 'ArrowDown') {
+    e.preventDefault(); cycleLetter(entryUI.slot, -1);
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    if (!e.repeat) confirmEntry();
+  } else if (e.key === ' ') {
+    e.preventDefault();
+  }
+}
+
 window.addEventListener('pointerdown', (e) => {
   if (state === 'menu' || state === 'loading') return;   // el overlay maneja el inicio
   e.preventDefault();
+  if (state === 'entry') { handleEntryPointer(e.clientX, e.clientY); return; }
   onPress();
 }, { passive: false });
 
 window.addEventListener('keydown', (e) => {
+  if (state === 'entry') { handleEntryKey(e); return; }
   const isJump = e.code === 'Space' || e.code === 'ArrowUp' || e.key === ' ' || e.key === 'ArrowUp';
-  if (!isJump) return;
+  const isEnter = e.key === 'Enter' && (state === 'dead' || state === 'menu');
+  if (!isJump && !isEnter) return;
   e.preventDefault();
   if (e.repeat) return;
   if (state === 'menu') { startFromOverlay(); return; }
@@ -548,10 +701,14 @@ function die() {
   world.deadAt = performance.now();
   world.deadT = 0;
   Sfx.play('hit');
-  if (world.score > hiScore) {
-    hiScore = world.score;
-    world.newRecord = true;
-    storageSet(CONFIG.storageHi, hiScore);
+  world.newRecord = world.score > Scores.best();
+  world.addedRank = 0;
+  entryUI.hits = [];
+  if (Scores.qualifies(world.score)) {         // entra en el top 10 -> pide iniciales
+    state = 'entry';
+    entryUI.letters = initials.split('');
+    entryUI.slot = 0;
+    entryUI.rank = Scores.rankFor(world.score);
   }
 }
 
@@ -737,6 +894,129 @@ function drawPanel(lines) {
   }
 }
 
+function rrect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function drawTriangle(cx, cy, size, up, color) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  const d = up ? -1 : 1;
+  ctx.moveTo(cx, cy + d * size * 0.6);
+  ctx.lineTo(cx - size, cy - d * size * 0.5);
+  ctx.lineTo(cx + size, cy - d * size * 0.5);
+  ctx.closePath();
+  ctx.fill();
+}
+
+/* Pantalla de ingreso de iniciales: ▲/▼ cambian la letra, tocar la casilla la selecciona */
+function drawEntryPanel(blink) {
+  ctx.fillStyle = 'rgba(6, 8, 16, 0.74)';
+  ctx.fillRect(0, 0, W, H);
+
+  const n = CONFIG.initialsLength;
+  const f = clamp(Math.min(W * 0.06, H * 0.045), 12, 30);
+  const slot = f * 2.6, gap = f * 0.7;
+  const arrowH = Math.max(f * 2, 40);
+  const btnH = f * 2.4, btnW = Math.max(f * 8, 130);
+  const titleH = f * 1.9, lineH = f * 1.35;
+  const total = titleH + lineH * 2 + arrowH * 2 + slot + f * 0.5 + btnH + f * 1.4;
+  let y = Math.max(safeTop + 8, (H - total) / 2);
+  const hits = [];
+
+  drawText('¡NUEVO PUNTAJE!', W / 2, y + titleH / 2, f * 1.5, { color: '#ffd34d', alpha: blink ? 1 : 0.75 });
+  y += titleH;
+  drawText('PUNTOS ' + pad(world.score), W / 2, y + lineH / 2, f);
+  y += lineH;
+  drawText('PUESTO #' + entryUI.rank, W / 2, y + lineH / 2, f * 0.9, { color: '#7fe08a' });
+  y += lineH;
+
+  const x0 = (W - (n * slot + (n - 1) * gap)) / 2;
+  const arrowsY = [y, y + arrowH + slot];
+  for (let i = 0; i < n; i++) {
+    const x = x0 + i * (slot + gap), cx = x + slot / 2;
+    const active = i === entryUI.slot;
+    const col = active ? '#ffd34d' : 'rgba(255,255,255,0.8)';
+
+    drawTriangle(cx, arrowsY[0] + arrowH / 2, f * 0.7, true, col);
+    hits.push({ type: 'up', i, x, y: arrowsY[0], w: slot, h: arrowH });
+
+    const by = y + arrowH;
+    rrect(x, by, slot, slot, f * 0.4);
+    ctx.fillStyle = active ? 'rgba(255, 211, 77, 0.18)' : 'rgba(255,255,255,0.10)';
+    ctx.fill();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = active ? (blink ? '#ffd34d' : 'rgba(255,211,77,0.45)') : 'rgba(255,255,255,0.35)';
+    ctx.stroke();
+    drawText(entryUI.letters[i], cx, by + slot / 2 + slot * 0.04, slot * 0.72, { color: active ? '#ffd34d' : '#fff' });
+    hits.push({ type: 'slot', i, x, y: by, w: slot, h: slot });
+
+    drawTriangle(cx, arrowsY[1] + arrowH / 2, f * 0.7, false, col);
+    hits.push({ type: 'down', i, x, y: arrowsY[1], w: slot, h: arrowH });
+  }
+  y += arrowH * 2 + slot + f * 0.5;
+
+  const bx = (W - btnW) / 2;
+  const grad = ctx.createLinearGradient(0, y, 0, y + btnH);
+  grad.addColorStop(0, '#ffe58a'); grad.addColorStop(1, '#ffb82e');
+  rrect(bx, y, btnW, btnH, btnH / 2);
+  ctx.fillStyle = grad;
+  ctx.fill();
+  drawText('LISTO', W / 2, y + btnH / 2 + 1, f * 1.1, { color: '#1a1405', stroke: 'rgba(0,0,0,0)' });
+  hits.push({ type: 'ok', x: bx, y, w: btnW, h: btnH });
+  y += btnH;
+  drawText('Elegí tus iniciales', W / 2, y + f * 0.9, f * 0.7, { alpha: 0.7, weight: 600 });
+
+  entryUI.hits = hits;
+}
+
+/* Game Over con ranking (top 5/8 según alto de pantalla) */
+function drawDeadPanel(blink) {
+  ctx.fillStyle = 'rgba(6, 8, 16, 0.62)';
+  ctx.fillRect(0, 0, W, H);
+
+  const f = clamp(Math.min(W * 0.05, H * 0.042), 11, 28);
+  const cap = H >= 640 ? 8 : 5;
+  const rows = Scores.list.slice(0, cap).map((e, i) => ({ rank: i + 1, name: e.name, score: e.score, isNew: world.addedRank === i + 1 }));
+  if (world.addedRank > cap) {                  // el puesto nuevo quedó fuera del recorte: mostrarlo igual
+    const e = Scores.list[world.addedRank - 1];
+    rows[cap - 1] = { rank: world.addedRank, name: e.name, score: e.score, isNew: true };
+  }
+
+  const medal = ['#ffd34d', '#d9dee8', '#e0a070'];
+  const lines = [
+    { t: 'GAME OVER', s: 1.9, color: '#ff6b6b', gap: 0.3 },
+    { t: 'PUNTOS ' + pad(world.score), s: 1.15 }
+  ];
+  if (world.newRecord) lines.push({ t: '¡NUEVO RÉCORD!', s: 1.0, color: '#7fe08a', blink: true });
+  if (rows.length) {
+    lines.push({ t: '— MEJORES PUNTAJES —', s: 0.9, color: '#ffd34d', gap: 0.5 });
+    rows.forEach((r) => lines.push({
+      t: String(r.rank).padStart(2, ' ') + '. ' + r.name + '  ' + pad(r.score),
+      s: 1.0, color: medal[r.rank - 1] || '#fff', blink: r.isNew, alt: '#7fe08a'
+    }));
+  }
+  lines.push({ t: 'Tocá para reiniciar', s: 0.9, gap: 0.7, blink: true, dim: true });
+
+  const hOf = (l) => f * l.s * 1.4 + (l.gap || 0) * f;
+  const total = lines.reduce((a, l) => a + hOf(l), 0);
+  let y = Math.max(safeTop + 8, (H - total) / 2);
+  for (const l of lines) {
+    const h = hOf(l);
+    let color = l.color || '#fff', alpha = 1;
+    if (l.blink && l.alt) color = blink ? l.alt : l.color;      // fila nueva: alterna verde/medalla
+    else if (l.blink) alpha = l.dim ? (blink ? 1 : 0.35) : (blink ? 1 : 0.5);
+    drawText(l.t, W / 2, y + (f * l.s * 1.4) / 2 + (l.gap || 0) * f, f * l.s, { color, alpha });
+    y += h;
+  }
+}
+
 function drawDebug() {
   ctx.lineWidth = 2;
   ctx.strokeStyle = '#00ff88';
@@ -770,22 +1050,20 @@ function render() {
   if (CONFIG.debug) drawDebug();
 
   if (shake) ctx.restore();
-  if (state === 'running' || state === 'dead' || state === 'paused') drawHUD();
+  if (state === 'running' || state === 'dead' || state === 'entry' || state === 'paused') drawHUD();
 
   const blink = Math.floor(performance.now() / 500) % 2 === 0;
 
-  if (state === 'dead') {
+  if (state === 'dead' || state === 'entry') {
     if (world.deadT < 0.18) {                    // flash de impacto
       ctx.fillStyle = `rgba(255,255,255,${0.55 * (1 - world.deadT / 0.18)})`;
       ctx.fillRect(0, 0, W, H);
     }
-    drawPanel([
-      { text: 'GAME OVER', scale: 1.15, color: '#ff6b6b' },
-      { text: 'PUNTOS ' + pad(world.score), scale: 0.62 },
-      { text: 'RÉCORD ' + pad(hiScore), scale: 0.62, color: '#ffd34d' },
-      { text: world.newRecord ? '¡NUEVO RÉCORD!' : ' ', scale: 0.6, color: '#7fe08a', alpha: blink ? 1 : 0.5 },
-      { text: 'Tocá para reiniciar', scale: 0.5, alpha: blink ? 1 : 0.35 }
-    ]);
+    if (state === 'entry') {
+      if (world.deadT >= ENTRY_READY_AT) drawEntryPanel(blink);
+    } else {
+      drawDeadPanel(blink);
+    }
   } else if (state === 'paused') {
     drawPanel([
       { text: 'PAUSA', scale: 1.1 },
@@ -805,7 +1083,7 @@ function frame(t) {
   lastT = t;
 
   if (state === 'running') update(dt);
-  else if (state === 'dead') world.deadT += dt;
+  else if (state === 'dead' || state === 'entry') world.deadT += dt;
   render();
 }
 
@@ -853,6 +1131,7 @@ function setupOverlay() {
 async function main() {
   Sfx.init();
   setupOverlay();
+  renderOverlayScores();
   selectCharacter(character);
   layout();
   resetRun();
