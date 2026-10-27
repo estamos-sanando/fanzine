@@ -5,7 +5,7 @@
  * - Si publicás cambios en Vercel, SUBÍ el número de CACHE_VERSION
  *   para que los celulares descarguen la versión nueva.
  * ========================================================= */
-const CACHE_VERSION = 'v5';
+const CACHE_VERSION = 'v6';
 const CACHE_NAME = 'fanzine-runner-' + CACHE_VERSION;
 
 // Mantener sincronizado con el diccionario ASSETS de game.js

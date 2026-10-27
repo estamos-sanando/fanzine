@@ -4,8 +4,12 @@
    ========================================================= */
 :root {
   --bg: #0b0d14;
-  --accent: #ffd34d;
-  --accent-2: #7fc47a;
+  --unlam: #299F80;
+  --unlam-light: #42bfa0;
+  --unlam-glow: #5cd4b6;
+  --unlam-dark: #1b6d58;
+  --accent: #299F80;
+  --accent-2: #42bfa0;
   --ink: #f6f3ea;
   --font-ui: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Courier New", monospace;
 }
@@ -105,7 +109,7 @@ img { -webkit-user-drag: none; user-select: none; pointer-events: none; }
   justify-content: center;
   padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
   background:
-    radial-gradient(90% 70% at 50% 35%, rgba(255, 211, 77, .10), transparent 60%),
+    radial-gradient(90% 70% at 50% 35%, rgba(41, 159, 128, .16), transparent 60%),
     linear-gradient(180deg, rgba(8, 10, 18, .70), rgba(8, 10, 18, .88));
   -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
@@ -159,9 +163,9 @@ img { -webkit-user-drag: none; user-select: none; pointer-events: none; }
 .picker__btn img { height: 64px; width: auto; }
 .picker__btn[aria-pressed="true"] {
   border-color: var(--accent);
-  background: rgba(255, 211, 77, .16);
+  background: rgba(41, 159, 128, .18);
   transform: translateY(-3px);
-  box-shadow: 0 8px 20px rgba(255, 211, 77, .18);
+  box-shadow: 0 8px 20px rgba(41, 159, 128, .25);
 }
 .picker__btn:focus-visible { outline: 3px solid var(--accent-2); outline-offset: 2px; }
 
@@ -173,9 +177,9 @@ img { -webkit-user-drag: none; user-select: none; pointer-events: none; }
   font-weight: 800;
   letter-spacing: .12em;
   text-transform: uppercase;
-  color: #1a1405;
-  background: linear-gradient(135deg, #ffe58a, var(--accent) 55%, #ffb82e);
-  box-shadow: 0 10px 30px rgba(255, 190, 40, .35), inset 0 -3px 0 rgba(0, 0, 0, .15);
+  color: #ffffff;
+  background: linear-gradient(135deg, #42bfa0, var(--accent) 55%, #1d7b63);
+  box-shadow: 0 10px 30px rgba(41, 159, 128, .40), inset 0 -3px 0 rgba(0, 0, 0, .20);
   animation: pulse 1.4s ease-in-out infinite;
 }
 #overlay.is-loading .overlay__start {
@@ -209,7 +213,7 @@ img { -webkit-user-drag: none; user-select: none; pointer-events: none; }
 .scores__list .rank { opacity: .65; }
 .scores__list .name { letter-spacing: .18em; }
 .scores__list .pts  { font-variant-numeric: tabular-nums; }
-.scores__list li:nth-child(1) { color: #ffd34d; }
+.scores__list li:nth-child(1) { color: var(--accent); }
 .scores__list li:nth-child(2) { color: #d9dee8; }
 .scores__list li:nth-child(3) { color: #e0a070; }
 

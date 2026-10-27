@@ -802,6 +802,15 @@ function update(dt) {
  * ============================================================================= */
 const JUMP_APEX_BAND = 1.8;   // |vy| (U/s) por debajo del cual se muestra el frame de apex
 
+// Paleta institucional UNLaM (#299F80)
+const UNLAM = {
+  green: '#299F80',   // Verde oficial UNLaM
+  light: '#42bfa0',   // Verde claro / resplandor
+  glow:  '#5cd4b6',   // Verde menta
+  dark:  '#1b6d58',   // Verde profundo
+  white: '#ffffff'
+};
+
 function heroSprite() {
   const set = IMG.chars[character];
   if (!set) return null;
@@ -900,7 +909,7 @@ function drawPopups() {
   const size = clamp(U * 0.3, 16, 36);
   for (const p of world.popups) {
     const k = p.t / 0.8;
-    drawText(p.text, p.x, p.y - k * U * 0.6, size, { color: '#ffd34d', alpha: 1 - k * k });
+    drawText(p.text, p.x, p.y - k * U * 0.6, size, { color: UNLAM.green, alpha: 1 - k * k });
   }
 }
 
@@ -911,10 +920,10 @@ function drawHUD() {
   const isMilestone = world.milestoneT > 0 && Math.floor(world.milestoneT * 6) % 2 === 0;
   drawText('PUNTOS ' + pad(world.score), m, y, size, {
     align: 'left',
-    color: isMilestone ? '#ffd34d' : '#fff'
+    color: isMilestone ? UNLAM.light : '#fff'
   });
   drawText('RÉCORD ' + pad(Math.max(hiScore, world.score)), W - m, y, size,
-           { align: 'right', color: '#ffd34d' });
+           { align: 'right', color: UNLAM.green });
 }
 
 function drawPanel(lines) {
@@ -964,11 +973,11 @@ function drawEntryPanel(blink) {
   let y = Math.max(safeTop + 8, (H - total) / 2);
   const hits = [];
 
-  drawText('¡NUEVO PUNTAJE!', W / 2, y + titleH / 2, f * 1.5, { color: '#ffd34d', alpha: blink ? 1 : 0.75 });
+  drawText('¡NUEVO PUNTAJE!', W / 2, y + titleH / 2, f * 1.5, { color: UNLAM.green, alpha: blink ? 1 : 0.75 });
   y += titleH;
   drawText('PUNTOS ' + pad(world.score), W / 2, y + lineH / 2, f);
   y += lineH;
-  drawText('PUESTO #' + entryUI.rank, W / 2, y + lineH / 2, f * 0.9, { color: '#7fe08a' });
+  drawText('PUESTO #' + entryUI.rank, W / 2, y + lineH / 2, f * 0.9, { color: UNLAM.light });
   y += lineH;
 
   const x0 = (W - (n * slot + (n - 1) * gap)) / 2;
@@ -976,19 +985,19 @@ function drawEntryPanel(blink) {
   for (let i = 0; i < n; i++) {
     const x = x0 + i * (slot + gap), cx = x + slot / 2;
     const active = i === entryUI.slot;
-    const col = active ? '#ffd34d' : 'rgba(255,255,255,0.8)';
+    const col = active ? UNLAM.green : 'rgba(255,255,255,0.8)';
 
     drawTriangle(cx, arrowsY[0] + arrowH / 2, f * 0.7, true, col);
     hits.push({ type: 'up', i, x, y: arrowsY[0], w: slot, h: arrowH });
 
     const by = y + arrowH;
     rrect(x, by, slot, slot, f * 0.4);
-    ctx.fillStyle = active ? 'rgba(255, 211, 77, 0.18)' : 'rgba(255,255,255,0.10)';
+    ctx.fillStyle = active ? 'rgba(41, 159, 128, 0.22)' : 'rgba(255,255,255,0.10)';
     ctx.fill();
     ctx.lineWidth = 3;
-    ctx.strokeStyle = active ? (blink ? '#ffd34d' : 'rgba(255,211,77,0.45)') : 'rgba(255,255,255,0.35)';
+    ctx.strokeStyle = active ? (blink ? UNLAM.green : 'rgba(41,159,128,0.45)') : 'rgba(255,255,255,0.35)';
     ctx.stroke();
-    drawText(entryUI.letters[i], cx, by + slot / 2 + slot * 0.04, slot * 0.72, { color: active ? '#ffd34d' : '#fff' });
+    drawText(entryUI.letters[i], cx, by + slot / 2 + slot * 0.04, slot * 0.72, { color: active ? UNLAM.green : '#fff' });
     hits.push({ type: 'slot', i, x, y: by, w: slot, h: slot });
 
     drawTriangle(cx, arrowsY[1] + arrowH / 2, f * 0.7, false, col);
@@ -998,11 +1007,11 @@ function drawEntryPanel(blink) {
 
   const bx = (W - btnW) / 2;
   const grad = ctx.createLinearGradient(0, y, 0, y + btnH);
-  grad.addColorStop(0, '#ffe58a'); grad.addColorStop(1, '#ffb82e');
+  grad.addColorStop(0, UNLAM.light); grad.addColorStop(1, UNLAM.green);
   rrect(bx, y, btnW, btnH, btnH / 2);
   ctx.fillStyle = grad;
   ctx.fill();
-  drawText('LISTO', W / 2, y + btnH / 2 + 1, f * 1.1, { color: '#1a1405', stroke: 'rgba(0,0,0,0)' });
+  drawText('LISTO', W / 2, y + btnH / 2 + 1, f * 1.1, { color: '#ffffff', stroke: 'rgba(0,0,0,0)' });
   hits.push({ type: 'ok', x: bx, y, w: btnW, h: btnH });
   y += btnH;
   drawText('Elegí tus iniciales', W / 2, y + f * 0.9, f * 0.7, { alpha: 0.7, weight: 600 });
@@ -1023,17 +1032,17 @@ function drawDeadPanel(blink) {
     rows[cap - 1] = { rank: world.addedRank, name: e.name, score: e.score, isNew: true };
   }
 
-  const medal = ['#ffd34d', '#d9dee8', '#e0a070'];
+  const medal = [UNLAM.green, '#d9dee8', '#e0a070'];
   const lines = [
     { t: 'GAME OVER', s: 1.9, color: '#ff6b6b', gap: 0.3 },
     { t: 'PUNTOS ' + pad(world.score), s: 1.15 }
   ];
-  if (world.newRecord) lines.push({ t: '¡NUEVO RÉCORD!', s: 1.0, color: '#7fe08a', blink: true });
+  if (world.newRecord) lines.push({ t: '¡NUEVO RÉCORD!', s: 1.0, color: UNLAM.light, blink: true });
   if (rows.length) {
-    lines.push({ t: '— MEJORES PUNTAJES —', s: 0.9, color: '#ffd34d', gap: 0.5 });
+    lines.push({ t: '— MEJORES PUNTAJES —', s: 0.9, color: UNLAM.green, gap: 0.5 });
     rows.forEach((r) => lines.push({
       t: String(r.rank).padStart(2, ' ') + '. ' + r.name + '  ' + pad(r.score),
-      s: 1.0, color: medal[r.rank - 1] || '#fff', blink: r.isNew, alt: '#7fe08a'
+      s: 1.0, color: medal[r.rank - 1] || '#fff', blink: r.isNew, alt: UNLAM.light
     }));
   }
   lines.push({ t: 'Tocá para reiniciar', s: 0.9, gap: 0.7, blink: true, dim: true });
