@@ -15,39 +15,37 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <!-- Capa 1: cámara trasera en vivo -->
-  <video id="camera" autoplay muted playsinline webkit-playsinline disablepictureinpicture></video>
-
-  <!-- Capa 2: canvas transparente con el juego -->
+  <!-- Canvas del juego -->
   <canvas id="game" aria-label="Juego runner"></canvas>
 
   <!-- Auxiliares -->
   <div id="safe-probe" aria-hidden="true"></div>
   <div id="toast" role="status" aria-live="polite"></div>
 
-  <!-- Capa 3: pantalla de inicio (necesaria para permisos de cámara y fullscreen) -->
+  <!-- Pantalla de inicio sobre el portal de la UNLaM -->
   <main id="overlay" class="is-loading" tabindex="0">
-    <div class="overlay__inner">
-      <img id="overlay-logo" class="overlay__logo" src="ASSETS/Inicio.png" alt="Portal de la universidad" width="1106" height="581" decoding="async">
+    <div class="overlay__top">
       <h1 class="overlay__title">¡No te rindas!</h1>
-
       <div class="picker" role="group" aria-label="Elegí tu personaje">
-        <button id="pick-chica" class="picker__btn" type="button" data-char="chica" aria-pressed="true">
-          <img src="ASSETS/chicaquieta.png" alt="Chica" height="64">
+        <button id="pick-chica" class="picker__btn" type="button" data-char="chica" aria-pressed="true" title="Elegir Chica">
+          <img src="ASSETS/chicaquieta.png" alt="Chica" height="54">
         </button>
-        <button id="pick-chico" class="picker__btn" type="button" data-char="chico" aria-pressed="false">
-          <img src="ASSETS/chicoquieto.png" alt="Chico" height="64">
+        <button id="pick-chico" class="picker__btn" type="button" data-char="chico" aria-pressed="false" title="Elegir Chico">
+          <img src="ASSETS/chicoquieto.png" alt="Chico" height="54">
         </button>
       </div>
+    </div>
 
-      <p id="start-label" class="overlay__start">Cargando…</p>
+    <div class="overlay__bottom">
+      <button id="start-btn" class="overlay__start" type="button">
+        🚪 Entrar a la UNLaM
+      </button>
+      <p id="start-label" class="overlay__hint">Hacé <b>clic en la puerta</b> o <b>dos toques</b> para entrar</p>
 
       <section id="hiscores-box" class="scores" aria-label="Mejores puntajes" hidden>
         <h2 class="scores__title">★ Mejores puntajes ★</h2>
         <ol id="hiscores" class="scores__list"></ol>
       </section>
-
-      <p class="overlay__hint"><b>1 toque</b> salto &nbsp;·&nbsp; <b>2 toques</b> doble salto</p>
     </div>
   </main>
 

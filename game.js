@@ -22,22 +22,19 @@
 const ASSETS = {
   // Escenario, obstáculos y coleccionables
   images: {
-    gate:     'ASSETS/Inicio.png',               // portal que sale de escena al arrancar
-    ground:   'ASSETS/SUELO.png',                // vereda (el cielo blanco es transparente)
-    book:     'ASSETS/manualobstaculo.png',      // obstáculo bajo  -> 1 salto
-    horse:    'ASSETS/caballoobstaculo.png',     // obstáculo alto  -> doble salto
-    toast:    'ASSETS/100puntostostado.png',     // +100
-    tortilla: 'ASSETS/200puntostortilla.png'     // +200
+    gate:          'ASSETS/Inicio.png',          // portal de la universidad
+    fondoinicio:   'ASSETS/fondoinicio.png',     // fondo para pantalla de inicio (árboles, cielo)
+    reja:          'ASSETS/reja.png',            // reja modular sobre la vereda
+    fondoinfinito: 'ASSETS/fondoinfinito.png',   // fondo infinito durante la carrera (Teatro, Auditorio, Biblioteca)
+    ground:        'ASSETS/SUELO.png',           // vereda
+    book:          'ASSETS/manualobstaculo.png', // obstáculo bajo
+    horse:         'ASSETS/caballoobstaculo.png',// obstáculo alto
+    toast:         'ASSETS/100puntostostado.png',// +100
+    tortilla:      'ASSETS/200puntostortilla.png',// +200
+    mate:          'ASSETS/500puntosmate.png'    // +500 recompensa alta especial
   },
 
   // Personajes disponibles (se elige en la pantalla de inicio)
-  //   idle        : parado (también se usa de referencia de escala)
-  //   run         : 2 frames de carrera (se alternan)
-  // Secuencia del salto:  [1] despegue -> [2] subida -> [3] apex -> [4] caída -> [1] aterrizaje
-  //   jumpTakeoff : 1) agachado (despegue y aterrizaje)
-  //   jumpRise    : 2) subiendo
-  //   jumpApex    : 3) punto más alto
-  //   jumpFall    : 4) cayendo
   characters: {
     chica: {
       idle:        'ASSETS/chicaquieta.png',
@@ -67,8 +64,6 @@ const ASSETS = {
     }
   },
 
-  // Sonidos opcionales. Dejalos en null para usar sonidos sintetizados (WebAudio),
-  // o poné una ruta, ej.: jump: 'ASSETS/salto.mp3'
   sounds: {
     jump:       null,
     doubleJump: null,
@@ -92,7 +87,7 @@ const CONFIG = {
   storageChar: 'fanzine_runner_char',
   defaultCharacter: 'chica',
 
-  // Píxeles de SUELO.png (1920x1080) donde empieza la vereda; arriba es transparente
+  // Píxeles de SUELO.png (1920x1080) donde empieza la vereda
   groundSourceTop: 690,
 
   layout: {
@@ -101,56 +96,59 @@ const CONFIG = {
     unitMin: 56,
     unitMax: 230,
     stripHeightFrac: 0.28,  // la vereda ocupa el 28% inferior
-    feetInStrip: 0.56,      // los pies caen al 56% de la vereda (como en la referencia)
+    feetInStrip: 0.56,      // los pies caen al 56% de la vereda
     heroXFrac: 0.20         // posición horizontal del personaje
   },
 
   // Alto visual (en U) de cada sprite
-  size: { book: 0.55, horse: 1.30, pickup: 0.50 },
+  size: { book: 0.55, horse: 1.30, pickup: 0.50, mate: 0.58 },
 
-  // Hitboxes: margen (fracción del sprite) recortado en cada lado => más chicas que el sprite
+  // Hitboxes: margen recortado en cada lado
   hitbox: {
     book:  { l: 0.14, r: 0.14, t: 0.10, b: 0.00 },
     horse: { l: 0.16, r: 0.18, t: 0.08, b: 0.04 }
   },
   hero: { halfWidth: 0.17, bottom: 0.08, top: 0.85 },   // en U
-  pickupForgiveness: 0.18,                              // pickups más fáciles de agarrar
+  pickupForgiveness: 0.20,                              // pickups más fáciles de agarrar
 
   // Física (unidades: U y segundos)
   physics: {
-    gravity:         12,
-    jumpApex:        0.95,   // salto simple: no pasa al caballo (hitbox ~1.2 U)
-    doubleApex:      1.10,   // altura EXTRA del 2º impulso
-    doubleGravityMul: 0.80,  // más flotado en el doble salto
-    inputBuffer:     0.12    // si tocás un poco antes de aterrizar, salta igual
+    gravity:          12,
+    jumpApex:         0.95,   // salto simple
+    doubleApex:       1.10,   // altura de cada impulso aéreo
+    doubleGravityMul: 0.80,   // caída más ágil y controlable en el aire
+    inputBuffer:      0.14    // buffer de entrada antes de tocar el suelo
   },
 
-  // Velocidad horizontal en "anchos de pantalla por segundo"
-  // Inspirado en el Dinosaurio de Google: arranque accesible y aceleración continua
+  // Velocidad y aceleración idénticas al Dinosaurio de Google (Chromium T-Rex Runner)
+  // Parámetros oficiales de Runner.config en Chromium:
+  // Velocidad y aceleración progresiva (arranque accesible y aceleración continua perceptible)
   speed: {
-    start: 0.32,          // arranca un poco más lento (antes 0.50) para ritmo cómodo al inicio
-    max: 1.15,            // velocidad máxima desafiante
-    rampDistance: 4500    // distancia a la que se escala progresivamente la velocidad
+    start: 6,             // SPEED inicial (0.60 pantallas/s)
+    max: 13.5,            // MAX_SPEED desafiante (1.35 pantallas/s)
+    acceleration: 0.0028, // Aceleración acelerada (+0.168/s): la dificultad escala visiblemente desde los 10-15s
+    startFrac: 0.60,      // factor de ancho de pantalla por segundo al iniciar
+    maxFrac: 1.35         // factor de ancho de pantalla por segundo a vel. máxima
   },
 
-  // Spawner (huecos en SEGUNDOS => la dificultad es justa en cualquier resolución)
+  // Spawner: la separación se reduce y la variedad de obstáculos aumenta con la velocidad
   spawn: {
-    firstDelayFrac: 0.50,                 // margen inicial cómodo para que el jugador se acomode
-    gapMin: [1.45, 0.85],                 // huecos iniciales más holgados
-    gapMax: [2.35, 1.35],
-    horseExtraGap: 0.30,
-    horseChance: [0.15, 0.50],            // al inicio casi puros libros simples, luego más caballos
-    doubleBookChance: [0.05, 0.35],       // libros dobles aparecen más adelante
-    safeObstacles: 3                      // los primeros 3 obstáculos son siempre libros simples
+    firstDelayFrac: 0.50,                 // margen inicial para acomodarse antes del primer obstáculo
+    gapMin: [1.30, 0.72],                 // hueco mín en segundos [inicio, vel. máx]
+    gapMax: [2.05, 1.10],                 // hueco máx en segundos [inicio, vel. máx]
+    horseExtraGap: 0.35,                  // margen extra tras un caballo para aterrizar
+    horseChance: [0.12, 0.55],            // escala de libros simples hacia más caballos
+    doubleBookChance: [0.05, 0.38],       // libros dobles aparecen más frecuentemente al acelerar
+    safeObstacles: 2                      // los primeros 2 obstáculos son siempre libros simples
   },
 
-  points: { toast: 100, tortilla: 200 },
+  points: { toast: 100, tortilla: 200, mate: 500 },
   deadInputLock: 450                      // ms antes de poder reiniciar
 };
 
 
 /* =============================================================================
- * 3) UTILIDADES, AUDIO, CÁMARA, FULLSCREEN
+ * 3) UTILIDADES, AUDIO, FULLSCREEN
  * ============================================================================= */
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const lerp  = (a, b, t) => a + (b - a) * t;
@@ -159,17 +157,17 @@ const pad   = (n, len = 5) => String(Math.max(0, Math.floor(n))).padStart(len, '
 
 const $ = (id) => document.getElementById(id);
 const dom = {
-  video:   $('camera'),
-  canvas:  $('game'),
-  overlay: $('overlay'),
-  label:   $('start-label'),
-  toast:   $('toast'),
-  probe:   $('safe-probe'),
-  pickers: Array.from(document.querySelectorAll('.picker__btn')),
+  canvas:     $('game'),
+  overlay:    $('overlay'),
+  startBtn:   $('start-btn'),
+  label:      $('start-label'),
+  toast:      $('toast'),
+  probe:      $('safe-probe'),
+  pickers:    Array.from(document.querySelectorAll('.picker__btn')),
   scoresBox:  $('hiscores-box'),
   scoresList: $('hiscores')
 };
-const ctx = dom.canvas.getContext('2d', { alpha: true });
+const ctx = dom.canvas.getContext('2d', { alpha: false });
 
 function storageGet(key, fallback) {
   try { const v = localStorage.getItem(key); return v === null ? fallback : v; }
@@ -181,6 +179,7 @@ function storageSet(key, value) {
 
 let toastTimer = 0;
 function showToast(msg, ms = 4200) {
+  if (!dom.toast) return;
   dom.toast.textContent = msg;
   dom.toast.classList.add('is-visible');
   clearTimeout(toastTimer);
@@ -217,40 +216,44 @@ const Sfx = {
     osc.start(t);
     osc.stop(t + dur + 0.02);
   },
-  play(name) {
+  play(name, opt = 0) {
     const file = this.files[name];
     if (file) { try { file.currentTime = 0; file.play(); } catch (_) {} return; }
     switch (name) {
-      case 'jump':       this.tone(320, 640, 0.14); break;
-      case 'doubleJump': this.tone(480, 980, 0.18); this.tone(720, 1200, 0.12, 'square', 0.05, 0.06); break;
-      case 'pickup':     this.tone(880, 1320, 0.09, 'triangle', 0.1); this.tone(1320, 1760, 0.12, 'triangle', 0.1, 0.08); break;
-      case 'hit':        this.tone(220, 40, 0.4, 'sawtooth', 0.14); break;
-      case 'milestone':  this.tone(660, 660, 0.05, 'square', 0.08); this.tone(880, 880, 0.08, 'square', 0.08, 0.07); break;
+      case 'jump':
+        this.tone(320, 640, 0.14);
+        break;
+      case 'airJump': {
+        const step = Math.min(opt, 5);
+        const f0 = 420 + step * 55;
+        const f1 = 840 + step * 95;
+        this.tone(f0, f1, 0.16);
+        this.tone(f0 * 1.4, f1 * 1.3, 0.09, 'square', 0.04, 0.04);
+        break;
+      }
+      case 'doubleJump':
+        this.tone(480, 980, 0.18);
+        this.tone(720, 1200, 0.12, 'square', 0.05, 0.06);
+        break;
+      case 'pickup':
+        this.tone(880, 1320, 0.09, 'triangle', 0.1);
+        this.tone(1320, 1760, 0.12, 'triangle', 0.1, 0.08);
+        break;
+      case 'mate': // sonido festivo triunfal para el mate (+500 pts!)
+        this.tone(587, 880, 0.08, 'triangle', 0.12);
+        this.tone(880, 1318, 0.10, 'triangle', 0.12, 0.06);
+        this.tone(1318, 1760, 0.16, 'square', 0.10, 0.12);
+        break;
+      case 'hit':
+        this.tone(220, 40, 0.4, 'sawtooth', 0.14);
+        break;
+      case 'milestone':
+        this.tone(660, 660, 0.05, 'square', 0.08);
+        this.tone(880, 880, 0.08, 'square', 0.08, 0.07);
+        break;
     }
   }
 };
-
-/* ---------- Cámara trasera ---------- */
-async function startCamera() {
-  const md = navigator.mediaDevices;
-  if (!md || !md.getUserMedia) return { ok: false, reason: 'unsupported' };
-
-  const attempt = (video) => md.getUserMedia({ video, audio: false });
-  let stream = null;
-  try {
-    stream = await attempt({ facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } });
-  } catch (err) {
-    if (err && (err.name === 'NotAllowedError' || err.name === 'SecurityError')) {
-      return { ok: false, reason: 'denied' };
-    }
-    try { stream = await attempt(true); }                 // PC sin cámara trasera
-    catch (err2) { return { ok: false, reason: (err2 && err2.name) || 'error' }; }
-  }
-
-  dom.video.srcObject = stream;
-  try { await dom.video.play(); } catch (_) { /* autoplay ya cubierto por muted+playsinline */ }
-  return { ok: true };
-}
 
 /* ---------- Pantalla completa ---------- */
 function goFullscreen() {
@@ -472,7 +475,8 @@ const hero = {
 
 const world = {
   obstacles: [], pickups: [], popups: [],
-  groundScroll: 0, gateX: 0,
+  groundScroll: 0, bgScroll: 0, gateX: 0,
+  dinoSpeed: CONFIG.speed.start,
   dist: 0, bonus: 0, speed: 0, p: 0, time: 0,
   spawnDist: 0, spawned: 0,
   score: 0, newRecord: false,
@@ -482,12 +486,15 @@ const world = {
 
 function gateDims() {
   const img = IMG.gate;
-  const aspect = img ? img.naturalWidth / img.naturalHeight : 1.9;
-  const w = Math.min(W * 1.2, H * 1.6);
-  return { w, h: w / aspect };
+  const aspect = img ? img.naturalWidth / img.naturalHeight : 1.904;
+  // Escala del portal en la entrada: proporcional al alto disponible sobre la vereda
+  const maxH = Math.max(180, (groundY - safeTop - 20) * 0.90);
+  const h = Math.min(maxH, H * 0.76);
+  return { w: h * aspect, h };
 }
 function placeGate() {
-  world.gateX = heroX - gateDims().w * 0.44;    // la puerta queda sobre el personaje
+  // Portal a la derecha del personaje (según Imagen 2 de referencia)
+  world.gateX = Math.max(heroX + U * 0.85, W * 0.28);
 }
 
 function resetRun() {
@@ -495,9 +502,11 @@ function resetRun() {
   world.pickups.length = 0;
   world.popups.length = 0;
   world.groundScroll = 0;
+  world.bgScroll = 0;
+  world.dinoSpeed = CONFIG.speed.start;
   world.dist = 0; world.bonus = 0; world.p = 0; world.time = 0; world.score = 0;
   world.milestoneT = 0;
-  world.speed = W * CONFIG.speed.start;
+  world.speed = W * CONFIG.speed.startFrac;
   world.spawnDist = W * CONFIG.spawn.firstDelayFrac;
   world.spawned = 0;
   world.newRecord = false;
@@ -546,14 +555,19 @@ const overlap = (a, b) => a.l < b.r && a.r > b.l && a.t < b.b && a.b > b.t;
 /* ---------- Entradas ---------- */
 function tryJump() {
   if (hero.grounded) {
-    hero.vy = V1; hero.grounded = false; hero.jumps = 1;
-    hero.sinceJump = 0; hero.landT = 0;
+    hero.vy = V1;
+    hero.grounded = false;
+    hero.jumps = 1;
+    hero.sinceJump = 0;
+    hero.landT = 0;
     Sfx.play('jump');
-  } else if (hero.jumps === 1) {
-    hero.vy = V2; hero.jumps = 2; hero.sinceDouble = 0;
-    Sfx.play('doubleJump');
   } else {
-    hero.buffer = P.inputBuffer;          // 3er toque: se guarda para aterrizar
+    // Salto ilimitado en el aire (no limitado a 2 saltos)
+    hero.jumps++;
+    hero.sinceDouble = 0;
+    // Si estaba cayendo, frena de inmediato la caída y da impulso ascendente
+    hero.vy = Math.max(hero.vy * 0.15 + V2, V2);
+    Sfx.play('airJump', hero.jumps);
   }
 }
 
@@ -635,8 +649,34 @@ function handleEntryKey(e) {
   }
 }
 
+let lastMenuTap = 0;
+
+function handleMenuTap(clientX, clientY) {
+  if (state !== 'menu') return;
+  const now = performance.now();
+  const isDoubleTap = (now - lastMenuTap < 420);
+  lastMenuTap = now;
+
+  const rect = dom.canvas.getBoundingClientRect();
+  const x = clientX - rect.left;
+  const y = clientY - rect.top;
+
+  const { w, h } = gateDims();
+  const gateY = groundY + U * 0.18 - h;
+  // Clic/tap sobre el portal de la universidad
+  const inGate = (x >= world.gateX && x <= world.gateX + w && y >= gateY && y <= gateY + h);
+
+  if (inGate || isDoubleTap) {
+    startFromOverlay();
+  }
+}
+
 window.addEventListener('pointerdown', (e) => {
-  if (state === 'menu' || state === 'loading') return;   // el overlay maneja el inicio
+  if (state === 'menu') {
+    handleMenuTap(e.clientX, e.clientY);
+    return;
+  }
+  if (state === 'loading') return;
   e.preventDefault();
   if (state === 'entry') { handleEntryPointer(e.clientX, e.clientY); return; }
   onPress();
@@ -663,8 +703,6 @@ document.addEventListener('dblclick', (e) => e.preventDefault());
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     if (state === 'running') { state = 'paused'; world.pausedAt = performance.now(); }
-  } else if (dom.video.srcObject) {
-    dom.video.play().catch(() => {});
   }
 });
 
@@ -697,12 +735,26 @@ function spawnPattern() {
   }
   world.spawned++;
 
+  // Recompensa especial: ¡Mate de 500 puntos cada tanto!
+  const isMateSpawn = world.spawned >= 3 && (world.spawned % 5 === 0 || Math.random() < 0.22);
+  if (isMateSpawn) {
+    const pd = pickupDims('mate');
+    // Se ubica alto en el aire para aprovechar el multi-salto
+    const mateHeight = rand(2.35, 2.75);
+    world.pickups.push({
+      kind: 'mate',
+      x: x0 + width + rand(U * 0.6, U * 1.5),
+      hU: mateHeight,
+      phase: rand(0, 6.28)
+    });
+  }
+
   const gapSec = rand(lerp(S.gapMin[0], S.gapMin[1], p), lerp(S.gapMax[0], S.gapMax[1], p))
                + (isHorse ? S.horseExtraGap : 0);
   const gapPx = gapSec * world.speed;
   world.spawnDist = width + gapPx;
 
-  if (Math.random() < 0.4) {                          // tostado "gratis" en el piso
+  if (Math.random() < 0.35 && !isMateSpawn) {                          // tostado "gratis" en el piso
     const pd = pickupDims('toast');
     world.pickups.push({ kind: 'toast', x: x0 + width + gapPx / 2 - pd.w / 2, hU: 0.5, phase: rand(0, 6.28) });
   }
@@ -732,16 +784,24 @@ function die() {
 
 function update(dt) {
   const S = CONFIG.speed;
+  const frames = dt * 60; // frames normalizados a 60 fps (independiente de la tasa de refresco)
   world.time += dt;
-  world.p = 1 - Math.exp(-world.dist / S.rampDistance);
-  world.speed = W * lerp(S.start, S.max, world.p);
+
+  // Aceleración idéntica al Dinosaurio de Google (Runner.config.ACCELERATION = 0.001 por frame hasta 13)
+  if (world.dinoSpeed < S.max) {
+    world.dinoSpeed = Math.min(S.max, world.dinoSpeed + S.acceleration * frames);
+  }
+  world.p = clamp((world.dinoSpeed - S.start) / (S.max - S.start), 0, 1);
+  world.speed = W * lerp(S.startFrac, S.maxFrac, world.p);
   const dx = world.speed * dt;
 
   world.groundScroll += dx;
-  world.dist += (world.speed / W) * 100 * dt;
+  world.bgScroll += (world.speed * 0.45) * dt;
+  world.dist += world.dinoSpeed * frames;
 
+  // Puntuación idéntica a Google Dino (DistanceMeter COEFFICIENT: 0.025) + bonus
   const prev100 = Math.floor(world.score / 100);
-  world.score = Math.floor(world.dist / 5) + world.bonus;
+  world.score = Math.floor(world.dist * 0.025) + world.bonus;
   const new100 = Math.floor(world.score / 100);
   if (new100 > prev100 && world.score >= 100) {
     Sfx.play('milestone');
@@ -758,8 +818,16 @@ function update(dt) {
   if (hero.landT > 0) hero.landT -= dt;
   if (!hero.grounded) {
     hero.sinceJump += dt;
-    hero.vy -= (hero.jumps === 2 ? GRAV2 : GRAV) * dt;
+    hero.vy -= (hero.jumps > 1 ? GRAV2 : GRAV) * dt;
     hero.h += hero.vy * dt;
+
+    // Límite de techo para que no se pierda por arriba de la pantalla al saltar muchas veces
+    const maxHeroH = Math.max(2.4, (groundY - safeTop - U * 0.45) / U);
+    if (hero.h > maxHeroH) {
+      hero.h = maxHeroH;
+      hero.vy = Math.min(hero.vy, 0);
+    }
+
     if (hero.h <= 0) {
       hero.h = 0; hero.vy = 0; hero.grounded = true; hero.jumps = 0; hero.landT = 0.09;
       if (hero.buffer > 0) { hero.buffer = 0; tryJump(); }
@@ -790,8 +858,20 @@ function update(dt) {
       p.taken = true;
       const pts = CONFIG.points[p.kind];
       world.bonus += pts;
-      world.popups.push({ text: '+' + pts, x: heroX + U * 0.4, y: groundY - (hero.h + 1.2) * U, t: 0 });
-      Sfx.play('pickup');
+      const isMate = p.kind === 'mate';
+      world.popups.push({
+        text: '+' + pts,
+        x: heroX + U * 0.4,
+        y: groundY - (hero.h + 1.2) * U,
+        t: 0,
+        gold: isMate
+      });
+      if (isMate) {
+        Sfx.play('mate');
+        world.milestoneT = 1.2;
+      } else {
+        Sfx.play('pickup');
+      }
     }
   }
 }
@@ -862,12 +942,80 @@ function drawGround() {
   for (; x < W; x += period) ctx.drawImage(groundTile, x, stripTop, period, stripH);
 }
 
+function drawInfiniteBackground() {
+  const img = IMG.fondoinfinito;
+  if (!img) {
+    ctx.fillStyle = '#10141e';
+    ctx.fillRect(0, 0, W, stripTop);
+    return;
+  }
+  const bgH = stripTop + 6;
+  const s = bgH / img.naturalHeight;
+  const bgW = Math.ceil(img.naturalWidth * s);
+  const scroll = (world.bgScroll || 0) % bgW;
+  for (let x = -scroll; x < W; x += bgW) {
+    ctx.drawImage(img, x, 0, bgW, bgH);
+  }
+}
+
+function drawMenuBackground() {
+  // 1) Fondo de inicio (cielo, nubes, árboles y horizonte de la UNLaM)
+  const bgImg = IMG.fondoinicio;
+  if (bgImg) {
+    const bgH = stripTop + 6;
+    const s = bgH / bgImg.naturalHeight;
+    const bgW = Math.ceil(bgImg.naturalWidth * s);
+    const offset = Math.max(0, (bgW - W) * 0.25);
+    for (let x = -offset; x < W; x += bgW) {
+      ctx.drawImage(bgImg, x, 0, bgW, bgH);
+    }
+  } else {
+    ctx.fillStyle = '#7ec0ee';
+    ctx.fillRect(0, 0, W, stripTop);
+  }
+
+  // 2) Reja modular que bordea la vereda (Imagen 2)
+  const rejaImg = IMG.reja;
+  if (rejaImg) {
+    const rejaH = U * 1.25;
+    const s = rejaH / rejaImg.naturalHeight;
+    const rejaW = Math.ceil(rejaImg.naturalWidth * s);
+    const rejaY = stripTop - rejaH + U * 0.12;
+    for (let x = 0; x < W; x += rejaW) {
+      ctx.drawImage(rejaImg, x, rejaY, rejaW, rejaH);
+    }
+  }
+}
+
 function drawGate() {
   const img = IMG.gate;
   if (!img) return;
   const { w, h } = gateDims();
   if (world.gateX + w < 0) return;
-  ctx.drawImage(img, world.gateX, groundY + U * 0.18 - h, w, h);
+  const gateY = groundY + U * 0.18 - h;
+  ctx.drawImage(img, world.gateX, gateY, w, h);
+
+  // En la pantalla de inicio, indicador visual animado sobre la puerta abierta
+  if (state === 'menu') {
+    const doorX = world.gateX + w * 0.50;
+    const doorY = groundY - h * 0.35;
+    const pulse = 0.88 + 0.12 * Math.sin(performance.now() / 240);
+    ctx.save();
+    ctx.translate(doorX, doorY);
+    ctx.scale(pulse, pulse);
+
+    const badgeW = Math.max(92, U * 0.95);
+    const badgeH = 28;
+    ctx.fillStyle = 'rgba(41, 159, 128, 0.92)';
+    rrect(-badgeW / 2, -badgeH / 2, badgeW, badgeH, 14);
+    ctx.fill();
+    ctx.strokeStyle = '#5cd4b6';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    drawText('ENTRAR', 0, 1, 13, { color: '#ffffff', stroke: 'rgba(0,0,0,0)', weight: 800 });
+    ctx.restore();
+  }
 }
 
 function drawObstacles() {
@@ -909,7 +1057,9 @@ function drawPopups() {
   const size = clamp(U * 0.3, 16, 36);
   for (const p of world.popups) {
     const k = p.t / 0.8;
-    drawText(p.text, p.x, p.y - k * U * 0.6, size, { color: UNLAM.green, alpha: 1 - k * k });
+    const col = p.gold ? '#ffd34d' : UNLAM.green;
+    const s = p.gold ? size * 1.35 : size;
+    drawText(p.text, p.x, p.y - k * U * 0.6, s, { color: col, alpha: 1 - k * k });
   }
 }
 
@@ -1074,7 +1224,7 @@ function drawDebug() {
 }
 
 function render() {
-  ctx.clearRect(0, 0, W, H);                    // canvas transparente: se ve la cámara detrás
+  ctx.clearRect(0, 0, W, H);
 
   let shake = false;
   if (state === 'dead' && world.deadT < 0.28) {
@@ -1084,12 +1234,20 @@ function render() {
     ctx.translate(rand(-a, a), rand(-a, a));
   }
 
-  drawGround();
-  drawGate();
-  drawPickups();
-  drawObstacles();
-  drawHero();
-  drawPopups();
+  if (state === 'menu' || state === 'loading') {
+    drawMenuBackground();
+    drawGround();
+    drawGate();
+    drawHero();
+  } else {
+    drawInfiniteBackground();
+    drawGround();
+    drawGate();
+    drawPickups();
+    drawObstacles();
+    drawHero();
+    drawPopups();
+  }
   if (CONFIG.debug) drawDebug();
 
   if (shake) ctx.restore();
@@ -1140,25 +1298,16 @@ function selectCharacter(id) {
   dom.pickers.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.char === id)));
 }
 
-async function startFromOverlay() {
+function startFromOverlay() {
   if (starting || state !== 'menu') return;
   starting = true;
 
-  // Todo lo que requiere "gesto del usuario" se dispara de forma síncrona acá
+  // Audio y pantalla completa
   Sfx.unlock();
   goFullscreen();
-  dom.label.textContent = 'Activando cámara…';
-  const camPromise = startCamera();
-
-  const cam = await camPromise;
-  if (!cam.ok) {
-    showToast(cam.reason === 'denied'
-      ? 'Sin permiso de cámara: jugás con fondo alternativo.'
-      : 'No se pudo abrir la cámara: jugás con fondo alternativo.');
-  }
 
   dom.overlay.classList.add('is-hidden');
-  layout();                                      // por si cambió el viewport al entrar en fullscreen
+  layout();
   beginRun();
   starting = false;
 }
@@ -1168,7 +1317,12 @@ function setupOverlay() {
     e.stopPropagation();
     selectCharacter(b.dataset.char);
   }));
-  dom.overlay.addEventListener('click', startFromOverlay);
+  if (dom.startBtn) {
+    dom.startBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      startFromOverlay();
+    });
+  }
 }
 
 async function main() {
@@ -1188,7 +1342,7 @@ async function main() {
 
   state = 'menu';
   dom.overlay.classList.remove('is-loading');
-  dom.label.textContent = 'Tocá para empezar';
+  if (dom.label) dom.label.innerHTML = 'Hacé <b>clic en la puerta</b> o <b>dos toques</b> para entrar';
   dom.overlay.focus({ preventScroll: true });
 }
 

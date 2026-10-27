@@ -5,7 +5,7 @@
  * - Si publicás cambios en Vercel, SUBÍ el número de CACHE_VERSION
  *   para que los celulares descarguen la versión nueva.
  * ========================================================= */
-const CACHE_VERSION = 'v7';
+const CACHE_VERSION = 'v10';
 const CACHE_NAME = 'fanzine-runner-' + CACHE_VERSION;
 
 // Mantener sincronizado con el diccionario ASSETS de game.js
@@ -15,11 +15,15 @@ const PRECACHE = [
   'style.css',
   'game.js',
   'ASSETS/Inicio.png',
+  'ASSETS/fondoinicio.png',
+  'ASSETS/reja.png',
+  'ASSETS/fondoinfinito.png',
   'ASSETS/SUELO.png',
   'ASSETS/caballoobstaculo.png',
   'ASSETS/manualobstaculo.png',
   'ASSETS/100puntostostado.png',
   'ASSETS/200puntostortilla.png',
+  'ASSETS/500puntosmate.png',
   'ASSETS/chicaquieta.png',
   'ASSETS/chicacorreder.png',
   'ASSETS/chicacorre1.png',
