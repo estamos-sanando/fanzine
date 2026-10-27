@@ -41,7 +41,12 @@ const ASSETS = {
   characters: {
     chica: {
       idle:        'ASSETS/chicaquieta.png',
-      run:         ['ASSETS/chicacorreder.png', 'ASSETS/chicacorreizq.png'],
+      run: [
+        'ASSETS/chicacorreder.png',
+        'ASSETS/chicacorre1.png',
+        'ASSETS/chicacorreizq.png',
+        'ASSETS/chicacorre2.png'
+      ],
       jumpTakeoff: 'ASSETS/chicasalto.png',
       jumpRise:    'ASSETS/chicasalto1.png',
       jumpApex:    'ASSETS/chicasalto2.png',
@@ -49,7 +54,12 @@ const ASSETS = {
     },
     chico: {
       idle:        'ASSETS/chicoquieto.png',
-      run:         ['ASSETS/chicocorreder.png', 'ASSETS/chicocorreizq.png'],
+      run: [
+        'ASSETS/chicocorreder.png',
+        'ASSETS/chicocorre1.png',
+        'ASSETS/chicocorreizq.png',
+        'ASSETS/chicocorre2.png'
+      ],
       jumpTakeoff: 'ASSETS/chicosalto.png',
       jumpRise:    'ASSETS/chicosalto1.png',
       jumpApex:    'ASSETS/chicosalto2.png',
@@ -806,7 +816,7 @@ function heroSprite() {
   }
   // 5) aterrizaje: vuelve al frame agachado
   if (hero.landT > 0) return set.jumpTakeoff;
-  const frameDur = lerp(0.18, 0.08, world.p);
+  const frameDur = lerp(0.11, 0.045, world.p);
   const frames = set.run;
   return frames && frames.length ? frames[Math.floor(hero.animT / frameDur) % frames.length] : set.idle;
 }
@@ -825,7 +835,10 @@ function drawHero() {
   ctx.ellipse(heroX, groundY + U * 0.02, U * 0.30 * shrink, U * 0.06 * shrink, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  const w = img.naturalWidth * k, h = img.naturalHeight * k;
+  // Los frames corre1 y corre2 (exportados a 1x con ~106px de alto) se escalan a 1.5x
+  // para coincidir exactamente con los demás sprites (160px)
+  const scale = img.naturalHeight < 120 ? 1.5 : 1;
+  const w = img.naturalWidth * k * scale, h = img.naturalHeight * k * scale;
   ctx.drawImage(img, heroX - w / 2, groundY - hero.h * U - h, w, h);
 }
 
