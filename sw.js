@@ -5,7 +5,7 @@
  * - Si publicás cambios en Vercel, SUBÍ el número de CACHE_VERSION
  *   para que los celulares descarguen la versión nueva.
  * ========================================================= */
-const CACHE_VERSION = 'v10';
+const CACHE_VERSION = 'v18';
 const CACHE_NAME = 'fanzine-runner-' + CACHE_VERSION;
 
 // Mantener sincronizado con el diccionario ASSETS de game.js
@@ -15,12 +15,49 @@ const PRECACHE = [
   'style.css',
   'game.js',
   'ASSETS/Inicio.png',
-  'ASSETS/fondoinicio.png',
-  'ASSETS/reja.png',
+  'ASSETS/logonoterindas.png',
   'ASSETS/fondoinfinito.png',
+  'ASSETS/fondo inicio.png',
+  'ASSETS/fondoentrada.png',
+  'ASSETS/620cerrado.png',
+  'ASSETS/620abrepoco.png',
+  'ASSETS/620chicasale.png',
+  'ASSETS/620chicosale.png',
+  'ASSETS/chicacaminapuerta.png',
+  'ASSETS/chicacaminapuerta2.png',
+  'ASSETS/chicocaminapuerta.png',
+  'ASSETS/chicocaminapuerta2.png',
+  'ASSETS/chicadialogo.png',
+  'ASSETS/chicadialogo1.png',
+  'ASSETS/chicadialogo2.png',
+  'ASSETS/chicadialogo3.png',
+  'ASSETS/chicadialogo4.png',
+  'ASSETS/chicadialogo5.png',
+  'ASSETS/chicodialogo.png',
+  'ASSETS/chicodialogo1.png',
+  'ASSETS/chicodialogo2.png',
+  'ASSETS/chicodialogo3.png',
+  'ASSETS/chicodialogo4.png',
+  'ASSETS/chicodialogo5.png',
+  'ASSETS/maquina1.png',
+  'ASSETS/maquina2.png',
+  'ASSETS/maquina3.png',
+  'ASSETS/maquina4.png',
+  'ASSETS/cocachica1.png',
+  'ASSETS/cocachica2.png',
+  'ASSETS/cocachica3.png',
+  'ASSETS/cocachica4.png',
+  'ASSETS/cocachico1.png',
+  'ASSETS/cocachico2.png',
+  'ASSETS/cocachico3.png',
+  'ASSETS/cocachico4.png',
   'ASSETS/SUELO.png',
   'ASSETS/caballoobstaculo.png',
   'ASSETS/manualobstaculo.png',
+  'ASSETS/terovolando1.png',
+  'ASSETS/terovolando2.png',
+  'ASSETS/terovolando3.png',
+  'ASSETS/terovolando4.png',
   'ASSETS/100puntostostado.png',
   'ASSETS/200puntostortilla.png',
   'ASSETS/500puntosmate.png',
@@ -71,6 +108,8 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
+  // No interceptar endpoints de API (ej: /api/scores) para tener siempre datos frescos en red
+  if (url.pathname.startsWith('/api/')) return;
 
   const isNav = req.mode === 'navigate';
 

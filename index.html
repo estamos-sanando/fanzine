@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title>Fanzine Runner · ¡No te rindas!</title>
-  <meta name="description" content="Runner 2D arcade para jugar desde el celular sobre la cámara real. Un toque salta, dos toques hacen doble salto. Funciona sin conexión.">
+  <meta name="description" content="Runner 2D arcade en el campus de la UNLaM. ¡No te rindas! Salto y multi-salto infinito. Funciona sin conexión.">
   <meta name="theme-color" content="#0b0d14">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -22,34 +22,42 @@
   <div id="safe-probe" aria-hidden="true"></div>
   <div id="toast" role="status" aria-live="polite"></div>
 
-  <!-- Pantalla de inicio sobre el portal de la UNLaM -->
-  <main id="overlay" class="is-loading" tabindex="0">
-    <div class="overlay__top">
-      <h1 class="overlay__title">¡No te rindas!</h1>
-      <div class="picker" role="group" aria-label="Elegí tu personaje">
-        <button id="pick-chica" class="picker__btn" type="button" data-char="chica" aria-pressed="true" title="Elegir Chica">
-          <img src="ASSETS/chicaquieta.png" alt="Chica" height="54">
-        </button>
-        <button id="pick-chico" class="picker__btn" type="button" data-char="chico" aria-pressed="false" title="Elegir Chico">
-          <img src="ASSETS/chicoquieto.png" alt="Chico" height="54">
-        </button>
-      </div>
-    </div>
+  <!-- Pantalla de inicio: logo + elección de personaje + COMENZAR + ranking global -->
+  <main id="overlay" class="is-loading">
+    <div class="start">
+      <h1 class="start__logo">
+        <img src="ASSETS/logonoterindas.png" alt="¡No te rindas!" width="1279" height="484" decoding="async">
+      </h1>
 
-    <div class="overlay__bottom">
-      <button id="start-btn" class="overlay__start" type="button">
-        🚪 Entrar a la UNLaM
-      </button>
-      <p id="start-label" class="overlay__hint">Hacé <b>clic en la puerta</b> o <b>dos toques</b> para entrar</p>
+      <section class="start__pick" aria-labelledby="pick-title">
+        <h2 id="pick-title" class="start__label">Elegí tu personaje</h2>
+        <div class="picker" role="group" aria-label="Elegí tu personaje">
+          <button id="pick-chica" class="picker__btn" type="button" data-char="chica" aria-pressed="true">
+            <img src="ASSETS/chicaquieta.png" alt="" height="110">
+            <span class="picker__name">Chica</span>
+          </button>
+          <button id="pick-chico" class="picker__btn" type="button" data-char="chico" aria-pressed="false">
+            <img src="ASSETS/chicoquieto.png" alt="" height="110">
+            <span class="picker__name">Chico</span>
+          </button>
+        </div>
+      </section>
 
-      <section id="hiscores-box" class="scores" aria-label="Mejores puntajes" hidden>
-        <h2 class="scores__title">★ Mejores puntajes ★</h2>
+      <button id="start-btn" class="start__btn" type="button">Cargando…</button>
+      <p class="start__hint"><b>Tocá</b> para saltar · ¡ojo con el <b>tero</b> en el cielo! · <b>?skip</b> salta la intro</p>
+
+      <section id="hiscores-box" class="scores" aria-label="Ranking global">
+        <h2 class="scores__title">★ Ranking global ★</h2>
         <ol id="hiscores" class="scores__list"></ol>
+        <p id="hiscores-status" class="scores__status" data-state="loading" role="status"></p>
       </section>
     </div>
   </main>
 
-  <script src="game.js"></script>
+  <!-- Volver a la pantalla de inicio (solo visible en game over) -->
+  <button id="menu-btn" class="menu-btn" type="button">↩ Menú</button>
+
+  <script src="game.js?v=19"></script>
   <script>
     // Registro del Service Worker (modo offline). Requiere HTTPS o localhost.
     if ('serviceWorker' in navigator) {

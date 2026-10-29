@@ -1,15 +1,12 @@
 'use strict';
 
 /* =============================================================================
- *  FANZINE RUNNER  ·  Canvas 2D + cámara en vivo  ·  Vanilla JS (ES6+)
+ *  FANZINE RUNNER  ·  Canvas 2D + FSM cinemática  ·  Vanilla JS (ES6+)
  * =============================================================================
- *  1) MAPEO DE ASSETS   <<<<<  EDITÁ ACÁ LOS NOMBRES DE TUS ARCHIVOS  >>>>>
- *  2) CONFIG            (escalas, física, dificultad, hitboxes)
- *  3) Utilidades, audio, cámara, fullscreen
- *  4) Layout responsive
- *  5) Estado, entradas, física, spawner, colisiones
- *  6) Render
- *  7) Bucle principal y arranque
+ *  FSM States: CHARACTER_SELECT → INTRO_BUS → TUTORIAL → CAMPUS_ENTRANCE →
+ *              VENDING_MACHINE → PLAYING → GAME_OVER (+ ENTRY)
+ *
+ *  Cada estado tiene su propio update(dt) y draw(ctx).
  *
  *  Nota: Vercel (Linux) distingue mayúsculas/minúsculas. La carpeta se llama
  *  "ASSETS" y los nombres deben coincidir EXACTO con los archivos.
@@ -23,15 +20,59 @@ const ASSETS = {
   // Escenario, obstáculos y coleccionables
   images: {
     gate:          'ASSETS/Inicio.png',          // portal de la universidad
-    fondoinicio:   'ASSETS/fondoinicio.png',     // fondo para pantalla de inicio (árboles, cielo)
-    reja:          'ASSETS/reja.png',            // reja modular sobre la vereda
     fondoinfinito: 'ASSETS/fondoinfinito.png',   // fondo infinito durante la carrera (Teatro, Auditorio, Biblioteca)
     ground:        'ASSETS/SUELO.png',           // vereda
     book:          'ASSETS/manualobstaculo.png', // obstáculo bajo
     horse:         'ASSETS/caballoobstaculo.png',// obstáculo alto
     toast:         'ASSETS/100puntostostado.png',// +100
     tortilla:      'ASSETS/200puntostortilla.png',// +200
-    mate:          'ASSETS/500puntosmate.png'    // +500 recompensa alta especial
+    mate:          'ASSETS/500puntosmate.png',   // +500 recompensa alta especial
+    fondoInicio:   'ASSETS/fondoinicio.png',    // fondo escena del bondi
+    fondoEntrada:  'ASSETS/fondoentrada.png',    // fondo de la entrada a UNLaM
+    bus620closed:  'ASSETS/620cerrado.png',      // bondi cerrado
+    bus620open:    'ASSETS/620abrepoco.png',     // bondi con puerta abierta
+  },
+
+  // Bus con personaje bajando
+  bus620sale: {
+    chica: 'ASSETS/620chicasale.png',
+    chico: 'ASSETS/620chicosale.png'
+  },
+
+  // Obstáculo aéreo: tero en vuelo (4 frames de aleteo, miran a la derecha => se espejan)
+  tero: [
+    'ASSETS/terovolando1.png',
+    'ASSETS/terovolando2.png',
+    'ASSETS/terovolando3.png',
+    'ASSETS/terovolando4.png'
+  ],
+
+  // Máquina expendedora (4 frames de animación)
+  maquina: [
+    'ASSETS/maquina1.png',
+    'ASSETS/maquina2.png',
+    'ASSETS/maquina3.png',
+    'ASSETS/maquina4.png'
+  ],
+
+  // Coca / bebida animación (4 frames cada personaje)
+  coca: {
+    chica: ['ASSETS/cocachica1.png', 'ASSETS/cocachica2.png', 'ASSETS/cocachica3.png', 'ASSETS/cocachica4.png'],
+    chico: ['ASSETS/cocachico1.png', 'ASSETS/cocachico2.png', 'ASSETS/cocachico3.png', 'ASSETS/cocachico4.png']
+  },
+
+  // Diálogos del tutorial (6 frames cada personaje: 0=base, 1-5=secuencia)
+  dialogo: {
+    chica: ['ASSETS/chicadialogo.png', 'ASSETS/chicadialogo1.png', 'ASSETS/chicadialogo2.png',
+            'ASSETS/chicadialogo3.png', 'ASSETS/chicadialogo4.png', 'ASSETS/chicadialogo5.png'],
+    chico: ['ASSETS/chicodialogo.png', 'ASSETS/chicodialogo1.png', 'ASSETS/chicodialogo2.png',
+            'ASSETS/chicodialogo3.png', 'ASSETS/chicodialogo4.png', 'ASSETS/chicodialogo5.png']
+  },
+
+  // Personaje caminando hacia la puerta (perspectiva de espalda)
+  caminaPuerta: {
+    chica: ['ASSETS/chicacaminapuerta.png', 'ASSETS/chicacaminapuerta2.png'],
+    chico: ['ASSETS/chicocaminapuerta.png', 'ASSETS/chicocaminapuerta2.png']
   },
 
   // Personajes disponibles (se elige en la pantalla de inicio)
@@ -80,8 +121,13 @@ const ASSETS = {
  * ============================================================================= */
 const CONFIG = {
   debug: /[?&]debug\b/.test(location.search),   // ?debug muestra hitboxes
-  storageScores:   'fanzine_runner_scores',     // tabla de puntajes (top 10)
+  godMode: /[?&]god\b/.test(location.search),   // ?god activa modo invencible para testing visual
+  skipCinematic: /[?&]skip\b/.test(location.search), // ?skip salta las cinemáticas
+  storageScores:   'fanzine_runner_global',     // copia local del ranking global (para mostrar sin conexión)
+  storagePending:  'fanzine_runner_pending',    // puntajes que todavía no se pudieron enviar al servidor
   storageInitials: 'fanzine_runner_initials',   // últimas iniciales usadas
+  apiScores: '/api/scores',                     // ranking GLOBAL compartido entre dispositivos (api/scores.js)
+  apiTimeout: 7000,                             // ms antes de darse por vencida una llamada al servidor
   maxScores: 10,
   initialsLength: 3,
   storageChar: 'fanzine_runner_char',
@@ -101,12 +147,25 @@ const CONFIG = {
   },
 
   // Alto visual (en U) de cada sprite
-  size: { book: 0.55, horse: 1.30, pickup: 0.50, mate: 0.58 },
+  size: { book: 0.55, horse: 1.30, pickup: 0.50, mate: 0.58, tero: 0.62 },
 
   // Hitboxes: margen recortado en cada lado
   hitbox: {
     book:  { l: 0.14, r: 0.14, t: 0.10, b: 0.00 },
-    horse: { l: 0.16, r: 0.18, t: 0.08, b: 0.04 }
+    horse: { l: 0.16, r: 0.18, t: 0.08, b: 0.04 },
+    tero:  { l: 0.20, r: 0.20, t: 0.20, b: 0.22 }   // relativo a la caja de referencia del tero
+  },
+
+  // Tero: vuela cruzando la pantalla desde la derecha. Alterna entre alto y bajo cada tanto.
+  // Si el jugador permanece >10s en el aire, sale un tero de inmediato a su altura para nivelar la dificultad.
+  tero: {
+    refW: 130, refH: 110,   // caja de referencia (px del sprite) común a los 4 frames
+    bob: 0.04,              // vaivén vertical suave de aleteo (en U)
+    frameDur: 0.09,         // s por frame de aleteo
+    intervalMin: 10,        // segundos mínimos entre apariciones regulares
+    intervalMax: 15,        // segundos máximos entre apariciones regulares
+    firstDelay: 4.5,        // primer tero a los 4.5 segundos de arrancar
+    airAbuseTime: 10.0      // segundos continuos en el aire antes de lanzar tero inmediato
   },
   hero: { halfWidth: 0.17, bottom: 0.08, top: 0.85 },   // en U
   pickupForgiveness: 0.20,                              // pickups más fáciles de agarrar
@@ -121,19 +180,17 @@ const CONFIG = {
   },
 
   // Velocidad y aceleración idénticas al Dinosaurio de Google (Chromium T-Rex Runner)
-  // Parámetros oficiales de Runner.config en Chromium:
-  // Velocidad y aceleración progresiva (arranque accesible y aceleración continua perceptible)
   speed: {
     start: 6,             // SPEED inicial (0.60 pantallas/s)
     max: 13.5,            // MAX_SPEED desafiante (1.35 pantallas/s)
-    acceleration: 0.0028, // Aceleración acelerada (+0.168/s): la dificultad escala visiblemente desde los 10-15s
+    acceleration: 0.0028, // Aceleración acelerada (+0.168/s)
     startFrac: 0.60,      // factor de ancho de pantalla por segundo al iniciar
     maxFrac: 1.35         // factor de ancho de pantalla por segundo a vel. máxima
   },
 
   // Spawner: la separación se reduce y la variedad de obstáculos aumenta con la velocidad
   spawn: {
-    firstDelayFrac: 0.50,                 // margen inicial para acomodarse antes del primer obstáculo
+    firstDelayFrac: 1.0,                  // margen inicial tras tocar COMENZAR (~1.6s de pista libre)
     gapMin: [1.30, 0.72],                 // hueco mín en segundos [inicio, vel. máx]
     gapMax: [2.05, 1.10],                 // hueco máx en segundos [inicio, vel. máx]
     horseExtraGap: 0.35,                  // margen extra tras un caballo para aterrizar
@@ -157,15 +214,16 @@ const pad   = (n, len = 5) => String(Math.max(0, Math.floor(n))).padStart(len, '
 
 const $ = (id) => document.getElementById(id);
 const dom = {
-  canvas:     $('game'),
-  overlay:    $('overlay'),
-  startBtn:   $('start-btn'),
-  label:      $('start-label'),
-  toast:      $('toast'),
-  probe:      $('safe-probe'),
-  pickers:    Array.from(document.querySelectorAll('.picker__btn')),
-  scoresBox:  $('hiscores-box'),
-  scoresList: $('hiscores')
+  canvas:      $('game'),
+  toast:       $('toast'),
+  probe:       $('safe-probe'),
+  overlay:     $('overlay'),
+  startBtn:    $('start-btn'),
+  pickers:     Array.from(document.querySelectorAll('.picker__btn')),
+  scoresBox:   $('hiscores-box'),
+  scoresList:  $('hiscores'),
+  scoresState: $('hiscores-status'),
+  menuBtn:     $('menu-btn')
 };
 const ctx = dom.canvas.getContext('2d', { alpha: false });
 
@@ -251,6 +309,29 @@ const Sfx = {
         this.tone(660, 660, 0.05, 'square', 0.08);
         this.tone(880, 880, 0.08, 'square', 0.08, 0.07);
         break;
+      case 'busHorn':
+        this.tone(280, 280, 0.35, 'sawtooth', 0.10);
+        this.tone(350, 350, 0.35, 'sawtooth', 0.08, 0.30);
+        break;
+      case 'doorOpen':
+        this.tone(440, 520, 0.15, 'triangle', 0.06);
+        break;
+      case 'steps':
+        this.tone(120, 80, 0.08, 'square', 0.04);
+        break;
+      case 'vendingDrop':
+        this.tone(600, 200, 0.25, 'triangle', 0.10);
+        this.tone(200, 120, 0.15, 'square', 0.06, 0.22);
+        break;
+      case 'drink':
+        this.tone(300, 450, 0.12, 'sine', 0.06);
+        this.tone(450, 600, 0.10, 'sine', 0.05, 0.10);
+        break;
+      case 'startRun':
+        this.tone(440, 880, 0.12, 'square', 0.08);
+        this.tone(660, 1320, 0.14, 'square', 0.06, 0.08);
+        this.tone(880, 1760, 0.10, 'triangle', 0.08, 0.16);
+        break;
     }
   }
 };
@@ -288,6 +369,37 @@ async function loadAssets() {
   for (const [key, src] of Object.entries(ASSETS.images)) {
     jobs.push(loadImage(src).then((img) => { IMG[key] = img; }));
   }
+  IMG.tero = [];
+  jobs.push(Promise.all(ASSETS.tero.map(loadImage)).then((arr) => { IMG.tero = arr.filter(Boolean); }));
+
+  // Máquina expendedora frames
+  IMG.maquina = [];
+  jobs.push(Promise.all(ASSETS.maquina.map(loadImage)).then((arr) => { IMG.maquina = arr.filter(Boolean); }));
+
+  // Bus 620 con personaje bajando
+  IMG.bus620sale = {};
+  for (const [id, src] of Object.entries(ASSETS.bus620sale)) {
+    jobs.push(loadImage(src).then((img) => { IMG.bus620sale[id] = img; }));
+  }
+
+  // Coca frames
+  IMG.coca = {};
+  for (const [id, arr] of Object.entries(ASSETS.coca)) {
+    jobs.push(Promise.all(arr.map(loadImage)).then((imgs) => { IMG.coca[id] = imgs.filter(Boolean); }));
+  }
+
+  // Diálogo frames
+  IMG.dialogo = {};
+  for (const [id, arr] of Object.entries(ASSETS.dialogo)) {
+    jobs.push(Promise.all(arr.map(loadImage)).then((imgs) => { IMG.dialogo[id] = imgs.filter(Boolean); }));
+  }
+
+  // Camina puerta frames
+  IMG.caminaPuerta = {};
+  for (const [id, arr] of Object.entries(ASSETS.caminaPuerta)) {
+    jobs.push(Promise.all(arr.map(loadImage)).then((imgs) => { IMG.caminaPuerta[id] = imgs.filter(Boolean); }));
+  }
+
   for (const [id, set] of Object.entries(ASSETS.characters)) {
     const slot = (IMG.chars[id] = {});
     for (const [pose, src] of Object.entries(set)) {
@@ -344,7 +456,6 @@ function layout() {
     world.pickups.forEach((p) => { p.x *= k; });
     world.popups.forEach((p) => { p.x *= k; });
     world.gateX *= k;
-    if (state === 'menu') placeGate();
   }
 }
 
@@ -375,50 +486,83 @@ function buildGroundTile() {
 
 
 /* =============================================================================
- * 5) ESTADO, ENTRADAS, FÍSICA, SPAWNER, COLISIONES
+ * 5) FSM – MÁQUINA DE ESTADOS FINITA
  * ============================================================================= */
-let state = 'loading';          // loading | menu | running | paused | entry | dead
+const STATES = {
+  LOADING:          'LOADING',
+  CHARACTER_SELECT: 'CHARACTER_SELECT',
+  INTRO_BUS:        'INTRO_BUS',
+  TUTORIAL:         'TUTORIAL',
+  CAMPUS_ENTRANCE:  'CAMPUS_ENTRANCE',
+  VENDING_MACHINE:  'VENDING_MACHINE',
+  PLAYING:          'PLAYING',
+  GAME_OVER:        'GAME_OVER',
+  ENTRY:            'ENTRY',
+  PAUSED:           'PAUSED'
+};
+
+let state = STATES.LOADING;
 const savedCharacter = storageGet(CONFIG.storageChar, '');
 let character = ASSETS.characters[savedCharacter] ? savedCharacter : CONFIG.defaultCharacter;
+window.selectedCharacter = character === 'chica' ? 'girl' : 'boy';
+window.selectedCharacterId = character;
 
-/* ---------- Tabla de puntajes estilo arcade (persistente en localStorage) ---------- */
+// Transition helper
+function transitionTo(newState) {
+  const prev = state;
+  state = newState;
+  if (stateHandlers[newState] && stateHandlers[newState].enter) {
+    stateHandlers[newState].enter(prev);
+  }
+}
+
+
+/* =============================================================================
+ * 5b) RANKING GLOBAL
+ * ============================================================================= */
 const NAME_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 const cleanName = (s) =>
   String(s || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, CONFIG.initialsLength)
     .padEnd(CONFIG.initialsLength, 'A');
-
-const DEFAULT_SCORES = [
-  { name: 'UNL', score: 500 },
-  { name: 'MAT', score: 350 },
-  { name: 'FAN', score: 200 },
-  { name: 'RUN', score: 100 },
-  { name: 'BOY', score: 50 }
-];
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
 const Scores = {
-  list: [],                                   // [{ name, score }] ordenado de mayor a menor
-  load() {
-    try {
-      const raw = JSON.parse(storageGet(CONFIG.storageScores, '[]'));
-      this.list = (Array.isArray(raw) ? raw : [])
-        .filter((e) => e && Number.isFinite(e.score) && e.score > 0)
-        .map((e) => ({ name: cleanName(e.name), score: Math.floor(e.score) }))
-        .sort((a, b) => b.score - a.score)
-        .slice(0, CONFIG.maxScores);
-    } catch (_) { this.list = []; }
+  remote: [],             // último top global confirmado por el servidor [{ name, score }]
+  list: [],               // lo que se muestra: remote + puntajes propios pendientes, de mayor a menor
+  pending: [],            // [{ id, name, score }] puntajes que todavía no llegaron al servidor
+  status: 'loading',      // loading | ok | offline
+  version: 0,             // sube con cada envío confirmado (descarta GETs viejos)
+  syncing: false,
+  onChange: null,         // callback: cambió la lista o el estado
+  onRank: null,           // callback(id, rank): el servidor confirmó un puntaje enviado
 
-    // Migración retrocompatible o tabla arcade clásica inicial
-    if (this.list.length === 0) {
-      const oldHi = parseInt(storageGet('fanzine_runner_hi', '0'), 10) || 0;
-      if (oldHi > 0) {
-        this.list = [{ name: 'AAA', score: oldHi }, ...DEFAULT_SCORES.slice(1)];
-      } else {
-        this.list = DEFAULT_SCORES.map((e) => ({ ...e }));
-      }
-      this.save();
-    }
+  load() {
+    try { this.remote = this.sanitize(JSON.parse(storageGet(CONFIG.storageScores, '[]'))); }
+    catch (_) { this.remote = []; }
+    try {
+      const raw = JSON.parse(storageGet(CONFIG.storagePending, '[]'));
+      this.pending = (Array.isArray(raw) ? raw : []).filter((e) => e && e.id && Number.isFinite(e.score))
+        .map((e) => ({ id: String(e.id), name: cleanName(e.name), score: Math.floor(e.score) }));
+    } catch (_) { this.pending = []; }
+    this.rebuild();
   },
-  save() { storageSet(CONFIG.storageScores, JSON.stringify(this.list)); },
+  sanitize(raw) {
+    return (Array.isArray(raw) ? raw : [])
+      .filter((e) => e && Number.isFinite(Number(e.score)) && Number(e.score) > 0)
+      .map((e) => ({ name: cleanName(e.name), score: Math.floor(Number(e.score)) }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, CONFIG.maxScores);
+  },
+  // Muestra también los puntajes propios que aún no confirmó el servidor
+  rebuild() {
+    const out = this.remote.slice();
+    for (const p of this.pending) out.push({ name: p.name, score: p.score });
+    this.list = this.sanitize(out);
+  },
+  save() { storageSet(CONFIG.storageScores, JSON.stringify(this.remote)); },
+  savePending() { storageSet(CONFIG.storagePending, JSON.stringify(this.pending)); },
+  changed() { if (this.onChange) this.onChange(); },
+
   best() { return this.list.length ? this.list[0].score : 0; },
   qualifies(score) {
     return score > 0 && (this.list.length < CONFIG.maxScores ||
@@ -429,12 +573,86 @@ const Scores = {
     while (i < this.list.length && this.list[i].score >= score) i++;
     return i + 1;
   },
-  add(name, score) {
-    const rank = this.rankFor(score);
-    this.list.splice(rank - 1, 0, { name: cleanName(name), score: Math.floor(score) });
-    this.list.length = Math.min(this.list.length, CONFIG.maxScores);
-    this.save();
-    return rank;
+
+  async request(method, body) {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), CONFIG.apiTimeout);
+    try {
+      const res = await fetch(CONFIG.apiScores, {
+        method,
+        headers: body ? { 'Content-Type': 'application/json' } : undefined,
+        body: body ? JSON.stringify(body) : undefined,
+        cache: 'no-store',
+        signal: ctl.signal
+      });
+      if (!res.ok) { const err = new Error('HTTP ' + res.status); err.status = res.status; throw err; }
+      return await res.json();
+    } finally { clearTimeout(timer); }
+  },
+
+  // Baja el ranking global y reenvía lo que haya quedado pendiente
+  async refresh() {
+    const version = this.version;
+    try {
+      const data = await this.request('GET');
+      if (version === this.version) {                // si mientras tanto se confirmó un envío, esta copia ya es vieja
+        this.remote = this.sanitize(data.scores);
+        this.rebuild();
+        this.save();
+      }
+      this.status = 'ok';
+    } catch (_) {
+      this.status = 'offline';
+    }
+    this.changed();
+    if (this.status === 'ok') this.flush();
+  },
+
+  // Guarda al instante (se ve en el ranking) y envía en segundo plano
+  submit(name, score) {
+    const item = { id: uid(), name: cleanName(name), score: Math.floor(score) };
+    const rank = this.rankFor(item.score);
+    this.pending.push(item);
+    this.savePending();
+    this.rebuild();
+    this.changed();
+    this.flush();
+    return { id: item.id, rank };
+  },
+
+  async flush() {
+    if (this.syncing || !this.pending.length) return;
+    this.syncing = true;
+    this.changed();
+    try {
+      while (this.pending.length) {
+        const item = this.pending[0];
+        try {
+          const data = await this.request('POST', item);
+          this.pending.shift();                       // confirmado: ya no es "pendiente"
+          this.version++;
+          this.savePending();
+          this.remote = this.sanitize(data.scores);
+          this.rebuild();
+          this.save();
+          this.status = 'ok';
+          if (this.onRank) this.onRank(item.id, data.rank);
+          this.changed();
+        } catch (e) {
+          if (e && e.status === 400) {                // puntaje inválido: descartarlo
+            this.pending.shift();
+            this.savePending();
+            this.rebuild();
+            continue;
+          }
+          this.status = 'offline';                    // sin red / sin servidor / límite: reintenta luego
+          break;
+        }
+      }
+    } finally {
+      this.syncing = false;
+      this.changed();
+    }
   }
 };
 Scores.load();
@@ -444,23 +662,6 @@ let initials = cleanName(storageGet(CONFIG.storageInitials, 'AAA'));
 
 // Estado de la pantalla de ingreso de iniciales
 const entryUI = { letters: initials.split(''), slot: 0, rank: 1, hits: [] };
-
-/* Lista de mejores puntajes en la pantalla de inicio (DOM) */
-function renderOverlayScores() {
-  if (!dom.scoresList) return;
-  dom.scoresList.textContent = '';
-  Scores.list.slice(0, 5).forEach((e, i) => {
-    const li = document.createElement('li');
-    [(i + 1) + '.', e.name, pad(e.score)].forEach((txt, j) => {
-      const s = document.createElement('span');
-      s.className = ['rank', 'name', 'pts'][j];
-      s.textContent = txt;
-      li.appendChild(s);
-    });
-    dom.scoresList.appendChild(li);
-  });
-  dom.scoresBox.hidden = Scores.list.length === 0;
-}
 
 const P = CONFIG.physics;
 const GRAV = P.gravity;
@@ -493,8 +694,8 @@ function gateDims() {
   return { w: h * aspect, h };
 }
 function placeGate() {
-  // Portal a la derecha del personaje (según Imagen 2 de referencia)
-  world.gateX = Math.max(heroX + U * 0.85, W * 0.28);
+  // Portal de entrada: arranca a la altura del personaje y se aleja hacia atrás al correr
+  world.gateX = heroX - U * 0.25;
 }
 
 function resetRun() {
@@ -509,8 +710,10 @@ function resetRun() {
   world.speed = W * CONFIG.speed.startFrac;
   world.spawnDist = W * CONFIG.spawn.firstDelayFrac;
   world.spawned = 0;
+  world.teroTimer = CONFIG.tero.firstDelay;      // primer tero a los 4.5 segundos
+  world.teroAlt = 0;                            // 0 = más arriba, 1 = más abajo (alterna)
   world.newRecord = false;
-  Object.assign(hero, { h: 0, vy: 0, grounded: true, jumps: 0, animT: 0, sinceJump: 0, sinceDouble: 99, landT: 0, buffer: 0 });
+  Object.assign(hero, { h: 0, vy: 0, grounded: true, jumps: 0, animT: 0, sinceJump: 0, sinceDouble: 99, landT: 0, buffer: 0, airTime: 0 });
   placeGate();
 }
 
@@ -518,12 +721,35 @@ function resetRun() {
 const aspectOf = (img) => (img ? img.naturalWidth / img.naturalHeight : 1);
 
 function obstacleDims(kind) {
+  if (kind === 'tero') {
+    const T = CONFIG.tero;
+    const s = (CONFIG.size.tero * U) / T.refH;       // px de sprite -> px de pantalla
+    return { w: T.refW * s, h: T.refH * s, s };
+  }
   const h = CONFIG.size[kind] * U;
   return { w: h * aspectOf(IMG[kind]), h };
+}
+// Centro vertical del tero: vuela en la zona del cielo
+// Alterna entre "uno más arriba" (cielo alto) y "uno más abajo" (cielo bajo, sobre techos)
+function teroCenterY(o) {
+  const bob = Math.sin((o ? o.phase : 0)) * CONFIG.tero.bob * U;
+  if (o && o.skyY !== undefined) {
+    return o.skyY + bob;
+  }
+  const skyTop = safeTop + clamp(U * 0.28, 36, 68);
+  const skyBottom = Math.max(skyTop + 35, stripTop * 0.30);
+  // skyFrac: 0.10 = uno más arriba (cielo alto), 0.85 = uno más abajo (cielo bajo, sobre edificios)
+  const frac = o && o.skyFrac !== undefined ? o.skyFrac : 0.50;
+  const base = lerp(skyTop, skyBottom, frac);
+  return base + bob;
 }
 function obstacleRect(o) {
   const { w, h } = obstacleDims(o.kind);
   const hb = CONFIG.hitbox[o.kind];
+  if (o.kind === 'tero') {
+    const top = teroCenterY(o) - h / 2;
+    return { l: o.x + w * hb.l, r: o.x + w * (1 - hb.r), t: top + h * hb.t, b: top + h * (1 - hb.b) };
+  }
   return {
     l: o.x + w * hb.l,
     r: o.x + w * (1 - hb.r),
@@ -573,12 +799,22 @@ function tryJump() {
 
 function onPress() {
   switch (state) {
-    case 'running': tryJump(); break;
-    case 'dead':
-      if (performance.now() - world.deadAt > CONFIG.deadInputLock) beginRun();
+    case STATES.PLAYING:
+      tryJump();
       break;
-    case 'paused':
-      if (performance.now() - world.pausedAt > 200) { state = 'running'; }
+    case STATES.GAME_OVER:
+      if (performance.now() - world.deadAt > CONFIG.deadInputLock) beginRunFromMenu();
+      break;
+    case STATES.PAUSED:
+      if (performance.now() - world.pausedAt > 200) { state = STATES.PLAYING; }
+      break;
+    // Tutorial: salto activo durante toda la práctica interactiva
+    case STATES.TUTORIAL:
+      tryJump();
+      break;
+    // Máquina expendedora: interacción con toque/clic
+    case STATES.VENDING_MACHINE:
+      triggerVendingDrop();
       break;
   }
 }
@@ -598,11 +834,11 @@ function cycleLetter(i, dir) {
 function confirmEntry() {
   initials = entryUI.letters.join('');
   storageSet(CONFIG.storageInitials, initials);
-  world.addedRank = Scores.add(initials, world.score);
-  hiScore = Scores.best();
-  renderOverlayScores();
+  const sent = Scores.submit(initials, world.score);   // se ve ya mismo; el servidor lo confirma en segundo plano
+  world.submitId = sent.id;
+  world.addedRank = sent.rank <= CONFIG.maxScores ? sent.rank : 0;
   entryUI.hits = [];
-  state = 'dead';
+  transitionTo(STATES.GAME_OVER);
   world.deadAt = performance.now();             // evita reinicio accidental con el mismo toque
   Sfx.play('pickup');
 }
@@ -649,47 +885,53 @@ function handleEntryKey(e) {
   }
 }
 
-let lastMenuTap = 0;
-
-function handleMenuTap(clientX, clientY) {
-  if (state !== 'menu') return;
-  const now = performance.now();
-  const isDoubleTap = (now - lastMenuTap < 420);
-  lastMenuTap = now;
-
-  const rect = dom.canvas.getBoundingClientRect();
-  const x = clientX - rect.left;
-  const y = clientY - rect.top;
-
-  const { w, h } = gateDims();
-  const gateY = groundY + U * 0.18 - h;
-  // Clic/tap sobre el portal de la universidad
-  const inGate = (x >= world.gateX && x <= world.gateX + w && y >= gateY && y <= gateY + h);
-
-  if (inGate || isDoubleTap) {
-    startFromOverlay();
+window.addEventListener('pointermove', (e) => {
+  if (state === STATES.VENDING_MACHINE && cinema.vending && cinema.vending.phase === 'idle') {
+    const rect = dom.canvas.getBoundingClientRect();
+    const scaleX = W / (rect.width || W);
+    const scaleY = H / (rect.height || H);
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
+    const maq = cinema.vending.maqRect;
+    if (maq && x >= maq.x && x <= maq.x + maq.w && y >= maq.y && y <= maq.y + maq.h) {
+      dom.canvas.style.cursor = 'pointer';
+      return;
+    }
   }
-}
+  dom.canvas.style.cursor = 'default';
+});
 
 window.addEventListener('pointerdown', (e) => {
-  if (state === 'menu') {
-    handleMenuTap(e.clientX, e.clientY);
-    return;
-  }
-  if (state === 'loading') return;
+  if (state === STATES.LOADING || state === STATES.CHARACTER_SELECT) return;          // el menú usa sus propios botones
+  if (e.target && e.target.closest && e.target.closest('#menu-btn')) return;
   e.preventDefault();
-  if (state === 'entry') { handleEntryPointer(e.clientX, e.clientY); return; }
+  Sfx.unlock();
+  if (state === STATES.ENTRY) { handleEntryPointer(e.clientX, e.clientY); return; }
+  // Cinemáticas: interacción con la máquina expendedora
+  if (state === STATES.VENDING_MACHINE) { handleVendingClick(e.clientX, e.clientY); return; }
   onPress();
 }, { passive: false });
 
 window.addEventListener('keydown', (e) => {
-  if (state === 'entry') { handleEntryKey(e); return; }
+  if (state === STATES.LOADING) return;
+  if (state === STATES.CHARACTER_SELECT) { handleMenuKey(e); return; }
+  if (state === STATES.ENTRY) { handleEntryKey(e); return; }
+  if (state === STATES.GAME_OVER && (e.key === 'm' || e.key === 'M' || e.key === 'Escape')) {
+    e.preventDefault();
+    showMenu();
+    return;
+  }
+  if (state === STATES.VENDING_MACHINE && (e.code === 'Space' || e.key === ' ' || e.code === 'Enter' || e.key === 'Enter')) {
+    e.preventDefault();
+    triggerVendingDrop();
+    return;
+  }
   const isJump = e.code === 'Space' || e.code === 'ArrowUp' || e.key === ' ' || e.key === 'ArrowUp';
-  const isEnter = e.key === 'Enter' && (state === 'dead' || state === 'menu');
+  const isEnter = e.key === 'Enter' && state === STATES.GAME_OVER;
   if (!isJump && !isEnter) return;
   e.preventDefault();
   if (e.repeat) return;
-  if (state === 'menu') { startFromOverlay(); return; }
+  Sfx.unlock();
   onPress();
 }, { passive: false });
 
@@ -702,11 +944,14 @@ document.addEventListener('dblclick', (e) => e.preventDefault());
 
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
-    if (state === 'running') { state = 'paused'; world.pausedAt = performance.now(); }
+    if (state === STATES.PLAYING) { state = STATES.PAUSED; world.pausedAt = performance.now(); }
   }
 });
 
-/* ---------- Spawner ---------- */
+
+/* =============================================================================
+ * 5c) SPAWNER DE VEREDA
+ * ============================================================================= */
 function spawnPattern() {
   const S = CONFIG.spawn;
   const p = world.p;
@@ -739,7 +984,6 @@ function spawnPattern() {
   const isMateSpawn = world.spawned >= 3 && (world.spawned % 5 === 0 || Math.random() < 0.22);
   if (isMateSpawn) {
     const pd = pickupDims('mate');
-    // Se ubica alto en el aire para aprovechar el multi-salto
     const mateHeight = rand(2.35, 2.75);
     world.pickups.push({
       kind: 'mate',
@@ -760,125 +1004,1015 @@ function spawnPattern() {
   }
 }
 
-/* ---------- Ciclo de partida ---------- */
-function beginRun() {
-  resetRun();
-  state = 'running';
-}
+/* ---------- Tero en la zona del cielo ---------- */
+function spawnSkyTero(isEmergency = false) {
+  if (!IMG.tero || !IMG.tero.length) return;
+  const T = CONFIG.tero;
+  let skyFrac, skyY;
 
-function die() {
-  state = 'dead';
-  world.deadAt = performance.now();
-  world.deadT = 0;
-  Sfx.play('hit');
-  world.newRecord = world.score > Scores.best();
-  world.addedRank = 0;
-  entryUI.hits = [];
-  if (Scores.qualifies(world.score)) {         // entra en el top 10 -> pide iniciales
-    state = 'entry';
-    entryUI.letters = initials.split('');
-    entryUI.slot = 0;
-    entryUI.rank = Scores.rankFor(world.score);
-  }
-}
-
-function update(dt) {
-  const S = CONFIG.speed;
-  const frames = dt * 60; // frames normalizados a 60 fps (independiente de la tasa de refresco)
-  world.time += dt;
-
-  // Aceleración idéntica al Dinosaurio de Google (Runner.config.ACCELERATION = 0.001 por frame hasta 13)
-  if (world.dinoSpeed < S.max) {
-    world.dinoSpeed = Math.min(S.max, world.dinoSpeed + S.acceleration * frames);
-  }
-  world.p = clamp((world.dinoSpeed - S.start) / (S.max - S.start), 0, 1);
-  world.speed = W * lerp(S.startFrac, S.maxFrac, world.p);
-  const dx = world.speed * dt;
-
-  world.groundScroll += dx;
-  world.bgScroll += (world.speed * 0.45) * dt;
-  world.dist += world.dinoSpeed * frames;
-
-  // Puntuación idéntica a Google Dino (DistanceMeter COEFFICIENT: 0.025) + bonus
-  const prev100 = Math.floor(world.score / 100);
-  world.score = Math.floor(world.dist * 0.025) + world.bonus;
-  const new100 = Math.floor(world.score / 100);
-  if (new100 > prev100 && world.score >= 100) {
-    Sfx.play('milestone');
-    world.milestoneT = 1.0;
-  }
-  if (world.milestoneT > 0) world.milestoneT -= dt;
-
-  world.gateX -= dx;
-
-  // --- Héroe ---
-  hero.animT += dt;
-  hero.sinceDouble += dt;
-  hero.buffer = Math.max(0, hero.buffer - dt);
-  if (hero.landT > 0) hero.landT -= dt;
-  if (!hero.grounded) {
-    hero.sinceJump += dt;
-    hero.vy -= (hero.jumps > 1 ? GRAV2 : GRAV) * dt;
-    hero.h += hero.vy * dt;
-
-    // Límite de techo para que no se pierda por arriba de la pantalla al saltar muchas veces
-    const maxHeroH = Math.max(2.4, (groundY - safeTop - U * 0.45) / U);
-    if (hero.h > maxHeroH) {
-      hero.h = maxHeroH;
-      hero.vy = Math.min(hero.vy, 0);
-    }
-
-    if (hero.h <= 0) {
-      hero.h = 0; hero.vy = 0; hero.grounded = true; hero.jumps = 0; hero.landT = 0.09;
-      if (hero.buffer > 0) { hero.buffer = 0; tryJump(); }
-    }
+  if (isEmergency) {
+    // Si el jugador persiste >10s solo en la zona aérea, sale a su misma altura para nivelar la dificultad
+    const playerCenterY = groundY - (hero.h + 0.45) * U;
+    skyY = clamp(playerCenterY, safeTop + 45, groundY - U * 1.3);
+    Sfx.tone(480, 240, 0.22, 'sawtooth', 0.12);
+    world.popups.push({
+      text: '¡CUIDADO!',
+      x: heroX + U * 0.4,
+      y: groundY - (hero.h + 1.2) * U,
+      t: 0,
+      gold: true
+    });
+  } else {
+    // Alterna: uno más arriba (0.10) y uno más abajo (0.85)
+    skyFrac = world.teroAlt === 0 ? 0.10 : 0.85;
+    world.teroAlt = 1 - world.teroAlt;
+    Sfx.tone(850, 680, 0.08, 'sine', 0.04);
   }
 
-  // --- Spawner ---
-  world.spawnDist -= dx;
-  if (world.spawnDist <= 0) spawnPattern();
+  // Velocidad de vuelo horizontal para cruzar fluidamente la pantalla desde la derecha
+  const flySpeed = isEmergency
+    ? (W * 0.40 + world.speed * 0.32)
+    : (W * 0.28 + world.speed * 0.22);
 
-  // --- Entidades ---
-  for (const o of world.obstacles) o.x -= dx;
-  for (const p of world.pickups) { p.x -= dx; p.phase += dt * 4; }
-  world.obstacles = world.obstacles.filter((o) => o.x + obstacleDims(o.kind).w > -U);
-  world.pickups   = world.pickups.filter((p) => !p.taken && p.x + pickupDims(p.kind).w > -U);
-
-  // --- Popups ---
-  for (const p of world.popups) p.t += dt;
-  world.popups = world.popups.filter((p) => p.t < 0.8);
-
-  // --- Colisiones ---
-  const hr = heroRect();
-  for (const o of world.obstacles) {
-    if (overlap(hr, obstacleRect(o))) { die(); return; }
-  }
-  for (const p of world.pickups) {
-    if (!p.taken && overlap(hr, pickupRect(p))) {
-      p.taken = true;
-      const pts = CONFIG.points[p.kind];
-      world.bonus += pts;
-      const isMate = p.kind === 'mate';
-      world.popups.push({
-        text: '+' + pts,
-        x: heroX + U * 0.4,
-        y: groundY - (hero.h + 1.2) * U,
-        t: 0,
-        gold: isMate
-      });
-      if (isMate) {
-        Sfx.play('mate');
-        world.milestoneT = 1.2;
-      } else {
-        Sfx.play('pickup');
-      }
-    }
-  }
+  world.obstacles.push({
+    kind: 'tero',
+    x: W + 30,                                  // entra volando desde el borde derecho
+    flySpeed,                                   // cruza toda la pantalla hacia la izquierda
+    phase: rand(0, 6.28),
+    t: 0,
+    skyFrac,
+    skyY,
+    isEmergency: !!isEmergency
+  });
 }
 
 
 /* =============================================================================
- * 6) RENDER
+ * 5d) CINEMÁTICA - Estado compartido por las escenas
+ * ============================================================================= */
+const cinema = {
+  bus: null,
+  tutorial: null,
+  campus: null,
+  vending: null
+};
+
+/* ---------- Vending machine interaction helpers ---------- */
+function handleVendingClick(clientX, clientY) {
+  if (!cinema.vending || cinema.vending.phase !== 'idle') return;
+  const rect = dom.canvas.getBoundingClientRect();
+  const scaleX = W / (rect.width || W);
+  const scaleY = H / (rect.height || H);
+  const x = (clientX - rect.left) * scaleX;
+  const y = (clientY - rect.top) * scaleY;
+  const maq = cinema.vending.maqRect;
+  if (maq && x >= maq.x && x <= maq.x + maq.w && y >= maq.y && y <= maq.y + maq.h) {
+    triggerVendingDrop();
+  }
+}
+
+function triggerVendingDrop() {
+  if (!cinema.vending || cinema.vending.phase !== 'idle') return;
+  cinema.vending.phase = 'drop';
+  cinema.vending.dropT = 0;
+  Sfx.play('vendingDrop');
+}
+
+
+/* =============================================================================
+ * 6) STATE HANDLERS – FSM (CHARACTER_SELECT, INTRO_BUS, TUTORIAL,
+ *                         CAMPUS_ENTRANCE, VENDING_MACHINE, PLAYING, GAME_OVER)
+ * ============================================================================= */
+const stateHandlers = {};
+
+/* Helper seguro para obtener el contexto de canvas 2D */
+function getCanvasCtx(c) {
+  return (c && c.drawImage) ? c : ctx;
+}
+
+/* ---------- LOADING ---------- */
+stateHandlers[STATES.LOADING] = {
+  update() {},
+  draw(c) {
+    const g = getCanvasCtx(c);
+    g.fillStyle = '#10141e';
+    g.fillRect(0, 0, W, H);
+    drawText('CARGANDO...', W / 2, H / 2, clamp(U * 0.3, 16, 30), { color: '#8c96ab' });
+  }
+};
+
+/* ---------- CHARACTER_SELECT (Estado 0: Menú de Selección) ---------- */
+stateHandlers[STATES.CHARACTER_SELECT] = {
+  enter() {
+    dom.overlay.classList.remove('is-hidden');
+    dom.overlay.classList.remove('is-loading');
+    renderOverlayScores();
+    if (dom.startBtn) {
+      dom.startBtn.textContent = '▶ COMENZAR';
+      dom.startBtn.focus({ preventScroll: true });
+    }
+  },
+  update() {},
+  draw(c) {
+    const g = getCanvasCtx(c);
+    g.fillStyle = '#10141e';
+    g.fillRect(0, 0, W, H);
+    drawInfiniteBackground();
+    drawGround();
+    drawHero();
+  }
+};
+
+/* ---------- INTRO_BUS (Estado 1: Bondi 620 y Bajada) ---------- */
+stateHandlers[STATES.INTRO_BUS] = {
+  enter() {
+    dom.overlay.classList.add('is-hidden');
+    cinema.bus = {
+      t: 0,
+      phase: 'arriving', // arriving → stopping → doorOpen → stepping → busLeaving → charWalkRight → done
+      busOffsetX: -W * 1.5,
+      charX: 0,
+      charY: 0,
+      charWalkT: 0,
+      fadeAlpha: 0
+    };
+    Sfx.play('busHorn');
+  },
+
+  update(dt) {
+    const b = cinema.bus;
+    if (!b) return;
+    b.t += dt;
+    const bg = getFondoInicioRect();
+
+    switch (b.phase) {
+      case 'arriving': {
+        const dur = 2.2;
+        const p = clamp(b.t / dur, 0, 1);
+        const eased = 1 - Math.pow(1 - p, 3); // ease-out cubic
+        b.busOffsetX = lerp(-bg.w * 0.98, 0, eased);
+        if (p >= 1) {
+          b.busOffsetX = 0;
+          b.phase = 'stopping';
+          b.t = 0;
+        }
+        break;
+      }
+      case 'stopping': {
+        b.busOffsetX = 0;
+        if (b.t > 0.4) {
+          b.phase = 'doorOpen';
+          b.t = 0;
+          Sfx.play('doorOpen');
+        }
+        break;
+      }
+      case 'doorOpen': {
+        b.busOffsetX = 0;
+        if (b.t > 0.6) {
+          b.phase = 'stepping';
+          b.t = 0;
+          Sfx.play('steps');
+        }
+        break;
+      }
+      case 'stepping': {
+        b.busOffsetX = 0;
+        // El personaje baja del colectivo hasta apoyarse en el suelo de la vereda
+        b.charX = bg.x + (170 / 1366) * bg.w;
+        const stepY = bg.y + (512 / 768) * bg.h;
+        const groundWalkY = bg.y + (540 / 768) * bg.h;
+        const stepP = clamp(b.t / 0.8, 0, 1);
+        b.charY = lerp(stepY, groundWalkY, stepP);
+
+        if (b.t > 1.1) {
+          b.phase = 'busLeaving';
+          b.t = 0;
+          b.charY = groundWalkY;
+        }
+        break;
+      }
+      case 'busLeaving': {
+        const dur = 1.8;
+        const p = clamp(b.t / dur, 0, 1);
+        const eased = p * p; // ease-in para arrancar progresivamente
+        b.busOffsetX = lerp(0, bg.w + 180, eased);
+        if (p >= 1) {
+          b.phase = 'charWalkRight';
+          b.t = 0;
+          b.charWalkT = 0;
+        }
+        break;
+      }
+      case 'charWalkRight': {
+        b.charWalkT += dt;
+        const walkSpeed = Math.max(W * 0.38, 190);
+        b.charX += walkSpeed * dt;
+        b.charY = bg.y + (540 / 768) * bg.h;
+        // Camina hacia la derecha hasta salir de la pantalla para cambio de escena manteniendo el mismo fondo
+        if (b.charX > W + 80) {
+          b.phase = 'done';
+          b.t = 0;
+        }
+        break;
+      }
+      case 'done': {
+        // Transición directa al Tutorial sin corte abrupto manteniendo el fondo de calle
+        transitionTo(STATES.TUTORIAL);
+        break;
+      }
+    }
+  },
+
+  draw(c) {
+    const g = getCanvasCtx(c);
+    const b = cinema.bus;
+    if (!b) return;
+    const bg = getFondoInicioRect();
+
+    // Fondo: calle y reja institucional de llegada
+    if (IMG.fondoInicio) {
+      g.drawImage(IMG.fondoInicio, bg.x, bg.y, bg.w, bg.h);
+    } else {
+      g.fillStyle = '#10141e';
+      g.fillRect(0, 0, W, H);
+    }
+
+    // Bus 620 en sus distintas fases de animación
+    if (b.phase === 'stepping') {
+      const saleImg = IMG.bus620sale[character];
+      if (saleImg) g.drawImage(saleImg, bg.x + b.busOffsetX, bg.y, bg.w, bg.h);
+    } else if (b.phase === 'doorOpen') {
+      if (IMG.bus620open) g.drawImage(IMG.bus620open, bg.x + b.busOffsetX, bg.y, bg.w, bg.h);
+    } else if (b.phase !== 'charWalkRight' && b.phase !== 'done') {
+      if (IMG.bus620closed) g.drawImage(IMG.bus620closed, bg.x + b.busOffsetX, bg.y, bg.w, bg.h);
+    }
+
+    // Personaje sobre la vereda
+    const charH = (124 / 768) * bg.h;
+    if (b.phase === 'busLeaving') {
+      const set = IMG.chars[character];
+      if (set && set.idle) {
+        const k = charH / set.idle.naturalHeight;
+        const cw = set.idle.naturalWidth * k;
+        // Sombra suave en el suelo
+        g.fillStyle = 'rgba(0,0,0,0.28)';
+        g.beginPath();
+        g.ellipse(b.charX, b.charY + charH * 0.02, charH * 0.28, charH * 0.05, 0, 0, Math.PI * 2);
+        g.fill();
+        g.drawImage(set.idle, b.charX - cw / 2, b.charY - charH, cw, charH);
+      }
+    } else if (b.phase === 'charWalkRight') {
+      drawWalkingChar(b.charX, b.charWalkT, b.charY, charH);
+    }
+  }
+};
+
+/* ---------- TUTORIAL (Estado 2: Práctica interactiva - Aprender Jugando) ---------- */
+stateHandlers[STATES.TUTORIAL] = {
+  enter() {
+    cinema.tutorial = {
+      t: 0,
+      phase: 'enterWalk',  // enterWalk → running → dialog1 → practiceBook → dialog2 → practiceHorse → fadeOut → runToEnd → done
+      dialogFrame: 0,
+      dialogTimer: 0,
+      popAlpha: 0,
+      obstacle: null,
+      stumbleT: 0,
+      passedBook: false,
+      passedHorse: false,
+      runX: 0
+    };
+    resetRun();
+    world.speed = Math.max(W * 0.36, 180);
+    world.dinoSpeed = 4.5;
+  },
+
+  update(dt) {
+    const tut = cinema.tutorial;
+    if (!tut) return;
+    tut.t += dt;
+    hero.animT += dt;
+    hero.sinceDouble += dt;
+    hero.buffer = Math.max(0, hero.buffer - dt);
+    if (hero.landT > 0) hero.landT -= dt;
+    if (tut.stumbleT > 0) tut.stumbleT -= dt;
+
+    // Física del personaje (salto y gravedad activos para que el usuario practique)
+    if (!hero.grounded) {
+      hero.sinceJump += dt;
+      hero.vy -= (hero.jumps > 1 ? GRAV2 : GRAV) * dt;
+      hero.h += hero.vy * dt;
+      const maxHeroH = Math.max(2.4, (groundY - safeTop - U * 0.45) / U);
+      if (hero.h > maxHeroH) { hero.h = maxHeroH; hero.vy = Math.min(hero.vy, 0); }
+      if (hero.h <= 0) {
+        hero.h = 0; hero.vy = 0; hero.grounded = true; hero.jumps = 0; hero.landT = 0.09;
+        if (hero.buffer > 0) { hero.buffer = 0; tryJump(); }
+      }
+    }
+
+    // Animación de habla en el diálogo (ciclo de los 6 frames chico/chica)
+    tut.dialogTimer += dt;
+    tut.dialogFrame = Math.floor(tut.dialogTimer / 0.14) % 6;
+
+    switch (tut.phase) {
+      case 'enterWalk':
+        // El personaje entra en cuadro y toma unos pasos de carrera inicial
+        world.groundScroll += (world.speed * 0.6) * dt;
+        world.bgScroll += (world.speed * 0.28) * dt;
+        if (tut.t > 0.7) {
+          tut.phase = 'running';
+          tut.t = 0;
+        }
+        break;
+
+      case 'running':
+        // Entorno entra en velocidad normal de juego y se despliega el pop-up
+        world.groundScroll += world.speed * dt;
+        world.bgScroll += (world.speed * 0.45) * dt;
+        tut.popAlpha = clamp(tut.t / 0.4, 0, 1);
+        if (tut.t > 0.5) {
+          tut.phase = 'dialog1';
+          tut.t = 0;
+        }
+        break;
+
+      case 'dialog1':
+        world.groundScroll += world.speed * dt;
+        world.bgScroll += (world.speed * 0.45) * dt;
+        tut.popAlpha = 1;
+        if (tut.t > 2.2) {
+          tut.phase = 'practiceBook';
+          tut.t = 0;
+          tut.obstacle = { kind: 'book', x: W + U * 0.9 };
+        }
+        break;
+
+      case 'practiceBook':
+        world.groundScroll += world.speed * dt;
+        world.bgScroll += (world.speed * 0.45) * dt;
+        tut.popAlpha = 1;
+        if (tut.obstacle) {
+          tut.obstacle.x -= world.speed * dt;
+          const hr = heroRect();
+          const or = obstacleRect(tut.obstacle);
+          if (overlap(hr, or) && tut.stumbleT <= 0) {
+            // Golpe en tutorial: tropiezo didáctico sin Game Over para aprender
+            tut.stumbleT = 0.55;
+            Sfx.play('hit');
+            tut.obstacle.x = W + U * 1.0;
+          } else if (tut.obstacle.x < heroX - U * 0.6) {
+            // Superado con éxito mediante salto simple
+            tut.passedBook = true;
+            tut.obstacle = null;
+            tut.phase = 'dialog2';
+            tut.t = 0;
+            tut.dialogTimer = 0;
+            Sfx.play('pickup');
+          }
+        }
+        break;
+
+      case 'dialog2':
+        world.groundScroll += world.speed * dt;
+        world.bgScroll += (world.speed * 0.45) * dt;
+        tut.popAlpha = 1;
+        if (tut.t > 2.3) {
+          tut.phase = 'practiceHorse';
+          tut.t = 0;
+          tut.obstacle = { kind: 'horse', x: W + U * 1.1 };
+        }
+        break;
+
+      case 'practiceHorse':
+        world.groundScroll += world.speed * dt;
+        world.bgScroll += (world.speed * 0.45) * dt;
+        tut.popAlpha = 1;
+        if (tut.obstacle) {
+          tut.obstacle.x -= world.speed * dt;
+          const hr = heroRect();
+          const or = obstacleRect(tut.obstacle);
+          if (overlap(hr, or) && tut.stumbleT <= 0) {
+            // Tropiezo con caballo: reintenta para practicar doble salto
+            tut.stumbleT = 0.55;
+            Sfx.play('hit');
+            tut.obstacle.x = W + U * 1.2;
+          } else if (tut.obstacle.x < heroX - U * 0.8) {
+            // Superado con éxito mediante doble salto
+            tut.passedHorse = true;
+            tut.obstacle = null;
+            tut.phase = 'fadeOut';
+            tut.t = 0;
+            Sfx.play('mate');
+          }
+        }
+        break;
+
+      case 'fadeOut':
+        world.groundScroll += world.speed * dt;
+        world.bgScroll += (world.speed * 0.45) * dt;
+        tut.popAlpha = 1 - clamp(tut.t / 0.5, 0, 1);
+        if (tut.t > 0.5) {
+          tut.phase = 'runToEnd';
+          tut.t = 0;
+        }
+        break;
+
+      case 'runToEnd':
+        // El personaje llega al final del tramo y avanza sin interrupción hacia la siguiente escena
+        world.groundScroll += world.speed * dt;
+        world.bgScroll += (world.speed * 0.45) * dt;
+        tut.runX += (world.speed * 0.6) * dt;
+        if (tut.t > 1.1) {
+          transitionTo(STATES.CAMPUS_ENTRANCE);
+        }
+        break;
+    }
+  },
+
+  draw(c) {
+    const g = getCanvasCtx(c);
+    const tut = cinema.tutorial;
+    if (!tut) return;
+
+    // Escenario de fondo con la misma calle (fondo inicio con vereda)
+    drawStreetBackground();
+    drawGround();
+
+    // Obstáculo de práctica en la vereda
+    if (tut.obstacle) {
+      const img = IMG[tut.obstacle.kind];
+      if (img) {
+        const { w, h } = obstacleDims(tut.obstacle.kind);
+        g.drawImage(img, tut.obstacle.x, groundY - h + U * 0.04, w, h);
+      }
+    }
+
+    // Personaje con efecto de parpadeo suave al tropezar
+    if (tut.stumbleT > 0 && Math.floor(performance.now() / 80) % 2 === 0) {
+      // parpadeo
+    } else {
+      if (tut.phase === 'runToEnd' && tut.runX > 0) {
+        // Corre avanzando hacia el extremo derecho
+        const runX = heroX + tut.runX;
+        drawWalkingChar(runX, hero.animT, groundY, U);
+      } else {
+        drawHero();
+      }
+    }
+
+    // Pop-up flotante con cuadro de diálogo y assets chico/chica dialogando
+    if (tut.popAlpha > 0) {
+      g.save();
+      g.globalAlpha = tut.popAlpha;
+      drawTutorialDialog(tut);
+      g.restore();
+    }
+
+    // Indicador sutil de acción
+    if (tut.phase === 'practiceBook') {
+      const blink = Math.floor(performance.now() / 380) % 2 === 0;
+      const size = clamp(U * 0.19, 11, 20);
+      drawText('¡TOCÁ O ESPACIO PARA SALTAR!', W / 2, H - U * 0.42, size, {
+        color: blink ? UNLAM.light : '#ffffff',
+        alpha: 0.95
+      });
+    } else if (tut.phase === 'practiceHorse') {
+      const blink = Math.floor(performance.now() / 380) % 2 === 0;
+      const size = clamp(U * 0.19, 11, 20);
+      drawText('¡DOBLE TOQUE O DOBLE ESPACIO PARA DOBLE SALTO!', W / 2, H - U * 0.42, size, {
+        color: blink ? '#ffd34d' : '#ffffff',
+        alpha: 0.95
+      });
+    }
+  }
+};
+
+/* ---------- CAMPUS_ENTRANCE (Estado 3: Entrada a la UNLaM) ---------- */
+stateHandlers[STATES.CAMPUS_ENTRANCE] = {
+  enter() {
+    cinema.campus = {
+      t: 0,
+      phase: 'fadeIn',     // fadeIn → walkForward → walkToDoor → fadeOut → done
+      charX: -60,
+      charY: 0,
+      walkT: 0,
+      fadeAlpha: 1
+    };
+    Object.assign(hero, { h: 0, vy: 0, grounded: true, jumps: 0, animT: 0 });
+  },
+
+  update(dt) {
+    const c = cinema.campus;
+    if (!c) return;
+    c.t += dt;
+    const bg = getCampusRect();
+    const gateTargetX = W * 0.5; // Punto medio horizontal de la pantalla (canvas.width * 0.5)
+    const sidewalkY = bg.y + (710 / 768) * bg.h;
+    const thresholdY = bg.y + (515 / 768) * bg.h;
+
+    switch (c.phase) {
+      case 'fadeIn':
+        c.fadeAlpha = 1 - clamp(c.t / 0.4, 0, 1);
+        c.charY = sidewalkY;
+        if (c.fadeAlpha <= 0) {
+          c.phase = 'walkForward';
+          c.t = 0;
+        }
+        break;
+
+      case 'walkForward':
+        // Continúa caminando hacia la derecha (entra por la izquierda)
+        c.walkT += dt;
+        c.charX += Math.max(W * 0.28, 170) * dt;
+        c.charY = sidewalkY;
+        // Al alcanzar el punto medio horizontal, cambia inmediatamente de perspectiva hacia el fondo
+        if (c.charX >= gateTargetX) {
+          c.charX = gateTargetX;
+          c.phase = 'walkToDoor';
+          c.t = 0;
+          c.walkT = 0;
+        }
+        break;
+
+      case 'walkToDoor':
+        // Avanza en dirección a la puerta de entrada de la universidad (hacia el fondo)
+        c.walkT += dt;
+        const walkDur = 2.0;
+        const p = clamp(c.t / walkDur, 0, 1);
+        c.charY = lerp(sidewalkY, thresholdY, p);
+        if (p >= 1) {
+          c.phase = 'fadeOut';
+          c.t = 0;
+        }
+        break;
+
+      case 'fadeOut':
+        // Al llegar a la zona de la puerta (umbral), fade a negro total
+        c.fadeAlpha = clamp(c.t / 0.6, 0, 1);
+        if (c.fadeAlpha >= 1) {
+          transitionTo(STATES.VENDING_MACHINE);
+        }
+        break;
+    }
+  },
+
+  draw(c) {
+    const g = getCanvasCtx(c);
+    const cm = cinema.campus;
+    if (!cm) return;
+    const bg = getCampusRect();
+
+    // Fondo: entrada de la universidad (UNLaM - fondoentrada)
+    if (IMG.fondoEntrada) {
+      g.drawImage(IMG.fondoEntrada, bg.x, bg.y, bg.w, bg.h);
+    } else {
+      g.fillStyle = '#1a2232';
+      g.fillRect(0, 0, W, H);
+    }
+
+    const baseH = (120 / 768) * bg.h;
+
+    if (cm.phase === 'fadeIn' || cm.phase === 'walkForward') {
+      // Vista lateral caminando hacia la derecha
+      drawWalkingChar(cm.charX, cm.walkT, cm.charY, baseH);
+    } else if (cm.phase === 'walkToDoor' || cm.phase === 'fadeOut') {
+      // Vista de espaldas en perspectiva hacia el portal
+      const sidewalkY = bg.y + (710 / 768) * bg.h;
+      const thresholdY = bg.y + (515 / 768) * bg.h;
+      const p = clamp((cm.charY - thresholdY) / (sidewalkY - thresholdY), 0, 1);
+      const scale = lerp(0.65, 1.0, p);
+      const curH = baseH * scale;
+      const frames = IMG.caminaPuerta[character];
+      if (frames && frames.length) {
+        const idx = Math.floor(cm.walkT / 0.20) % frames.length;
+        const img = frames[idx];
+        if (img) {
+          const k = curH / img.naturalHeight;
+          const w = img.naturalWidth * k;
+          // Sombra en perspectiva
+          g.fillStyle = 'rgba(0,0,0,0.25)';
+          g.beginPath();
+          g.ellipse(cm.charX, cm.charY + curH * 0.02, curH * 0.25, curH * 0.05, 0, 0, Math.PI * 2);
+          g.fill();
+          g.drawImage(img, cm.charX - w / 2, cm.charY - curH, w, curH);
+        }
+      }
+    }
+
+    // Transición a negro
+    if (cm.fadeAlpha > 0) {
+      g.fillStyle = `rgba(0,0,0,${cm.fadeAlpha})`;
+      g.fillRect(0, 0, W, H);
+    }
+  }
+};
+
+/* ---------- VENDING_MACHINE (Estado 4: Máquina Expendedora y la Bebida) ---------- */
+stateHandlers[STATES.VENDING_MACHINE] = {
+  enter() {
+    cinema.vending = {
+      t: 0,
+      phase: 'fadeIn',   // fadeIn → idle (waiting_for_vending_machine) → drop → drink → ready → done
+      fadeAlpha: 1,
+      maqRect: null,
+      dropT: 0,
+      drinkT: 0,
+      drinkFrame: 0,
+      maqFrame: 0,
+      maqX: 0,
+      maqY: 0,
+      maqW: 0,
+      maqH: 0
+    };
+    resetRun();
+    Object.assign(hero, { h: 0, vy: 0, grounded: true, jumps: 0, animT: 0 });
+  },
+
+  update(dt) {
+    const v = cinema.vending;
+    if (!v) return;
+    v.t += dt;
+
+    switch (v.phase) {
+      case 'fadeIn':
+        // Se disipa el fundido a negro
+        v.fadeAlpha = 1 - clamp(v.t / 0.5, 0, 1);
+        if (v.fadeAlpha <= 0) {
+          v.phase = 'idle'; // En espera de interacción (waiting_for_vending_machine)
+          v.t = 0;
+        }
+        break;
+
+      case 'idle':
+        v.maqFrame = 0;
+        break;
+
+      case 'drop':
+        // Cae una botella de bebida al compartimento de salida (sprites maquina 1-4)
+        v.dropT += dt;
+        v.maqFrame = Math.min(Math.floor(v.dropT / 0.20), 3);
+        if (v.dropT > 0.8) {
+          v.phase = 'drink';
+          v.t = 0;
+          v.drinkT = 0;
+          Sfx.play('drink');
+        }
+        break;
+
+      case 'drink':
+        // El personaje bebe la gaseosa (animación cocachica / cocachico frames 1-4)
+        v.drinkT += dt;
+        v.drinkFrame = Math.min(Math.floor(v.drinkT / 0.45), 3);
+        if (v.drinkT > 1.8) {
+          v.phase = 'ready';
+          v.t = 0;
+          Sfx.play('startRun');
+        }
+        break;
+
+      case 'ready':
+        // Regresa a la pose estándar de carrera (run) antes de iniciar
+        if (v.t > 0.4) {
+          world.vendingX = v.maqX;
+          transitionTo(STATES.PLAYING);
+        }
+        break;
+    }
+  },
+
+  draw(c) {
+    const g = getCanvasCtx(c);
+    const v = cinema.vending;
+    if (!v) return;
+
+    // Escenario principal infinito (Teatro, Auditorio, Biblioteca y vereda)
+    drawInfiniteBackground();
+    drawGround();
+
+    // Dimensiones y hitbox responsive de la máquina expendedora
+    const maqFrames = IMG.maquina;
+    const maqImg = (maqFrames && maqFrames.length) ? (maqFrames[v.maqFrame] || maqFrames[0]) : null;
+    const maqH = U * 1.35;
+    const maqW = maqImg ? (maqH * (maqImg.naturalWidth / maqImg.naturalHeight)) : (maqH * 0.79);
+    // Ubicada detrás/junto al personaje frente al circuito (referencia Imagen 2)
+    const maqX = heroX - maqW * 0.35;
+    const maqY = groundY - maqH + U * 0.04;
+
+    v.maqX = maqX;
+    v.maqY = maqY;
+    v.maqW = maqW;
+    v.maqH = maqH;
+    // Hitbox responsive recalculada según dimensiones actuales del canvas
+    v.maqRect = { x: maqX - 25, y: maqY - 25, w: maqW + 50, h: maqH + 50 };
+
+    // 1) Dibujar máquina expendedora
+    if (maqImg) {
+      g.drawImage(maqImg, maqX, maqY, maqW, maqH);
+
+      // Indicador visual / parpadeo resaltando la máquina en espera de interacción
+      if (v.phase === 'idle') {
+        const pulse = 0.4 + Math.sin(v.t * 4.5) * 0.3;
+        g.save();
+        g.globalAlpha = pulse;
+        g.strokeStyle = UNLAM.light;
+        g.lineWidth = 3;
+        rrect(maqX - 6, maqY - 6, maqW + 12, maqH + 12, 10);
+        g.stroke();
+        g.restore();
+
+        const blink = Math.floor(performance.now() / 420) % 2 === 0;
+        const size = clamp(U * 0.18, 11, 20);
+        drawText('▶ TOCÁ LA MÁQUINA', maqX + maqW / 2, maqY - U * 0.22, size, {
+          color: blink ? UNLAM.light : '#ffffff',
+          alpha: 0.95
+        });
+      }
+    }
+
+    // 2) Dibujar personaje (en primer plano, frente a la máquina)
+    if (v.phase === 'drink') {
+      const cocaFrames = IMG.coca[character];
+      if (cocaFrames && cocaFrames.length) {
+        const img = cocaFrames[v.drinkFrame] || cocaFrames[0];
+        if (img) {
+          const k = U / img.naturalHeight;
+          const w = img.naturalWidth * k;
+          const h = img.naturalHeight * k;
+          g.drawImage(img, heroX - w / 2, groundY - h, w, h);
+        }
+      }
+    } else if (v.phase === 'ready') {
+      // Pose estándar de carrera (run)
+      const set = IMG.chars[character];
+      const img = set && set.run && set.run[0] ? set.run[0] : (set && set.idle);
+      if (img) {
+        const k = U / (set.idle ? set.idle.naturalHeight : img.naturalHeight);
+        const w = img.naturalWidth * k;
+        const h = img.naturalHeight * k;
+        g.drawImage(img, heroX - w / 2, groundY - h, w, h);
+      }
+    } else {
+      // Personaje quieto (idle) frente al circuito
+      const set = IMG.chars[character];
+      if (set && set.idle) {
+        const k = U / set.idle.naturalHeight;
+        const w = set.idle.naturalWidth * k;
+        const h = set.idle.naturalHeight * k;
+        g.drawImage(set.idle, heroX - w / 2, groundY - h, w, h);
+      }
+    }
+
+    // Fundido a negro que se disipa
+    if (v.fadeAlpha > 0) {
+      g.fillStyle = `rgba(0,0,0,${v.fadeAlpha})`;
+      g.fillRect(0, 0, W, H);
+    }
+  }
+};
+
+/* ---------- PLAYING (Escena 5: Core game loop) ---------- */
+stateHandlers[STATES.PLAYING] = {
+  enter() {
+    const savedVendingX = world.vendingX;
+    resetRun();
+    world.vendingX = savedVendingX;
+    layout();
+  },
+
+  update(dt) {
+    const S = CONFIG.speed;
+    const frames = dt * 60; // frames normalizados a 60 fps (independiente de la tasa de refresco)
+    world.time += dt;
+
+    // Aceleración idéntica al Dinosaurio de Google (Runner.config.ACCELERATION = 0.001 por frame hasta 13)
+    if (world.dinoSpeed < S.max) {
+      world.dinoSpeed = Math.min(S.max, world.dinoSpeed + S.acceleration * frames);
+    }
+    world.p = clamp((world.dinoSpeed - S.start) / (S.max - S.start), 0, 1);
+    world.speed = W * lerp(S.startFrac, S.maxFrac, world.p);
+    const dx = world.speed * dt;
+
+    world.groundScroll += dx;
+    world.bgScroll += (world.speed * 0.45) * dt;
+    if (world.vendingX !== undefined && world.vendingX > -U * 3) {
+      world.vendingX -= dx;
+    }
+    world.dist += world.dinoSpeed * frames;
+
+    // Puntuación idéntica a Google Dino (DistanceMeter COEFFICIENT: 0.025) + bonus
+    const prev100 = Math.floor(world.score / 100);
+    world.score = Math.floor(world.dist * 0.025) + world.bonus;
+    const new100 = Math.floor(world.score / 100);
+    if (new100 > prev100 && world.score >= 100) {
+      Sfx.play('milestone');
+      world.milestoneT = 1.0;
+    }
+    if (world.milestoneT > 0) world.milestoneT -= dt;
+
+    world.gateX -= dx;
+
+    // --- Héroe ---
+    hero.animT += dt;
+    hero.sinceDouble += dt;
+    hero.buffer = Math.max(0, hero.buffer - dt);
+    if (hero.landT > 0) hero.landT -= dt;
+    if (!hero.grounded) {
+      hero.sinceJump += dt;
+      hero.vy -= (hero.jumps > 1 ? GRAV2 : GRAV) * dt;
+      hero.h += hero.vy * dt;
+
+      // Límite de techo para que no se pierda por arriba de la pantalla al saltar muchas veces
+      const maxHeroH = Math.max(2.4, (groundY - safeTop - U * 0.45) / U);
+      if (hero.h > maxHeroH) {
+        hero.h = maxHeroH;
+        hero.vy = Math.min(hero.vy, 0);
+      }
+
+      if (hero.h <= 0) {
+        hero.h = 0; hero.vy = 0; hero.grounded = true; hero.jumps = 0; hero.landT = 0.09;
+        if (hero.buffer > 0) { hero.buffer = 0; tryJump(); }
+      }
+    }
+
+    // --- Tero periódico (cruza la pantalla alternando alto y bajo cada tanto) ---
+    const T = CONFIG.tero;
+    world.teroTimer -= dt;
+    if (world.teroTimer <= 0) {
+      spawnSkyTero(false);
+      world.teroTimer = rand(T.intervalMin, T.intervalMax);
+    }
+
+    // --- Monitoreo de persistencia en la zona aérea (anti-abuso: > 10 seg) ---
+    if (!hero.grounded && hero.h > 0.08) {
+      hero.airTime = (hero.airTime || 0) + dt;
+      if (hero.airTime >= T.airAbuseTime) {
+        spawnSkyTero(true); // ¡sale un tero inmediatamente para nivelar la dificultad!
+        hero.airTime = 4.0; // cooldown: si persiste en el aire 6s más sin bajar, saldrá otro
+      }
+    } else {
+      hero.airTime = 0;     // al tocar la vereda se reinicia el contador
+    }
+
+    // --- Spawner ---
+    world.spawnDist -= dx;
+    if (world.spawnDist <= 0) spawnPattern();
+
+    // --- Entidades ---
+    for (const o of world.obstacles) {
+      const spd = o.kind === 'tero' ? (o.flySpeed || (world.speed * 1.25)) : world.speed;
+      o.x -= spd * dt;
+      if (o.kind === 'tero') { o.t += dt; o.phase += dt * 4.5; }   // aleteo + vaivén
+    }
+    for (const p of world.pickups) { p.x -= dx; p.phase += dt * 4; }
+    world.obstacles = world.obstacles.filter((o) => o.x + obstacleDims(o.kind).w > -U);
+    world.pickups   = world.pickups.filter((p) => !p.taken && p.x + pickupDims(p.kind).w > -U);
+
+    // --- Popups ---
+    for (const p of world.popups) p.t += dt;
+    world.popups = world.popups.filter((p) => p.t < 0.8);
+
+    // --- Colisiones ---
+    const hr = heroRect();
+    for (const o of world.obstacles) {
+      if (overlap(hr, obstacleRect(o))) {
+        if (!CONFIG.godMode) { die(); return; }
+      }
+    }
+    for (const p of world.pickups) {
+      if (!p.taken && overlap(hr, pickupRect(p))) {
+        p.taken = true;
+        const pts = CONFIG.points[p.kind];
+        world.bonus += pts;
+        const isMate = p.kind === 'mate';
+        world.popups.push({
+          text: '+' + pts,
+          x: heroX + U * 0.4,
+          y: groundY - (hero.h + 1.2) * U,
+          t: 0,
+          gold: isMate
+        });
+        if (isMate) {
+          Sfx.play('mate');
+          world.milestoneT = 1.2;
+        } else {
+          Sfx.play('pickup');
+        }
+      }
+    }
+  },
+
+  draw(c) {
+    const g = getCanvasCtx(c);
+    drawInfiniteBackground();
+    drawGround();
+    // La máquina expendedora se aleja junto con el escenario al iniciar la carrera
+    if (world.vendingX !== undefined && world.vendingX > -U * 3 && IMG.maquina && IMG.maquina[3]) {
+      const maqImg = IMG.maquina[3];
+      const maqH = U * 1.35;
+      const maqW = maqH * (maqImg.naturalWidth / maqImg.naturalHeight);
+      g.drawImage(maqImg, world.vendingX, groundY - maqH + U * 0.04, maqW, maqH);
+    }
+    drawGate();
+    drawPickups();
+    drawObstacles();
+    drawHero();
+    drawPopups();
+    if (CONFIG.debug) drawDebug();
+    drawHUD();
+  }
+};
+
+/* ---------- GAME_OVER ---------- */
+stateHandlers[STATES.GAME_OVER] = {
+  update(dt) {
+    world.deadT += dt;
+  },
+  draw() {
+    // Render subyacente
+    let shake = false;
+    if (world.deadT < 0.28) {
+      shake = true;
+      ctx.save();
+      const a = U * 0.06 * (1 - world.deadT / 0.28);
+      ctx.translate(rand(-a, a), rand(-a, a));
+    }
+    drawInfiniteBackground();
+    drawGround();
+    drawGate();
+    drawPickups();
+    drawObstacles();
+    drawHero();
+    drawPopups();
+    if (CONFIG.debug) drawDebug();
+    if (shake) ctx.restore();
+    drawHUD();
+
+    const blink = Math.floor(performance.now() / 500) % 2 === 0;
+    if (world.deadT < 0.18) {                    // flash de impacto
+      ctx.fillStyle = `rgba(255,255,255,${0.55 * (1 - world.deadT / 0.18)})`;
+      ctx.fillRect(0, 0, W, H);
+    }
+    drawDeadPanel(blink);
+  }
+};
+
+/* ---------- ENTRY (Ingreso de iniciales) ---------- */
+stateHandlers[STATES.ENTRY] = {
+  update(dt) {
+    world.deadT += dt;
+  },
+  draw() {
+    // Render subyacente
+    let shake = false;
+    if (world.deadT < 0.28) {
+      shake = true;
+      ctx.save();
+      const a = U * 0.06 * (1 - world.deadT / 0.28);
+      ctx.translate(rand(-a, a), rand(-a, a));
+    }
+    drawInfiniteBackground();
+    drawGround();
+    drawGate();
+    drawPickups();
+    drawObstacles();
+    drawHero();
+    drawPopups();
+    if (shake) ctx.restore();
+    drawHUD();
+
+    const blink = Math.floor(performance.now() / 500) % 2 === 0;
+    if (world.deadT < 0.18) {
+      ctx.fillStyle = `rgba(255,255,255,${0.55 * (1 - world.deadT / 0.18)})`;
+      ctx.fillRect(0, 0, W, H);
+    }
+    if (world.deadT >= ENTRY_READY_AT) drawEntryPanel(blink);
+  }
+};
+
+/* ---------- PAUSED ---------- */
+stateHandlers[STATES.PAUSED] = {
+  update() {},
+  draw() {
+    drawInfiniteBackground();
+    drawGround();
+    drawGate();
+    drawPickups();
+    drawObstacles();
+    drawHero();
+    drawPopups();
+    drawHUD();
+    const blink = Math.floor(performance.now() / 500) % 2 === 0;
+    drawPanel([
+      { text: 'PAUSA', scale: 1.1 },
+      { text: 'Tocá para seguir', scale: 0.5, alpha: blink ? 1 : 0.35 }
+    ]);
+  }
+};
+
+
+/* =============================================================================
+ * 7) RENDER HELPERS
  * ============================================================================= */
 const JUMP_APEX_BAND = 1.8;   // |vy| (U/s) por debajo del cual se muestra el frame de apex
 
@@ -894,7 +2028,7 @@ const UNLAM = {
 function heroSprite() {
   const set = IMG.chars[character];
   if (!set) return null;
-  if (state === 'menu' || state === 'loading') return set.idle;
+  if (state === STATES.LOADING || state === STATES.CHARACTER_SELECT) return set.idle;
   if (!hero.grounded) {
     // 1) despegue agachado (también al iniciar el doble salto)
     if (hero.sinceJump < 0.07 || (hero.jumps === 2 && hero.sinceDouble < 0.08)) return set.jumpTakeoff;
@@ -931,6 +2065,117 @@ function drawHero() {
   ctx.drawImage(img, heroX - w / 2, groundY - hero.h * U - h, w, h);
 }
 
+function drawWalkingChar(x, t, customY = groundY, customH = U) {
+  const set = IMG.chars[character];
+  if (!set || !set.run || !set.run.length) return;
+  const frameDur = 0.14;
+  const img = set.run[Math.floor(t / frameDur) % set.run.length];
+  if (!img) return;
+  const k = customH / (set.idle ? set.idle.naturalHeight : img.naturalHeight);
+  const scale = img.naturalHeight < 120 ? 1.5 : 1;
+  const w = img.naturalWidth * k * scale;
+  const h = img.naturalHeight * k * scale;
+  // Sombra
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.beginPath();
+  ctx.ellipse(x, customY + customH * 0.02, customH * 0.28, customH * 0.05, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.drawImage(img, x - w / 2, customY - h, w, h);
+}
+
+function getFondoInicioRect() {
+  const img = IMG.fondoInicio;
+  const nw = img ? img.naturalWidth : 1366;
+  const nh = img ? img.naturalHeight : 768;
+  const scale = Math.max(W / nw, H / nh);
+  const w = nw * scale;
+  const h = nh * scale;
+  const x = (W - w) / 2;
+  const y = H - h; // Aligned to bottom so street/pavement is at bottom
+  return { x, y, w, h, scale };
+}
+
+function drawStreetBackground() {
+  const img = IMG.fondoInicio;
+  if (!img) {
+    drawInfiniteBackground();
+    return;
+  }
+  const bg = getFondoInicioRect();
+  const period = bg.w * 2;
+  let x = -((world.bgScroll || 0) % period);
+  for (; x < W; x += period) {
+    ctx.drawImage(img, x, bg.y, bg.w, bg.h);
+    ctx.save();
+    ctx.translate(x + bg.w * 2, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(img, 0, bg.y, bg.w, bg.h);
+    ctx.restore();
+  }
+}
+
+function getCampusRect() {
+  const img = IMG.fondoEntrada;
+  const nw = img ? img.naturalWidth : 1366;
+  const nh = img ? img.naturalHeight : 768;
+  const scale = Math.max(W / nw, H / nh);
+  const w = nw * scale;
+  const h = nh * scale;
+  const x = (W - w) / 2;
+  const y = H - h;
+  return { x, y, w, h, scale };
+}
+
+function drawTutorialDialog(tut) {
+  const dialogFrames = IMG.dialogo[character];
+  const frameIdx = dialogFrames && dialogFrames.length ? tut.dialogFrame % dialogFrames.length : 0;
+  const portraitImg = dialogFrames ? dialogFrames[frameIdx] : null;
+
+  const boxW = clamp(W * 0.92, 280, 560);
+  const boxH = clamp(U * 0.72, 60, 88);
+  const boxX = (W - boxW) / 2;
+  const boxY = safeTop + 14;
+
+  ctx.save();
+  // Glassmorphic backdrop
+  ctx.fillStyle = 'rgba(10, 14, 24, 0.90)';
+  ctx.strokeStyle = 'rgba(66, 191, 160, 0.50)';
+  ctx.lineWidth = 2;
+  rrect(boxX, boxY, boxW, boxH, 14);
+  ctx.fill();
+  ctx.stroke();
+
+  // Portrait on left
+  let textX = boxX + 16;
+  if (portraitImg) {
+    const portH = boxH - 12;
+    const portW = portH * (portraitImg.naturalWidth / portraitImg.naturalHeight);
+    ctx.drawImage(portraitImg, boxX + 10, boxY + 6, portW, portH);
+    textX = boxX + portW + 20;
+  }
+
+  const textW = boxW - (textX - boxX) - 14;
+  let instruction = '';
+  if (tut.phase === 'dialog1' || tut.phase === 'practiceBook') {
+    instruction = 'Un toque / Barra espaciadora: Salto simple (esquiva manuales)';
+  } else if (tut.phase === 'dialog2' || tut.phase === 'practiceHorse') {
+    instruction = 'Doble toque / Doble espacio: Doble salto (esquiva el caballo)';
+  }
+
+  // Title
+  ctx.font = `800 ${clamp(boxH * 0.17, 9, 13)}px "Press Start 2P", monospace, sans-serif`;
+  ctx.fillStyle = UNLAM.light;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.fillText('TUTORIAL · ¡APRENDÉ A JUGAR!', textX, boxY + 12);
+
+  // Body
+  ctx.font = `700 ${clamp(boxH * 0.22, 11, 15)}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(instruction, textX, boxY + 34, textW);
+  ctx.restore();
+}
+
 function drawGround() {
   if (!groundTile) {
     ctx.fillStyle = '#4a4d57';
@@ -958,35 +2203,6 @@ function drawInfiniteBackground() {
   }
 }
 
-function drawMenuBackground() {
-  // 1) Fondo de inicio (cielo, nubes, árboles y horizonte de la UNLaM)
-  const bgImg = IMG.fondoinicio;
-  if (bgImg) {
-    const bgH = stripTop + 6;
-    const s = bgH / bgImg.naturalHeight;
-    const bgW = Math.ceil(bgImg.naturalWidth * s);
-    const offset = Math.max(0, (bgW - W) * 0.25);
-    for (let x = -offset; x < W; x += bgW) {
-      ctx.drawImage(bgImg, x, 0, bgW, bgH);
-    }
-  } else {
-    ctx.fillStyle = '#7ec0ee';
-    ctx.fillRect(0, 0, W, stripTop);
-  }
-
-  // 2) Reja modular que bordea la vereda (Imagen 2)
-  const rejaImg = IMG.reja;
-  if (rejaImg) {
-    const rejaH = U * 1.25;
-    const s = rejaH / rejaImg.naturalHeight;
-    const rejaW = Math.ceil(rejaImg.naturalWidth * s);
-    const rejaY = stripTop - rejaH + U * 0.12;
-    for (let x = 0; x < W; x += rejaW) {
-      ctx.drawImage(rejaImg, x, rejaY, rejaW, rejaH);
-    }
-  }
-}
-
 function drawGate() {
   const img = IMG.gate;
   if (!img) return;
@@ -994,32 +2210,25 @@ function drawGate() {
   if (world.gateX + w < 0) return;
   const gateY = groundY + U * 0.18 - h;
   ctx.drawImage(img, world.gateX, gateY, w, h);
+}
 
-  // En la pantalla de inicio, indicador visual animado sobre la puerta abierta
-  if (state === 'menu') {
-    const doorX = world.gateX + w * 0.50;
-    const doorY = groundY - h * 0.35;
-    const pulse = 0.88 + 0.12 * Math.sin(performance.now() / 240);
-    ctx.save();
-    ctx.translate(doorX, doorY);
-    ctx.scale(pulse, pulse);
-
-    const badgeW = Math.max(92, U * 0.95);
-    const badgeH = 28;
-    ctx.fillStyle = 'rgba(41, 159, 128, 0.92)';
-    rrect(-badgeW / 2, -badgeH / 2, badgeW, badgeH, 14);
-    ctx.fill();
-    ctx.strokeStyle = '#5cd4b6';
-    ctx.lineWidth = 2.5;
-    ctx.stroke();
-
-    drawText('ENTRAR', 0, 1, 13, { color: '#ffffff', stroke: 'rgba(0,0,0,0)', weight: 800 });
-    ctx.restore();
-  }
+function drawTero(o) {
+  const frames = IMG.tero;
+  if (!frames || !frames.length) return;
+  const img = frames[Math.floor(o.t / CONFIG.tero.frameDur) % frames.length];
+  const { w, h, s } = obstacleDims('tero');
+  const cx = o.x + w / 2, cy = teroCenterY(o);
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(-1, 1);                                       // los sprites miran a la derecha; el tero viene hacia la izquierda
+  ctx.drawImage(img, -img.naturalWidth * s / 2, -img.naturalHeight * s / 2,
+                img.naturalWidth * s, img.naturalHeight * s);
+  ctx.restore();
 }
 
 function drawObstacles() {
   for (const o of world.obstacles) {
+    if (o.kind === 'tero') { drawTero(o); continue; }
     const img = IMG[o.kind];
     if (!img) continue;
     const { w, h } = obstacleDims(o.kind);
@@ -1187,15 +2396,19 @@ function drawDeadPanel(blink) {
     { t: 'GAME OVER', s: 1.9, color: '#ff6b6b', gap: 0.3 },
     { t: 'PUNTOS ' + pad(world.score), s: 1.15 }
   ];
-  if (world.newRecord) lines.push({ t: '¡NUEVO RÉCORD!', s: 1.0, color: UNLAM.light, blink: true });
+  if (world.newRecord) lines.push({ t: '¡NUEVO RÉCORD GLOBAL!', s: 1.0, color: UNLAM.light, blink: true });
   if (rows.length) {
-    lines.push({ t: '— MEJORES PUNTAJES —', s: 0.9, color: UNLAM.green, gap: 0.5 });
+    lines.push({ t: '— RANKING GLOBAL —', s: 0.9, color: UNLAM.green, gap: 0.5 });
     rows.forEach((r) => lines.push({
       t: String(r.rank).padStart(2, ' ') + '. ' + r.name + '  ' + pad(r.score),
       s: 1.0, color: medal[r.rank - 1] || '#fff', blink: r.isNew, alt: UNLAM.light
     }));
   }
-  lines.push({ t: 'Tocá para reiniciar', s: 0.9, gap: 0.7, blink: true, dim: true });
+  const note = Scores.status === 'offline'
+    ? (Scores.pending.length ? 'Sin conexión · tu puntaje se enviará solo' : 'Sin conexión · ranking guardado')
+    : (Scores.syncing ? 'Enviando puntaje…' : '');
+  if (note) lines.push({ t: note, s: 0.6, color: '#aab3c5', gap: 0.2 });
+  lines.push({ t: 'Tocá para reiniciar', s: 0.9, gap: 0.6, blink: true, dim: true });
 
   const hOf = (l) => f * l.s * 1.4 + (l.gap || 0) * f;
   const total = lines.reduce((a, l) => a + hOf(l), 0);
@@ -1223,93 +2436,142 @@ function drawDebug() {
   ctx.beginPath(); ctx.moveTo(0, groundY); ctx.lineTo(W, groundY); ctx.stroke();
 }
 
-function render() {
-  ctx.clearRect(0, 0, W, H);
 
-  let shake = false;
-  if (state === 'dead' && world.deadT < 0.28) {
-    shake = true;
-    ctx.save();
-    const a = U * 0.06 * (1 - world.deadT / 0.28);
-    ctx.translate(rand(-a, a), rand(-a, a));
-  }
-
-  if (state === 'menu' || state === 'loading') {
-    drawMenuBackground();
-    drawGround();
-    drawGate();
-    drawHero();
+/* =============================================================================
+ * 8) GAME FLOW FUNCTIONS
+ * ============================================================================= */
+function die() {
+  world.deadAt = performance.now();
+  world.deadT = 0;
+  Sfx.play('hit');
+  world.newRecord = world.score > Scores.best();
+  world.addedRank = 0;
+  world.submitId = null;
+  entryUI.hits = [];
+  Scores.refresh();                            // trae el ranking global más reciente
+  if (Scores.qualifies(world.score)) {         // entra en el top 10 -> pide iniciales
+    transitionTo(STATES.ENTRY);
+    entryUI.letters = initials.split('');
+    entryUI.slot = 0;
+    entryUI.rank = Scores.rankFor(world.score);
   } else {
-    drawInfiniteBackground();
-    drawGround();
-    drawGate();
-    drawPickups();
-    drawObstacles();
-    drawHero();
-    drawPopups();
+    transitionTo(STATES.GAME_OVER);
   }
-  if (CONFIG.debug) drawDebug();
+}
 
-  if (shake) ctx.restore();
-  if (state === 'running' || state === 'dead' || state === 'entry' || state === 'paused') drawHUD();
-
-  const blink = Math.floor(performance.now() / 500) % 2 === 0;
-
-  if (state === 'dead' || state === 'entry') {
-    if (world.deadT < 0.18) {                    // flash de impacto
-      ctx.fillStyle = `rgba(255,255,255,${0.55 * (1 - world.deadT / 0.18)})`;
-      ctx.fillRect(0, 0, W, H);
-    }
-    if (state === 'entry') {
-      if (world.deadT >= ENTRY_READY_AT) drawEntryPanel(blink);
-    } else {
-      drawDeadPanel(blink);
-    }
-  } else if (state === 'paused') {
-    drawPanel([
-      { text: 'PAUSA', scale: 1.1 },
-      { text: 'Tocá para seguir', scale: 0.5, alpha: blink ? 1 : 0.35 }
-    ]);
+function beginRunFromMenu() {
+  if (CONFIG.skipCinematic) {
+    transitionTo(STATES.PLAYING);
+  } else {
+    transitionTo(STATES.INTRO_BUS);
   }
+}
+
+function showMenu() {
+  if (state !== STATES.GAME_OVER) return;
+  resetRun();
+  transitionTo(STATES.CHARACTER_SELECT);
 }
 
 
 /* =============================================================================
- * 7) BUCLE PRINCIPAL Y ARRANQUE
+ * 9) BUCLE PRINCIPAL Y ARRANQUE
  * ============================================================================= */
 let lastT = 0;
+let menuBtnShown = false;
+
 function frame(t) {
   requestAnimationFrame(frame);
   const dt = lastT ? clamp((t - lastT) / 1000, 0, 0.05) : 0;
   lastT = t;
 
-  if (state === 'running') update(dt);
-  else if (state === 'dead' || state === 'entry') world.deadT += dt;
-  render();
+  const handler = stateHandlers[state];
+  if (handler) {
+    if (handler.update) handler.update(dt);
+    if (handler.draw) handler.draw(ctx);
+  }
+
+  // Botón "Menú" solo en la pantalla de game over
+  const wantMenuBtn = state === STATES.GAME_OVER;
+  if (wantMenuBtn !== menuBtnShown) {
+    menuBtnShown = wantMenuBtn;
+    if (dom.menuBtn) dom.menuBtn.classList.toggle('is-visible', wantMenuBtn);
+  }
 }
 
-/* ---------- Overlay de inicio ---------- */
+/* ---------- Pantalla de inicio: personaje + COMENZAR + ranking global ---------- */
 let starting = false;
 
 function selectCharacter(id) {
   if (!ASSETS.characters[id]) return;
   character = id;
+  window.selectedCharacter = id === 'chica' ? 'girl' : 'boy';
+  window.selectedCharacterId = id;
   storageSet(CONFIG.storageChar, id);
   dom.pickers.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.char === id)));
+  if (dom.startBtn) {
+    dom.startBtn.disabled = false;
+    dom.startBtn.textContent = '▶ COMENZAR';
+  }
 }
 
-function startFromOverlay() {
-  if (starting || state !== 'menu') return;
+function renderOverlayScores() {
+  if (!dom.scoresList) return;
+  dom.scoresList.textContent = '';
+  const top = Scores.list.slice(0, 5);
+  top.forEach((e, i) => {
+    const li = document.createElement('li');
+    [(i + 1) + '.', e.name, pad(e.score)].forEach((txt, j) => {
+      const s = document.createElement('span');
+      s.className = ['rank', 'name', 'pts'][j];
+      s.textContent = txt;
+      li.appendChild(s);
+    });
+    dom.scoresList.appendChild(li);
+  });
+  if (!top.length) {
+    const li = document.createElement('li');
+    li.className = 'empty';
+    li.textContent = Scores.status === 'loading' ? 'Cargando ranking…' : '¡Sé la primera persona en dejar su marca!';
+    dom.scoresList.appendChild(li);
+  }
+  if (dom.scoresState) {
+    dom.scoresState.dataset.state = Scores.status;
+    dom.scoresState.textContent = Scores.status === 'offline'
+      ? (Scores.pending.length ? 'Sin conexión · tu puntaje se enviará solo' : 'Sin conexión · mostrando el último ranking')
+      : (Scores.status === 'loading' ? 'Conectando…' : '');
+  }
+}
+
+function startGame() {
+  if (starting || state !== STATES.CHARACTER_SELECT) return;
   starting = true;
 
-  // Audio y pantalla completa
+  // Audio y pantalla completa (requieren gesto del usuario)
   Sfx.unlock();
   goFullscreen();
 
   dom.overlay.classList.add('is-hidden');
   layout();
-  beginRun();
+
+  if (CONFIG.skipCinematic) {
+    transitionTo(STATES.PLAYING);
+  } else {
+    transitionTo(STATES.INTRO_BUS);
+  }
   starting = false;
+}
+
+function handleMenuKey(e) {
+  if (e.key === 'Enter' || e.key === ' ' || e.code === 'Space') {
+    e.preventDefault();
+    if (!e.repeat) startGame();
+  } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+    e.preventDefault();
+    const ids = Object.keys(ASSETS.characters);
+    const dir = e.key === 'ArrowRight' ? 1 : -1;
+    selectCharacter(ids[(ids.indexOf(character) + dir + ids.length) % ids.length]);
+  }
 }
 
 function setupOverlay() {
@@ -1320,9 +2582,22 @@ function setupOverlay() {
   if (dom.startBtn) {
     dom.startBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      startFromOverlay();
+      startGame();
     });
   }
+  if (dom.menuBtn) {
+    dom.menuBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      showMenu();
+    });
+  }
+
+  // Ranking global: al cambiar la lista se actualiza el récord, la pantalla de inicio y el puesto obtenido
+  Scores.onChange = () => { hiScore = Scores.best(); renderOverlayScores(); };
+  Scores.onRank = (id, rank) => {
+    if (id === world.submitId) world.addedRank = rank > 0 && rank <= CONFIG.maxScores ? rank : 0;
+  };
+  window.addEventListener('online', () => Scores.refresh());   // reenvía lo pendiente al volver la conexión
 }
 
 async function main() {
@@ -1332,18 +2607,16 @@ async function main() {
   selectCharacter(character);
   layout();
   resetRun();
-  requestAnimationFrame(frame);                  // escena idle detrás del overlay
+  requestAnimationFrame(frame);
+  Scores.refresh();                              // el ranking baja mientras cargan los assets
 
   await loadAssets();
-  layout();                                      // ahora hay imágenes: tile de suelo y proporciones reales
+  layout();
   resetRun();
 
   if (!IMG.chars[character] || !IMG.chars[character].idle) selectCharacter(CONFIG.defaultCharacter);
 
-  state = 'menu';
-  dom.overlay.classList.remove('is-loading');
-  if (dom.label) dom.label.innerHTML = 'Hacé <b>clic en la puerta</b> o <b>dos toques</b> para entrar';
-  dom.overlay.focus({ preventScroll: true });
+  transitionTo(STATES.CHARACTER_SELECT);
 }
 
 let resizeRaf = 0;
