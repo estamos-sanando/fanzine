@@ -1178,10 +1178,11 @@ stateHandlers[STATES.INTRO_BUS] = {
       }
       case 'stepping': {
         b.busOffsetX = 0;
-        // El personaje baja del colectivo hasta apoyarse en el suelo de la vereda
-        b.charX = bg.x + (170 / 1366) * bg.w;
-        const stepY = bg.y + (512 / 768) * bg.h;
-        const groundWalkY = bg.y + (540 / 768) * bg.h;
+        // El personaje baja del colectivo hasta apoyarse en el asfalto de la calle
+        b.charX = bg.x + (190 / 1366) * bg.w;
+        const busOffsetY = (155 / 768) * bg.h;
+        const stepY = bg.y + busOffsetY + (469 / 768) * bg.h;
+        const groundWalkY = bg.y + busOffsetY + (476 / 768) * bg.h;
         const stepP = clamp(b.t / 0.8, 0, 1);
         b.charY = lerp(stepY, groundWalkY, stepP);
 
@@ -1208,7 +1209,8 @@ stateHandlers[STATES.INTRO_BUS] = {
         b.charWalkT += dt;
         const walkSpeed = Math.max(W * 0.38, 190);
         b.charX += walkSpeed * dt;
-        b.charY = bg.y + (540 / 768) * bg.h;
+        const busOffsetY = (155 / 768) * bg.h;
+        b.charY = bg.y + busOffsetY + (476 / 768) * bg.h;
         // Camina hacia la derecha hasta salir de la pantalla para cambio de escena manteniendo el mismo fondo
         if (b.charX > W + 80) {
           b.phase = 'done';
@@ -1238,17 +1240,19 @@ stateHandlers[STATES.INTRO_BUS] = {
       g.fillRect(0, 0, W, H);
     }
 
-    // Bus 620 en sus distintas fases de animación
+    // Bus 620 en sus distintas fases de animación (ubicado en la calle sobre el asfalto)
+    const busOffsetY = (155 / 768) * bg.h;
+    const busY = bg.y + busOffsetY;
     if (b.phase === 'stepping') {
       const saleImg = IMG.bus620sale[character];
-      if (saleImg) g.drawImage(saleImg, bg.x + b.busOffsetX, bg.y, bg.w, bg.h);
+      if (saleImg) g.drawImage(saleImg, bg.x + b.busOffsetX, busY, bg.w, bg.h);
     } else if (b.phase === 'doorOpen') {
-      if (IMG.bus620open) g.drawImage(IMG.bus620open, bg.x + b.busOffsetX, bg.y, bg.w, bg.h);
+      if (IMG.bus620open) g.drawImage(IMG.bus620open, bg.x + b.busOffsetX, busY, bg.w, bg.h);
     } else if (b.phase !== 'charWalkRight' && b.phase !== 'done') {
-      if (IMG.bus620closed) g.drawImage(IMG.bus620closed, bg.x + b.busOffsetX, bg.y, bg.w, bg.h);
+      if (IMG.bus620closed) g.drawImage(IMG.bus620closed, bg.x + b.busOffsetX, busY, bg.w, bg.h);
     }
 
-    // Personaje sobre la vereda
+    // Personaje sobre el asfalto
     const charH = (124 / 768) * bg.h;
     if (b.phase === 'busLeaving') {
       const set = IMG.chars[character];
