@@ -129,11 +129,12 @@ const CONFIG = {
   debug: /[?&]debug\b/.test(location.search),   // ?debug muestra hitboxes
   godMode: /[?&]god\b/.test(location.search),   // ?god activa modo invencible para testing visual
   skipCinematic: /[?&]skip\b/.test(location.search), // ?skip salta las cinemáticas
-  storageScores:   'fanzine_runner_global',     // copia local del ranking global (para mostrar sin conexión)
+  storageScores:   'fanzine_runner_global_v2',  // copia local del ranking global (para mostrar sin conexión)
   storagePending:  'fanzine_runner_pending',    // puntajes que todavía no se pudieron enviar al servidor
   storageInitials: 'fanzine_runner_initials',   // últimas iniciales usadas
-  apiScores: '/api/scores',                     // ranking GLOBAL compartido entre dispositivos (api/scores.js)
-  apiTimeout: 7000,                             // ms antes de darse por vencida una llamada al servidor
+  apiScores: '/api/scores',                     // endpoint local/Vercel (api/scores.js)
+  cloudScores: 'https://api.restful-api.dev/objects/ff808181a09d98f701a18d9ecd606591', // cloud backend global compartido
+  apiTimeout: 5500,                             // ms antes de alternar al cloud
   maxScores: 10,
   initialsLength: 3,
   storageChar: 'fanzine_runner_char',
@@ -287,6 +288,9 @@ const Sfx = {
     switch (name) {
       case 'jump':
         this.tone(320, 640, 0.14);
+        break;
+      case 'talk':
+        this.tone(rand(420, 520), 380, 0.035, 'triangle', 0.035);
         break;
       case 'airJump': {
         const step = Math.min(opt, 5);
@@ -557,8 +561,21 @@ const cleanName = (s) =>
     .padEnd(CONFIG.initialsLength, 'A');
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
+const INITIAL_SCORES = [
+  { name: 'UNL', score: 1200 },
+  { name: 'FAN', score: 950 },
+  { name: 'MAT', score: 780 },
+  { name: 'RUN', score: 620 },
+  { name: 'BOY', score: 500 },
+  { name: 'GRL', score: 420 },
+  { name: 'SAN', score: 350 },
+  { name: 'JMP', score: 280 },
+  { name: 'TOP', score: 200 },
+  { name: 'WIN', score: 150 }
+];
+
 const Scores = {
-  remote: [],             // último top global confirmado por el servidor [{ name, score }]
+  remote: [],             // último top global confirmado por el servidor/cloud [{ name, score }]
   list: [],               // lo que se muestra: remote + puntajes propios pendientes, de mayor a menor
   pending: [],            // [{ id, name, score }] puntajes que todavía no llegaron al servidor
   status: 'loading',      // loading | ok | offline
@@ -568,8 +585,13 @@ const Scores = {
   onRank: null,           // callback(id, rank): el servidor confirmó un puntaje enviado
 
   load() {
-    try { this.remote = this.sanitize(JSON.parse(storageGet(CONFIG.storageScores, '[]'))); }
-    catch (_) { this.remote = []; }
+    try {
+      const stored = JSON.parse(storageGet(CONFIG.storageScores, 'null')) ||
+                     JSON.parse(storageGet('fanzine_runner_global', 'null'));
+      this.remote = stored ? this.sanitize(stored) : [...INITIAL_SCORES];
+    } catch (_) {
+      this.remote = [...INITIAL_SCORES];
+    }
     try {
       const raw = JSON.parse(storageGet(CONFIG.storagePending, '[]'));
       this.pending = (Array.isArray(raw) ? raw : []).filter((e) => e && e.id && Number.isFinite(e.score))
@@ -578,19 +600,24 @@ const Scores = {
     this.rebuild();
   },
   sanitize(raw) {
-    return (Array.isArray(raw) ? raw : [])
+    if (!Array.isArray(raw) || !raw.length) return [...INITIAL_SCORES];
+    const valid = raw
       .filter((e) => e && Number.isFinite(Number(e.score)) && Number(e.score) > 0)
       .map((e) => ({ name: cleanName(e.name), score: Math.floor(Number(e.score)) }))
-      .sort((a, b) => b.score - a.score)
-      .slice(0, CONFIG.maxScores);
+      .sort((a, b) => b.score - a.score);
+    return valid.length ? valid.slice(0, CONFIG.maxScores) : [...INITIAL_SCORES];
   },
   // Muestra también los puntajes propios que aún no confirmó el servidor
   rebuild() {
-    const out = this.remote.slice();
+    const out = (this.remote && this.remote.length) ? this.remote.slice() : [...INITIAL_SCORES];
     for (const p of this.pending) out.push({ name: p.name, score: p.score });
     this.list = this.sanitize(out);
   },
-  save() { storageSet(CONFIG.storageScores, JSON.stringify(this.remote)); },
+  save() {
+    storageSet(CONFIG.storageScores, JSON.stringify(this.remote));
+    // Guardar también en la clave anterior como resguardo
+    storageSet('fanzine_runner_global', JSON.stringify(this.remote));
+  },
   savePending() { storageSet(CONFIG.storagePending, JSON.stringify(this.pending)); },
   changed() { if (this.onChange) this.onChange(); },
 
@@ -606,9 +633,10 @@ const Scores = {
   },
 
   async request(method, body) {
-    const ctl = new AbortController();
-    const timer = setTimeout(() => ctl.abort(), CONFIG.apiTimeout);
+    // 1. Intentar endpoint local o Vercel (/api/scores)
     try {
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), CONFIG.apiTimeout);
       const res = await fetch(CONFIG.apiScores, {
         method,
         headers: body ? { 'Content-Type': 'application/json' } : undefined,
@@ -616,18 +644,57 @@ const Scores = {
         cache: 'no-store',
         signal: ctl.signal
       });
-      if (!res.ok) { const err = new Error('HTTP ' + res.status); err.status = res.status; throw err; }
-      return await res.json();
-    } finally { clearTimeout(timer); }
+      clearTimeout(timer);
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (_) {}
+
+    // 2. Si /api/scores no está disponible (ej: GitHub Pages o sin backend Node), usar Cloud REST directo
+    const ctlCloud = new AbortController();
+    const tCloud = setTimeout(() => ctlCloud.abort(), CONFIG.apiTimeout);
+    try {
+      if (method === 'GET') {
+        const res = await fetch(CONFIG.cloudScores, { cache: 'no-store', signal: ctlCloud.signal });
+        if (!res.ok) throw new Error('Cloud HTTP ' + res.status);
+        const d = await res.json();
+        const scores = (d && d.data && Array.isArray(d.data.scores)) ? d.data.scores : [];
+        return { scores };
+      } else if (method === 'POST') {
+        let current = [];
+        try {
+          const curRes = await fetch(CONFIG.cloudScores, { cache: 'no-store', signal: ctlCloud.signal });
+          if (curRes.ok) {
+            const curData = await curRes.json();
+            if (curData && curData.data && Array.isArray(curData.data.scores)) current = curData.data.scores;
+          }
+        } catch (_) {}
+        const merged = this.sanitize([...current, body]);
+        let rank = 1;
+        while (rank <= merged.length && merged[rank - 1].score > body.score) rank++;
+
+        await fetch(CONFIG.cloudScores, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: 'fanzine_scores', data: { scores: merged } }),
+          signal: ctlCloud.signal
+        });
+        return { rank, scores: merged };
+      }
+    } finally {
+      clearTimeout(tCloud);
+    }
   },
 
-  // Baja el ranking global y reenvía lo que haya quedado pendiente
+  // Baja el ranking global y fusiona sin borrar puntajes propios
   async refresh() {
     const version = this.version;
     try {
       const data = await this.request('GET');
-      if (version === this.version) {                // si mientras tanto se confirmó un envío, esta copia ya es vieja
-        this.remote = this.sanitize(data.scores);
+      if (data && Array.isArray(data.scores) && version === this.version) {
+        // Fusión atómica: conserva siempre los puntajes más altos
+        const combined = [...(this.remote || []), ...data.scores];
+        this.remote = this.sanitize(combined);
         this.rebuild();
         this.save();
       }
@@ -645,6 +712,9 @@ const Scores = {
     const rank = this.rankFor(item.score);
     this.pending.push(item);
     this.savePending();
+    // Guardar inmediatamente en remote para que NUNCA desaparezca
+    this.remote = this.sanitize([...this.remote, { name: item.name, score: item.score }]);
+    this.save();
     this.rebuild();
     this.changed();
     this.flush();
@@ -663,11 +733,14 @@ const Scores = {
           this.pending.shift();                       // confirmado: ya no es "pendiente"
           this.version++;
           this.savePending();
-          this.remote = this.sanitize(data.scores);
-          this.rebuild();
-          this.save();
+          if (data && Array.isArray(data.scores)) {
+            const combined = [...(this.remote || []), ...data.scores];
+            this.remote = this.sanitize(combined);
+            this.rebuild();
+            this.save();
+          }
           this.status = 'ok';
-          if (this.onRank) this.onRank(item.id, data.rank);
+          if (this.onRank && data && data.rank) this.onRank(item.id, data.rank);
           this.changed();
         } catch (e) {
           if (e && e.status === 400) {                // puntaje inválido: descartarlo
@@ -676,7 +749,7 @@ const Scores = {
             this.rebuild();
             continue;
           }
-          this.status = 'offline';                    // sin red / sin servidor / límite: reintenta luego
+          this.status = 'offline';                    // sin red / límite: reintenta luego
           break;
         }
       }
@@ -1342,6 +1415,8 @@ stateHandlers[STATES.TUTORIAL] = {
       phase: 'enterWalk',  // enterWalk → running → dialog1 → practiceBook → dialog2 → practiceHorse → fadeOut → runToEnd → done
       dialogFrame: 0,
       dialogTimer: 0,
+      charCount: 0,
+      lastCharCount: 0,
       popAlpha: 0,
       obstacle: null,
       stumbleT: 0,
@@ -1382,15 +1457,16 @@ stateHandlers[STATES.TUTORIAL] = {
       }
     }
 
-    // Animación de habla en el diálogo (ciclo de los 6 frames chico/chica)
-    tut.dialogTimer += dt;
-    tut.dialogFrame = Math.floor(tut.dialogTimer / 0.14) % 6;
+    const textPhase1 = 'Un toque / Barra espaciadora: Salto simple (esquiva manuales)';
+    const textPhase2 = 'Doble toque / Doble espacio: Doble salto (esquiva el caballo)';
+    const charsPerSec = 34; // velocidad de escritura fluida
 
     switch (tut.phase) {
       case 'enterWalk':
         // El personaje entra en cuadro y toma unos pasos de carrera inicial
         world.groundScroll += (world.speed * 0.6) * dt;
         world.bgScroll += (world.speed * 0.28) * dt;
+        tut.dialogFrame = 0;
         if (tut.t > 0.7) {
           tut.phase = 'running';
           tut.t = 0;
@@ -1402,9 +1478,13 @@ stateHandlers[STATES.TUTORIAL] = {
         world.groundScroll += world.speed * dt;
         world.bgScroll += (world.speed * 0.45) * dt;
         tut.popAlpha = clamp(tut.t / 0.4, 0, 1);
+        tut.dialogFrame = 0;
         if (tut.t > 0.5) {
           tut.phase = 'dialog1';
           tut.t = 0;
+          tut.charCount = 0;
+          tut.lastCharCount = 0;
+          tut.dialogTimer = 0;
         }
         break;
 
@@ -1412,9 +1492,26 @@ stateHandlers[STATES.TUTORIAL] = {
         world.groundScroll += world.speed * dt;
         world.bgScroll += (world.speed * 0.45) * dt;
         tut.popAlpha = 1;
-        if (tut.t > 2.2) {
+        const count1 = Math.min(textPhase1.length, Math.floor(tut.t * charsPerSec));
+        tut.charCount = count1;
+        if (count1 < textPhase1.length) {
+          // El personaje está hablando: anima boca en sincronía con el texto
+          tut.dialogTimer += dt;
+          tut.dialogFrame = Math.floor(tut.dialogTimer / 0.11) % 6;
+          if (count1 > (tut.lastCharCount || 0)) {
+            tut.lastCharCount = count1;
+            if (textPhase1[count1 - 1] !== ' ' && count1 % 2 === 0) Sfx.play('talk');
+          }
+        } else {
+          // Terminó de hablar: boca cerrada en reposo (frame 0)
+          tut.dialogFrame = 0;
+          tut.dialogTimer = 0;
+        }
+        if (tut.t > 2.8) {
           tut.phase = 'practiceBook';
           tut.t = 0;
+          tut.charCount = textPhase1.length;
+          tut.dialogFrame = 0;
           tut.obstacle = { kind: 'book', x: W + U * 0.9 };
         }
         break;
@@ -1423,6 +1520,8 @@ stateHandlers[STATES.TUTORIAL] = {
         world.groundScroll += world.speed * dt;
         world.bgScroll += (world.speed * 0.45) * dt;
         tut.popAlpha = 1;
+        tut.charCount = textPhase1.length;
+        tut.dialogFrame = 0; // Boca en reposo
         if (tut.obstacle) {
           tut.obstacle.x -= world.speed * dt;
           const hr = heroRect(streetY);
@@ -1438,7 +1537,10 @@ stateHandlers[STATES.TUTORIAL] = {
             tut.obstacle = null;
             tut.phase = 'dialog2';
             tut.t = 0;
+            tut.charCount = 0;
+            tut.lastCharCount = 0;
             tut.dialogTimer = 0;
+            tut.dialogFrame = 0;
             Sfx.play('pickup');
           }
         }
@@ -1448,9 +1550,26 @@ stateHandlers[STATES.TUTORIAL] = {
         world.groundScroll += world.speed * dt;
         world.bgScroll += (world.speed * 0.45) * dt;
         tut.popAlpha = 1;
-        if (tut.t > 2.3) {
+        const count2 = Math.min(textPhase2.length, Math.floor(tut.t * charsPerSec));
+        tut.charCount = count2;
+        if (count2 < textPhase2.length) {
+          // El personaje está hablando: anima boca en sincronía con el texto
+          tut.dialogTimer += dt;
+          tut.dialogFrame = Math.floor(tut.dialogTimer / 0.11) % 6;
+          if (count2 > (tut.lastCharCount || 0)) {
+            tut.lastCharCount = count2;
+            if (textPhase2[count2 - 1] !== ' ' && count2 % 2 === 0) Sfx.play('talk');
+          }
+        } else {
+          // Terminó de hablar: boca cerrada en reposo (frame 0)
+          tut.dialogFrame = 0;
+          tut.dialogTimer = 0;
+        }
+        if (tut.t > 2.8) {
           tut.phase = 'practiceHorse';
           tut.t = 0;
+          tut.charCount = textPhase2.length;
+          tut.dialogFrame = 0;
           tut.obstacle = { kind: 'horse', x: W + U * 1.1 };
         }
         break;
@@ -1459,6 +1578,8 @@ stateHandlers[STATES.TUTORIAL] = {
         world.groundScroll += world.speed * dt;
         world.bgScroll += (world.speed * 0.45) * dt;
         tut.popAlpha = 1;
+        tut.charCount = textPhase2.length;
+        tut.dialogFrame = 0; // Boca en reposo
         if (tut.obstacle) {
           tut.obstacle.x -= world.speed * dt;
           const hr = heroRect(streetY);
@@ -1474,6 +1595,7 @@ stateHandlers[STATES.TUTORIAL] = {
             tut.obstacle = null;
             tut.phase = 'fadeOut';
             tut.t = 0;
+            tut.dialogFrame = 0;
             Sfx.play('mate');
           }
         }
@@ -2214,7 +2336,7 @@ function getCampusRect() {
 
 function drawTutorialDialog(tut) {
   const dialogFrames = IMG.dialogo[character];
-  const frameIdx = dialogFrames && dialogFrames.length ? tut.dialogFrame % dialogFrames.length : 0;
+  const frameIdx = dialogFrames && dialogFrames.length ? (tut.dialogFrame % dialogFrames.length) : 0;
   const portraitImg = dialogFrames ? dialogFrames[frameIdx] : null;
 
   const boxW = clamp(W * 0.92, 280, 560);
@@ -2224,8 +2346,8 @@ function drawTutorialDialog(tut) {
 
   ctx.save();
   // Glassmorphic backdrop
-  ctx.fillStyle = 'rgba(10, 14, 24, 0.90)';
-  ctx.strokeStyle = 'rgba(66, 191, 160, 0.50)';
+  ctx.fillStyle = 'rgba(10, 14, 24, 0.92)';
+  ctx.strokeStyle = 'rgba(66, 191, 160, 0.55)';
   ctx.lineWidth = 2;
   rrect(boxX, boxY, boxW, boxH, 14);
   ctx.fill();
@@ -2241,12 +2363,15 @@ function drawTutorialDialog(tut) {
   }
 
   const textW = boxW - (textX - boxX) - 14;
-  let instruction = '';
+  let fullInstruction = '';
   if (tut.phase === 'dialog1' || tut.phase === 'practiceBook') {
-    instruction = 'Un toque / Barra espaciadora: Salto simple (esquiva manuales)';
+    fullInstruction = 'Un toque / Barra espaciadora: Salto simple (esquiva manuales)';
   } else if (tut.phase === 'dialog2' || tut.phase === 'practiceHorse') {
-    instruction = 'Doble toque / Doble espacio: Doble salto (esquiva el caballo)';
+    fullInstruction = 'Doble toque / Doble espacio: Doble salto (esquiva el caballo)';
   }
+
+  const charCount = Number.isFinite(tut.charCount) ? tut.charCount : fullInstruction.length;
+  const visibleText = fullInstruction.slice(0, charCount);
 
   // Title
   ctx.font = `800 ${clamp(boxH * 0.17, 9, 13)}px "Press Start 2P", monospace, sans-serif`;
@@ -2255,10 +2380,10 @@ function drawTutorialDialog(tut) {
   ctx.textBaseline = 'top';
   ctx.fillText('TUTORIAL · ¡APRENDÉ A JUGAR!', textX, boxY + 12);
 
-  // Body
+  // Body: texto sincronizado con los sprites de diálogo
   ctx.font = `700 ${clamp(boxH * 0.22, 11, 15)}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
   ctx.fillStyle = '#ffffff';
-  ctx.fillText(instruction, textX, boxY + 34, textW);
+  ctx.fillText(visibleText, textX, boxY + 34, textW);
   ctx.restore();
 }
 
@@ -2461,7 +2586,7 @@ function drawDeadPanel(blink) {
   ctx.fillRect(0, 0, W, H);
 
   const f = clamp(Math.min(W * 0.05, H * 0.042), 11, 28);
-  const cap = H >= 640 ? 8 : 5;
+  const cap = Math.min(CONFIG.maxScores, H >= 540 ? 10 : (H >= 450 ? 8 : 5));
   const rows = Scores.list.slice(0, cap).map((e, i) => ({ rank: i + 1, name: e.name, score: e.score, isNew: world.addedRank === i + 1 }));
   if (world.addedRank > cap) {                  // el puesto nuevo quedó fuera del recorte: mostrarlo igual
     const e = Scores.list[world.addedRank - 1];
@@ -2603,7 +2728,7 @@ function selectCharacter(id) {
 function renderOverlayScores() {
   if (!dom.scoresList) return;
   dom.scoresList.textContent = '';
-  const top = Scores.list.slice(0, 5);
+  const top = Scores.list.slice(0, CONFIG.maxScores);
   top.forEach((e, i) => {
     const li = document.createElement('li');
     [(i + 1) + '.', e.name, pad(e.score)].forEach((txt, j) => {
