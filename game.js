@@ -214,16 +214,17 @@ const pad   = (n, len = 5) => String(Math.max(0, Math.floor(n))).padStart(len, '
 
 const $ = (id) => document.getElementById(id);
 const dom = {
-  canvas:      $('game'),
-  toast:       $('toast'),
-  probe:       $('safe-probe'),
-  overlay:     $('overlay'),
-  startBtn:    $('start-btn'),
-  pickers:     Array.from(document.querySelectorAll('.picker__btn')),
-  scoresBox:   $('hiscores-box'),
-  scoresList:  $('hiscores'),
-  scoresState: $('hiscores-status'),
-  menuBtn:     $('menu-btn')
+  canvas:          $('game'),
+  toast:           $('toast'),
+  probe:           $('safe-probe'),
+  overlay:         $('overlay'),
+  startBtn:        $('start-btn'),
+  pickers:         Array.from(document.querySelectorAll('.picker__btn')),
+  scoresBox:       $('hiscores-box'),
+  scoresList:      $('hiscores'),
+  scoresState:     $('hiscores-status'),
+  menuBtn:         $('menu-btn'),
+  skipTutorialBtn: $('skip-tutorial-btn')
 };
 const ctx = dom.canvas.getContext('2d', { alpha: false });
 
@@ -529,6 +530,9 @@ window.selectedCharacterId = character;
 function transitionTo(newState) {
   const prev = state;
   state = newState;
+  if (dom.skipTutorialBtn) {
+    dom.skipTutorialBtn.classList.toggle('is-visible', newState === STATES.TUTORIAL);
+  }
   if (stateHandlers[newState] && stateHandlers[newState].enter) {
     stateHandlers[newState].enter(prev);
   }
@@ -2501,6 +2505,7 @@ function showMenu() {
  * ============================================================================= */
 let lastT = 0;
 let menuBtnShown = false;
+let skipTutorialBtnShown = false;
 
 function frame(t) {
   requestAnimationFrame(frame);
@@ -2518,6 +2523,13 @@ function frame(t) {
   if (wantMenuBtn !== menuBtnShown) {
     menuBtnShown = wantMenuBtn;
     if (dom.menuBtn) dom.menuBtn.classList.toggle('is-visible', wantMenuBtn);
+  }
+
+  // Botón "Saltar tutorial" solo durante el tutorial
+  const wantSkipTutorial = state === STATES.TUTORIAL;
+  if (wantSkipTutorial !== skipTutorialBtnShown) {
+    skipTutorialBtnShown = wantSkipTutorial;
+    if (dom.skipTutorialBtn) dom.skipTutorialBtn.classList.toggle('is-visible', wantSkipTutorial);
   }
 }
 
@@ -2612,6 +2624,22 @@ function setupOverlay() {
       e.stopPropagation();
       showMenu();
     });
+  }
+  if (dom.skipTutorialBtn) {
+    const onSkipTutorial = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (state === STATES.TUTORIAL) {
+        dom.skipTutorialBtn.classList.remove('is-visible');
+        skipTutorialBtnShown = false;
+        Sfx.play('click');
+        transitionTo(STATES.CAMPUS_ENTRANCE);
+      }
+    };
+    dom.skipTutorialBtn.addEventListener('click', onSkipTutorial);
+    dom.skipTutorialBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
+    dom.skipTutorialBtn.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: false });
+    dom.skipTutorialBtn.addEventListener('mousedown', (e) => e.stopPropagation());
   }
 
   // Ranking global: al cambiar la lista se actualiza el récord, la pantalla de inicio y el puesto obtenido

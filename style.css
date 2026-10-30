@@ -167,14 +167,12 @@ img { -webkit-user-drag: none; user-select: none; pointer-events: none; }
 .picker__btn {
   appearance: none;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  width: 84px;
-  height: 98px;
-  padding: 6px 4px;
-  border-radius: 16px;
+  width: 82px;
+  height: 82px;
+  padding: 6px;
+  border-radius: 18px;
   border: 2px solid rgba(255, 255, 255, 0.16);
   background: rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(6px);
@@ -185,18 +183,10 @@ img { -webkit-user-drag: none; user-select: none; pointer-events: none; }
   transition: transform .18s ease, border-color .18s ease, background .18s ease, box-shadow .18s ease;
 }
 .picker__btn img {
-  height: 60px;
+  height: 64px;
   width: auto;
   filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.6));
   transition: transform .18s ease;
-}
-.picker__name {
-  font-family: inherit;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  color: #d8deeb;
 }
 
 .picker__btn:hover {
@@ -209,10 +199,6 @@ img { -webkit-user-drag: none; user-select: none; pointer-events: none; }
   background: rgba(41, 159, 128, 0.32);
   transform: translateY(-3px) scale(1.04);
   box-shadow: 0 8px 24px rgba(41, 159, 128, 0.4), inset 0 0 12px rgba(92, 212, 182, 0.25);
-}
-.picker__btn[aria-pressed="true"] .picker__name {
-  color: #ffffff;
-  text-shadow: 0 0 8px var(--unlam-glow);
 }
 .picker__btn[aria-pressed="true"] img {
   transform: scale(1.06);
@@ -370,6 +356,50 @@ img { -webkit-user-drag: none; user-select: none; pointer-events: none; }
   transform: translateX(-50%) scale(1.05);
 }
 
+/* Botón para saltar el tutorial */
+.skip-tutorial-btn {
+  position: fixed;
+  top: max(16px, env(safe-area-inset-top));
+  right: max(16px, env(safe-area-inset-right));
+  z-index: 50;
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1.5px solid rgba(66, 191, 160, 0.55);
+  background: rgba(11, 13, 20, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  padding: 8px 18px;
+  border-radius: 999px;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-8px);
+  transition: opacity .25s ease, transform .25s ease, border-color .2s ease, background .2s ease, box-shadow .2s ease;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+}
+.skip-tutorial-btn.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+.skip-tutorial-btn:hover {
+  border-color: var(--unlam-light);
+  background: rgba(41, 159, 128, 0.32);
+  box-shadow: 0 6px 20px rgba(41, 159, 128, 0.35);
+  transform: translateY(-1px) scale(1.03);
+}
+.skip-tutorial-btn:active {
+  transform: translateY(1px) scale(0.97);
+}
+
 @keyframes pulse {
   0%, 100% { transform: scale(1); }
   50%      { transform: scale(1.04); }
@@ -383,11 +413,17 @@ img { -webkit-user-drag: none; user-select: none; pointer-events: none; }
 @media (max-height: 520px) {
   .start { gap: 6px; }
   .start__logo img { max-height: 55px; }
-  .picker__btn { width: 68px; height: 72px; padding: 3px; }
-  .picker__btn img { height: 42px; }
+  .picker__btn { width: 62px; height: 62px; padding: 4px; }
+  .picker__btn img { height: 46px; }
   .start__btn { padding: 8px 24px; font-size: 13px; margin-top: 2px; }
   .start__hint { font-size: 10px; padding: 3px 10px; }
   .scores { display: none; }
+  .skip-tutorial-btn {
+    font-size: 11px;
+    padding: 6px 14px;
+    top: max(10px, env(safe-area-inset-top));
+    right: max(10px, env(safe-area-inset-right));
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

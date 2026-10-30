@@ -51,19 +51,17 @@
       <section class="start__pick" aria-labelledby="pick-title">
         <h2 id="pick-title" class="start__label">Elegí tu personaje</h2>
         <div class="picker" role="group" aria-label="Elegí tu personaje">
-          <button id="pick-chica" class="picker__btn" type="button" data-char="chica" aria-pressed="true">
+          <button id="pick-chica" class="picker__btn" type="button" data-char="chica" aria-pressed="true" aria-label="Chica">
             <img src="ASSETS/chicaquieta.png" alt="" height="110">
-            <span class="picker__name">Chica</span>
           </button>
-          <button id="pick-chico" class="picker__btn" type="button" data-char="chico" aria-pressed="false">
+          <button id="pick-chico" class="picker__btn" type="button" data-char="chico" aria-pressed="false" aria-label="Chico">
             <img src="ASSETS/chicoquieto.png" alt="" height="110">
-            <span class="picker__name">Chico</span>
           </button>
         </div>
       </section>
 
       <button id="start-btn" class="start__btn" type="button">Cargando…</button>
-      <p class="start__hint"><b>Tocá</b> para saltar · ¡ojo con el <b>tero</b> en el cielo! · <b>?skip</b> salta la intro</p>
+      <p class="start__hint"><b>Tocá</b> o barra espaciadora para saltar · ¡ojo con el <b>tero</b> en el cielo!</p>
 
       <section id="hiscores-box" class="scores" aria-label="Ranking global">
         <h2 class="scores__title">★ Ranking global ★</h2>
@@ -73,10 +71,13 @@
     </div>
   </main>
 
+  <!-- Botón para saltar el tutorial (visible durante el tutorial) -->
+  <button id="skip-tutorial-btn" class="skip-tutorial-btn" type="button">Saltar tutorial ⏭</button>
+
   <!-- Volver a la pantalla de inicio (solo visible en game over) -->
   <button id="menu-btn" class="menu-btn" type="button">↩ Menú</button>
 
-  <script src="game.js?v=20"></script>
+  <script src="game.js?v=21"></script>
   <script>
     // Registro del Service Worker (modo offline). Requiere HTTPS o localhost.
     if ('serviceWorker' in navigator) {
