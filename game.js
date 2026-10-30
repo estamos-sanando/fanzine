@@ -19,7 +19,6 @@
 const ASSETS = {
   // Escenario, obstáculos y coleccionables
   images: {
-    gate:          'ASSETS/Inicio.png',          // portal de la universidad
     fondoinfinito: 'ASSETS/fondoinfinito.png',   // fondo infinito durante la carrera (Teatro, Auditorio, Biblioteca)
     ground:        'ASSETS/SUELO.png',           // vereda
     book:          'ASSETS/manualobstaculo.png', // obstáculo bajo
@@ -32,6 +31,13 @@ const ASSETS = {
     bus620closed:  'ASSETS/620cerrado.png',      // bondi cerrado
     bus620open:    'ASSETS/620abrepoco.png',     // bondi con puerta abierta
   },
+
+  // Avión publicitario de Instagram (propulsor y cartel ondeando)
+  avion: [
+    'ASSETS/avion.png',
+    'ASSETS/avion1.png',
+    'ASSETS/avion2.png'
+  ],
 
   // Bus con personaje bajando
   bus620sale: {
@@ -373,6 +379,10 @@ async function loadAssets() {
   IMG.tero = [];
   jobs.push(Promise.all(ASSETS.tero.map(loadImage)).then((arr) => { IMG.tero = arr.filter(Boolean); }));
 
+  // Avión promocional de Instagram (3 frames)
+  IMG.avion = [];
+  jobs.push(Promise.all(ASSETS.avion.map(loadImage)).then((arr) => { IMG.avion = arr.filter(Boolean); }));
+
   // Máquina expendedora frames
   IMG.maquina = [];
   jobs.push(Promise.all(ASSETS.maquina.map(loadImage)).then((arr) => { IMG.maquina = arr.filter(Boolean); }));
@@ -456,7 +466,6 @@ function layout() {
     world.obstacles.forEach((o) => { o.x *= k; });
     world.pickups.forEach((p) => { p.x *= k; });
     world.popups.forEach((p) => { p.x *= k; });
-    world.gateX *= k;
   }
 
   checkOrientation();
@@ -698,26 +707,52 @@ const hero = {
 
 const world = {
   obstacles: [], pickups: [], popups: [],
-  groundScroll: 0, bgScroll: 0, gateX: 0,
+  groundScroll: 0, bgScroll: 0,
   dinoSpeed: CONFIG.speed.start,
   dist: 0, bonus: 0, speed: 0, p: 0, time: 0,
   spawnDist: 0, spawned: 0,
   score: 0, newRecord: false,
   deadAt: 0, deadT: 0, pausedAt: 0,
-  milestoneT: 0
+  milestoneT: 0,
+  plane: { active: false, x: 0, y: 0, w: 0, h: 0, t: 0, speed: 150, timer: 1.5 }
 };
 
-function gateDims() {
-  const img = IMG.gate;
-  const aspect = img ? img.naturalWidth / img.naturalHeight : 1.904;
-  // Escala del portal en la entrada: proporcional al alto disponible sobre la vereda
-  const maxH = Math.max(180, (groundY - safeTop - 20) * 0.90);
-  const h = Math.min(maxH, H * 0.76);
-  return { w: h * aspect, h };
+/* ---------- Avión promocional de Instagram (@nella_costa) ---------- */
+function updatePlane(dt) {
+  const p = world.plane;
+  if (!p) return;
+  if (p.active) {
+    p.t += dt;
+    p.x -= p.speed * dt;
+    // Vaivén suave en el cielo
+    p.y += Math.sin(p.t * 2.5) * (0.30 * dt * 60);
+    if (p.x + p.w < -60) {
+      p.active = false;
+      p.timer = rand(22, 34); // Próximo vuelo en 22 a 34 segundos
+    }
+  } else {
+    p.timer -= dt;
+    if (p.timer <= 0) {
+      p.active = true;
+      p.t = 0;
+      p.h = clamp(H * 0.13, 44, 90);
+      const refImg = (IMG.avion && IMG.avion[0]) ? IMG.avion[0] : null;
+      const aspect = refImg ? (refImg.naturalWidth / refImg.naturalHeight) : (1178 / 222);
+      p.w = p.h * aspect;
+      p.x = W + 40;
+      p.y = clamp(H * 0.09, 18, 80);
+      p.speed = Math.max(W * 0.16, 130);
+    }
+  }
 }
-function placeGate() {
-  // Portal de entrada: arranca a la altura del personaje y se aleja hacia atrás al correr
-  world.gateX = heroX - U * 0.25;
+
+function drawPlane(g = ctx) {
+  const p = world.plane;
+  if (!p || !p.active || !IMG.avion || !IMG.avion.length) return;
+  const frameDur = 0.11;
+  const img = IMG.avion[Math.floor(p.t / frameDur) % IMG.avion.length];
+  if (!img) return;
+  g.drawImage(img, p.x, p.y, p.w, p.h);
 }
 
 function resetRun() {
@@ -735,8 +770,8 @@ function resetRun() {
   world.teroTimer = CONFIG.tero.firstDelay;      // primer tero a los 4.5 segundos
   world.teroAlt = 0;                            // 0 = más arriba, 1 = más abajo (alterna)
   world.newRecord = false;
+  world.plane = { active: false, x: 0, y: 0, w: 0, h: 0, t: 0, speed: 150, timer: 1.5 };
   Object.assign(hero, { h: 0, vy: 0, grounded: true, jumps: 0, animT: 0, sinceJump: 0, sinceDouble: 99, landT: 0, buffer: 0, airTime: 0 });
-  placeGate();
 }
 
 /* ---------- Dimensiones y hitboxes ---------- */
@@ -765,7 +800,7 @@ function teroCenterY(o) {
   const base = lerp(skyTop, skyBottom, frac);
   return base + bob;
 }
-function obstacleRect(o) {
+function obstacleRect(o, customGroundY = groundY) {
   const { w, h } = obstacleDims(o.kind);
   const hb = CONFIG.hitbox[o.kind];
   if (o.kind === 'tero') {
@@ -775,8 +810,8 @@ function obstacleRect(o) {
   return {
     l: o.x + w * hb.l,
     r: o.x + w * (1 - hb.r),
-    t: groundY - h * (1 - hb.t),
-    b: groundY - h * hb.b
+    t: customGroundY - h * (1 - hb.t),
+    b: customGroundY - h * hb.b
   };
 }
 function pickupDims(kind) {
@@ -789,13 +824,13 @@ function pickupRect(p) {
   const f = CONFIG.pickupForgiveness;
   return { l: p.x - w * f, r: p.x + w * (1 + f), t: cy - h * (0.5 + f), b: cy + h * (0.5 + f) };
 }
-function heroRect() {
+function heroRect(customGroundY = groundY) {
   const c = CONFIG.hero;
   return {
     l: heroX - c.halfWidth * U,
     r: heroX + c.halfWidth * U,
-    t: groundY - (hero.h + c.top) * U,
-    b: groundY - (hero.h + c.bottom) * U
+    t: customGroundY - (hero.h + c.top) * U,
+    b: customGroundY - (hero.h + c.bottom) * U
   };
 }
 const overlap = (a, b) => a.l < b.r && a.r > b.l && a.t < b.b && a.b > b.t;
@@ -1200,11 +1235,13 @@ stateHandlers[STATES.INTRO_BUS] = {
       }
       case 'stepping': {
         b.busOffsetX = 0;
-        // El personaje baja del colectivo hasta apoyarse en el asfalto de la calle (cota exacta de la calzada)
-        b.charX = bg.x + (190 / 1366) * bg.w;
+        // El personaje baja del colectivo hasta apoyarse en el asfalto de la calle (proporcional al 620)
+        b.charX = bg.x + (185 / 1366) * bg.w;
         const busOffsetY = (196 / 768) * bg.h;
-        const stepY = bg.y + busOffsetY + (469 / 768) * bg.h;
-        const groundWalkY = bg.y + busOffsetY + (476 / 768) * bg.h;
+        const charH = (185 / 768) * bg.h;
+        const padOffset = (6 / 152) * charH;
+        const stepY = bg.y + busOffsetY + (440 / 768) * bg.h + padOffset;
+        const groundWalkY = bg.y + busOffsetY + (476 / 768) * bg.h + padOffset;
         const stepP = clamp(b.t / 0.8, 0, 1);
         b.charY = lerp(stepY, groundWalkY, stepP);
 
@@ -1232,7 +1269,9 @@ stateHandlers[STATES.INTRO_BUS] = {
         const walkSpeed = Math.max(W * 0.38, 190);
         b.charX += walkSpeed * dt;
         const busOffsetY = (196 / 768) * bg.h;
-        b.charY = bg.y + busOffsetY + (476 / 768) * bg.h;
+        const charH = (185 / 768) * bg.h;
+        const padOffset = (6 / 152) * charH;
+        b.charY = bg.y + busOffsetY + (476 / 768) * bg.h + padOffset;
         // Camina hacia la derecha hasta salir de la pantalla para cambio de escena manteniendo el mismo fondo
         if (b.charX > W + 80) {
           b.phase = 'done';
@@ -1274,17 +1313,18 @@ stateHandlers[STATES.INTRO_BUS] = {
       if (IMG.bus620closed) g.drawImage(IMG.bus620closed, bg.x + b.busOffsetX, busY, bg.w, bg.h);
     }
 
-    // Personaje sobre el asfalto
-    const charH = (124 / 768) * bg.h;
+    // Personaje sobre el asfalto (proporcional al colectivo 620: 185px escala 768)
+    const charH = (185 / 768) * bg.h;
+    const feetGroundY = bg.y + busOffsetY + (476 / 768) * bg.h;
     if (b.phase === 'busLeaving') {
       const set = IMG.chars[character];
       if (set && set.idle) {
         const k = charH / set.idle.naturalHeight;
         const cw = set.idle.naturalWidth * k;
-        // Sombra suave en el suelo
-        g.fillStyle = 'rgba(0,0,0,0.28)';
+        // Sombra suave en el suelo apoyada en el asfalto
+        g.fillStyle = 'rgba(0,0,0,0.30)';
         g.beginPath();
-        g.ellipse(b.charX, b.charY + charH * 0.02, charH * 0.28, charH * 0.05, 0, 0, Math.PI * 2);
+        g.ellipse(b.charX, feetGroundY, charH * 0.28, charH * 0.05, 0, 0, Math.PI * 2);
         g.fill();
         g.drawImage(set.idle, b.charX - cw / 2, b.charY - charH, cw, charH);
       }
@@ -1324,12 +1364,17 @@ stateHandlers[STATES.TUTORIAL] = {
     if (hero.landT > 0) hero.landT -= dt;
     if (tut.stumbleT > 0) tut.stumbleT -= dt;
 
-    // Física del personaje (salto y gravedad activos para que el usuario practique)
+    // Actualiza el vuelo del avión en el tutorial
+    updatePlane(dt);
+
+    const streetY = tutorialStreetY();
+
+    // Física del personaje (salto y gravedad sobre el asfalto de la calle)
     if (!hero.grounded) {
       hero.sinceJump += dt;
       hero.vy -= (hero.jumps > 1 ? GRAV2 : GRAV) * dt;
       hero.h += hero.vy * dt;
-      const maxHeroH = Math.max(2.4, (groundY - safeTop - U * 0.45) / U);
+      const maxHeroH = Math.max(2.4, (streetY - safeTop - U * 0.45) / U);
       if (hero.h > maxHeroH) { hero.h = maxHeroH; hero.vy = Math.min(hero.vy, 0); }
       if (hero.h <= 0) {
         hero.h = 0; hero.vy = 0; hero.grounded = true; hero.jumps = 0; hero.landT = 0.09;
@@ -1380,8 +1425,8 @@ stateHandlers[STATES.TUTORIAL] = {
         tut.popAlpha = 1;
         if (tut.obstacle) {
           tut.obstacle.x -= world.speed * dt;
-          const hr = heroRect();
-          const or = obstacleRect(tut.obstacle);
+          const hr = heroRect(streetY);
+          const or = obstacleRect(tut.obstacle, streetY);
           if (overlap(hr, or) && tut.stumbleT <= 0) {
             // Golpe en tutorial: tropiezo didáctico sin Game Over para aprender
             tut.stumbleT = 0.55;
@@ -1416,8 +1461,8 @@ stateHandlers[STATES.TUTORIAL] = {
         tut.popAlpha = 1;
         if (tut.obstacle) {
           tut.obstacle.x -= world.speed * dt;
-          const hr = heroRect();
-          const or = obstacleRect(tut.obstacle);
+          const hr = heroRect(streetY);
+          const or = obstacleRect(tut.obstacle, streetY);
           if (overlap(hr, or) && tut.stumbleT <= 0) {
             // Tropiezo con caballo: reintenta para practicar doble salto
             tut.stumbleT = 0.55;
@@ -1461,29 +1506,31 @@ stateHandlers[STATES.TUTORIAL] = {
     const tut = cinema.tutorial;
     if (!tut) return;
 
-    // Escenario de fondo con la misma calle (fondo inicio con vereda)
+    // Escenario de fondo con la misma calle (sin suelo de vereda, directamente sobre la calle)
     drawStreetBackground();
-    drawGround();
+    drawPlane(g);
 
-    // Obstáculo de práctica en la vereda
+    const streetY = tutorialStreetY();
+
+    // Obstáculo de práctica en la calle
     if (tut.obstacle) {
       const img = IMG[tut.obstacle.kind];
       if (img) {
         const { w, h } = obstacleDims(tut.obstacle.kind);
-        g.drawImage(img, tut.obstacle.x, groundY - h + U * 0.04, w, h);
+        g.drawImage(img, tut.obstacle.x, streetY - h + U * 0.04, w, h);
       }
     }
 
-    // Personaje con efecto de parpadeo suave al tropezar
+    // Personaje sobre el asfalto de la calle
     if (tut.stumbleT > 0 && Math.floor(performance.now() / 80) % 2 === 0) {
-      // parpadeo
+      // parpadeo al tropezar
     } else {
       if (tut.phase === 'runToEnd' && tut.runX > 0) {
         // Corre avanzando hacia el extremo derecho
         const runX = heroX + tut.runX;
-        drawWalkingChar(runX, hero.animT, groundY, U);
+        drawWalkingChar(runX, hero.animT, streetY, U);
       } else {
-        drawHero();
+        drawHero(streetY);
       }
     }
 
@@ -1533,7 +1580,8 @@ stateHandlers[STATES.CAMPUS_ENTRANCE] = {
     if (!c) return;
     c.t += dt;
     const bg = getCampusRect();
-    const gateTargetX = W * 0.5; // Punto medio horizontal de la pantalla (canvas.width * 0.5)
+    // Posición exacta del pasaje de entrada (cruz roja de referencia entre las rejas abiertas)
+    const gateTargetX = bg.x + (755 / 1366) * bg.w;
     const sidewalkY = bg.y + (710 / 768) * bg.h;
     const thresholdY = bg.y + (515 / 768) * bg.h;
 
@@ -1548,11 +1596,11 @@ stateHandlers[STATES.CAMPUS_ENTRANCE] = {
         break;
 
       case 'walkForward':
-        // Continúa caminando hacia la derecha (entra por la izquierda)
+        // Continúa caminando hacia la derecha (entra por la izquierda hasta el pasaje marcado con la cruz roja)
         c.walkT += dt;
         c.charX += Math.max(W * 0.28, 170) * dt;
         c.charY = sidewalkY;
-        // Al alcanzar el punto medio horizontal, cambia inmediatamente de perspectiva hacia el fondo
+        // Al alcanzar la posición de la cruz roja en el pasaje entre las rejas, cambia de perspectiva hacia el fondo
         if (c.charX >= gateTargetX) {
           c.charX = gateTargetX;
           c.phase = 'walkToDoor';
@@ -1562,7 +1610,7 @@ stateHandlers[STATES.CAMPUS_ENTRANCE] = {
         break;
 
       case 'walkToDoor':
-        // Avanza en dirección a la puerta de entrada de la universidad (hacia el fondo)
+        // Avanza en dirección al portal de la universidad a través de la abertura (hacia el fondo)
         c.walkT += dt;
         const walkDur = 2.0;
         const p = clamp(c.t / walkDur, 0, 1);
@@ -1574,7 +1622,7 @@ stateHandlers[STATES.CAMPUS_ENTRANCE] = {
         break;
 
       case 'fadeOut':
-        // Al llegar a la zona de la puerta (umbral), fade a negro total
+        // Al llegar al umbral interior, fade a negro total
         c.fadeAlpha = clamp(c.t / 0.6, 0, 1);
         if (c.fadeAlpha >= 1) {
           transitionTo(STATES.VENDING_MACHINE);
@@ -1597,7 +1645,7 @@ stateHandlers[STATES.CAMPUS_ENTRANCE] = {
       g.fillRect(0, 0, W, H);
     }
 
-    const baseH = (120 / 768) * bg.h;
+    const baseH = (135 / 768) * bg.h;
 
     if (cm.phase === 'fadeIn' || cm.phase === 'walkForward') {
       // Vista lateral caminando hacia la derecha
@@ -1716,13 +1764,13 @@ stateHandlers[STATES.VENDING_MACHINE] = {
     drawInfiniteBackground();
     drawGround();
 
-    // Dimensiones y hitbox responsive de la máquina expendedora
+    // Dimensiones y hitbox responsive de la máquina expendedora (ampliada y a la derecha del personaje)
     const maqFrames = IMG.maquina;
     const maqImg = (maqFrames && maqFrames.length) ? (maqFrames[v.maqFrame] || maqFrames[0]) : null;
-    const maqH = U * 1.35;
-    const maqW = maqImg ? (maqH * (maqImg.naturalWidth / maqImg.naturalHeight)) : (maqH * 0.79);
-    // Ubicada detrás/junto al personaje frente al circuito (referencia Imagen 2)
-    const maqX = heroX - maqW * 0.35;
+    const maqH = U * 1.72;
+    const maqW = maqImg ? (maqH * (maqImg.naturalWidth / maqImg.naturalHeight)) : (maqH * 0.792);
+    // Ubicada a la derecha del personaje para que no se superpongan (personaje a la izquierda)
+    const maqX = heroX + U * 0.58;
     const maqY = groundY - maqH + U * 0.04;
 
     v.maqX = maqX;
@@ -1756,13 +1804,14 @@ stateHandlers[STATES.VENDING_MACHINE] = {
       }
     }
 
-    // 2) Dibujar personaje (en primer plano, frente a la máquina)
+    // 2) Dibujar personaje a la izquierda de la máquina, aumentado proporcionalmente (charH = U * 1.25)
+    const charH = U * 1.25;
     if (v.phase === 'drink') {
       const cocaFrames = IMG.coca[character];
       if (cocaFrames && cocaFrames.length) {
         const img = cocaFrames[v.drinkFrame] || cocaFrames[0];
         if (img) {
-          const k = U / img.naturalHeight;
+          const k = charH / img.naturalHeight;
           const w = img.naturalWidth * k;
           const h = img.naturalHeight * k;
           g.drawImage(img, heroX - w / 2, groundY - h, w, h);
@@ -1773,7 +1822,7 @@ stateHandlers[STATES.VENDING_MACHINE] = {
       const set = IMG.chars[character];
       const img = set && set.run && set.run[0] ? set.run[0] : (set && set.idle);
       if (img) {
-        const k = U / (set.idle ? set.idle.naturalHeight : img.naturalHeight);
+        const k = charH / (set.idle ? set.idle.naturalHeight : img.naturalHeight);
         const w = img.naturalWidth * k;
         const h = img.naturalHeight * k;
         g.drawImage(img, heroX - w / 2, groundY - h, w, h);
@@ -1782,9 +1831,14 @@ stateHandlers[STATES.VENDING_MACHINE] = {
       // Personaje quieto (idle) frente al circuito
       const set = IMG.chars[character];
       if (set && set.idle) {
-        const k = U / set.idle.naturalHeight;
+        const k = charH / set.idle.naturalHeight;
         const w = set.idle.naturalWidth * k;
         const h = set.idle.naturalHeight * k;
+        // Sombra suave en el suelo
+        g.fillStyle = 'rgba(0,0,0,0.28)';
+        g.beginPath();
+        g.ellipse(heroX, groundY + charH * 0.02, charH * 0.28, charH * 0.05, 0, 0, Math.PI * 2);
+        g.fill();
         g.drawImage(set.idle, heroX - w / 2, groundY - h, w, h);
       }
     }
@@ -1836,7 +1890,8 @@ stateHandlers[STATES.PLAYING] = {
     }
     if (world.milestoneT > 0) world.milestoneT -= dt;
 
-    world.gateX -= dx;
+    // Actualiza el avión promocional de Instagram en el cielo
+    updatePlane(dt);
 
     // --- Héroe ---
     hero.animT += dt;
@@ -1931,15 +1986,15 @@ stateHandlers[STATES.PLAYING] = {
   draw(c) {
     const g = getCanvasCtx(c);
     drawInfiniteBackground();
+    drawPlane(g);
     drawGround();
-    // La máquina expendedora se aleja junto con el escenario al iniciar la carrera
-    if (world.vendingX !== undefined && world.vendingX > -U * 3 && IMG.maquina && IMG.maquina[3]) {
+    // La máquina expendedora (ampliada) se aleja junto con el escenario al iniciar la carrera
+    if (world.vendingX !== undefined && world.vendingX > -U * 4 && IMG.maquina && IMG.maquina[3]) {
       const maqImg = IMG.maquina[3];
-      const maqH = U * 1.35;
+      const maqH = U * 1.72;
       const maqW = maqH * (maqImg.naturalWidth / maqImg.naturalHeight);
       g.drawImage(maqImg, world.vendingX, groundY - maqH + U * 0.04, maqW, maqH);
     }
-    drawGate();
     drawPickups();
     drawObstacles();
     drawHero();
@@ -1964,8 +2019,8 @@ stateHandlers[STATES.GAME_OVER] = {
       ctx.translate(rand(-a, a), rand(-a, a));
     }
     drawInfiniteBackground();
+    drawPlane(ctx);
     drawGround();
-    drawGate();
     drawPickups();
     drawObstacles();
     drawHero();
@@ -1998,8 +2053,8 @@ stateHandlers[STATES.ENTRY] = {
       ctx.translate(rand(-a, a), rand(-a, a));
     }
     drawInfiniteBackground();
+    drawPlane(ctx);
     drawGround();
-    drawGate();
     drawPickups();
     drawObstacles();
     drawHero();
@@ -2021,8 +2076,8 @@ stateHandlers[STATES.PAUSED] = {
   update() {},
   draw() {
     drawInfiniteBackground();
+    drawPlane(ctx);
     drawGround();
-    drawGate();
     drawPickups();
     drawObstacles();
     drawHero();
@@ -2070,7 +2125,7 @@ function heroSprite() {
   return frames && frames.length ? frames[Math.floor(hero.animT / frameDur) % frames.length] : set.idle;
 }
 
-function drawHero() {
+function drawHero(customGroundY = groundY) {
   const set = IMG.chars[character];
   if (!set || !set.idle) return;
   const k = U / set.idle.naturalHeight;               // escala común para todos los frames
@@ -2081,14 +2136,14 @@ function drawHero() {
   const shrink = 1 - Math.min(hero.h, 2) * 0.18;
   ctx.fillStyle = 'rgba(0,0,0,0.28)';
   ctx.beginPath();
-  ctx.ellipse(heroX, groundY + U * 0.02, U * 0.30 * shrink, U * 0.06 * shrink, 0, 0, Math.PI * 2);
+  ctx.ellipse(heroX, customGroundY + U * 0.02, U * 0.30 * shrink, U * 0.06 * shrink, 0, 0, Math.PI * 2);
   ctx.fill();
 
   // Los frames corre1 y corre2 (exportados a 1x con ~106px de alto) se escalan a 1.5x
   // para coincidir exactamente con los demás sprites (160px)
   const scale = img.naturalHeight < 120 ? 1.5 : 1;
   const w = img.naturalWidth * k * scale, h = img.naturalHeight * k * scale;
-  ctx.drawImage(img, heroX - w / 2, groundY - hero.h * U - h, w, h);
+  ctx.drawImage(img, heroX - w / 2, customGroundY - hero.h * U - h, w, h);
 }
 
 function drawWalkingChar(x, t, customY = groundY, customH = U) {
@@ -2119,6 +2174,11 @@ function getFondoInicioRect() {
   const x = (W - w) / 2;
   const y = H - h; // Aligned to bottom so street/pavement is at bottom
   return { x, y, w, h, scale };
+}
+
+function tutorialStreetY() {
+  const bg = getFondoInicioRect();
+  return bg.y + (672 / 768) * bg.h;
 }
 
 function drawStreetBackground() {
@@ -2227,15 +2287,6 @@ function drawInfiniteBackground() {
   for (let x = -scroll; x < W; x += bgW) {
     ctx.drawImage(img, x, 0, bgW, bgH);
   }
-}
-
-function drawGate() {
-  const img = IMG.gate;
-  if (!img) return;
-  const { w, h } = gateDims();
-  if (world.gateX + w < 0) return;
-  const gateY = groundY + U * 0.18 - h;
-  ctx.drawImage(img, world.gateX, gateY, w, h);
 }
 
 function drawTero(o) {
