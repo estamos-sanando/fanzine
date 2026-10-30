@@ -1,11 +1,10 @@
 /* =========================================================
- * Service Worker · estrategia CACHE FIRST
- * - install : precachea todo el juego (tolerante a fallos individuales)
- * - fetch   : responde desde caché; si no está, va a red y lo guarda
- * - Si publicás cambios en Vercel, SUBÍ el número de CACHE_VERSION
- *   para que los celulares descarguen la versión nueva.
+ * Service Worker · Fanzine Runner v20
+ * - install : precachea el juego (tolerante a fallos)
+ * - fetch   : Network-First para HTML/JS/CSS (garantiza código actualizado)
+ *             Cache-First para imágenes y audios pesados (máxima velocidad)
  * ========================================================= */
-const CACHE_VERSION = 'v18';
+const CACHE_VERSION = 'v20';
 const CACHE_NAME = 'fanzine-runner-' + CACHE_VERSION;
 
 // Mantener sincronizado con el diccionario ASSETS de game.js
@@ -17,6 +16,7 @@ const PRECACHE = [
   'ASSETS/Inicio.png',
   'ASSETS/logonoterindas.png',
   'ASSETS/fondoinfinito.png',
+  'ASSETS/fondoinicio.png',
   'ASSETS/fondo inicio.png',
   'ASSETS/fondoentrada.png',
   'ASSETS/620cerrado.png',
@@ -112,12 +112,12 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname.startsWith('/api/')) return;
 
   const isNav = req.mode === 'navigate';
+  const isCode = isNav || url.pathname.endsWith('.js') || url.pathname.endsWith('.css');
 
-  event.respondWith(
-    caches.match(req, { ignoreSearch: true }).then((cached) => {
-      if (cached) return cached;                       // 1) Cache First
-
-      return fetch(req)                                // 2) Red + guardado en caché
+  if (isCode) {
+    // Network-First para código: asegura ver los cambios desplegados en Vercel de inmediato
+    event.respondWith(
+      fetch(req)
         .then((res) => {
           if (res && res.ok && res.type === 'basic') {
             const copy = res.clone();
@@ -125,8 +125,31 @@ self.addEventListener('fetch', (event) => {
           }
           return res;
         })
-        .catch(() => {                                 // 3) Sin red y sin caché
-          if (isNav) return caches.match('index.html').then((r) => r || caches.match('./'));
+        .catch(() => {
+          return caches.match(req, { ignoreSearch: true }).then((cached) => {
+            if (cached) return cached;
+            if (isNav) return caches.match('index.html').then((r) => r || caches.match('./'));
+            return Response.error();
+          });
+        })
+    );
+    return;
+  }
+
+  // Cache-First para imágenes y sonidos estáticos
+  event.respondWith(
+    caches.match(req, { ignoreSearch: true }).then((cached) => {
+      if (cached) return cached;
+
+      return fetch(req)
+        .then((res) => {
+          if (res && res.ok && res.type === 'basic') {
+            const copy = res.clone();
+            caches.open(CACHE_NAME).then((c) => c.put(req, copy));
+          }
+          return res;
+        })
+        .catch(() => {
           return Response.error();
         });
     })

@@ -12,11 +12,30 @@
   <meta name="format-detection" content="telephone=no">
   <link rel="icon" href="ASSETS/chicaquieta.png" type="image/png">
   <link rel="apple-touch-icon" href="ASSETS/chicaquieta.png">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=20">
 </head>
 <body>
   <!-- Canvas del juego -->
   <canvas id="game" aria-label="Juego runner"></canvas>
+
+  <!-- Aviso de rotación para dispositivos móviles en vertical -->
+  <aside id="rotate-device-modal" class="rotate-modal" aria-hidden="true" role="dialog" aria-label="Girá tu pantalla para jugar">
+    <div class="rotate-modal__content">
+      <div class="rotate-modal__icon" aria-hidden="true">
+        <svg viewBox="0 0 100 100" class="rotate-phone-svg" width="96" height="96">
+          <!-- Silueta del celular rotando -->
+          <rect class="phone-body" x="32" y="16" width="36" height="68" rx="6" />
+          <circle class="phone-home" cx="50" cy="76" r="2.5" />
+          <line class="phone-speaker" x1="43" y1="24" x2="57" y2="24" />
+          <!-- Flecha de rotación -->
+          <path class="rotate-arrow" d="M 76 32 A 38 38 0 0 1 76 68 L 82 62 M 76 68 L 68 66" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </div>
+      <h2 class="rotate-modal__title">¡GIRÁ TU PANTALLA!</h2>
+      <p class="rotate-modal__text">Para jugar a <b>Fanzine Runner</b> colocá tu celular en <b>modo horizontal</b> (apaisado).</p>
+      <div class="rotate-modal__badge">📱 ↺ Modo Horizontal</div>
+    </div>
+  </aside>
 
   <!-- Auxiliares -->
   <div id="safe-probe" aria-hidden="true"></div>
@@ -57,7 +76,7 @@
   <!-- Volver a la pantalla de inicio (solo visible en game over) -->
   <button id="menu-btn" class="menu-btn" type="button">↩ Menú</button>
 
-  <script src="game.js?v=19"></script>
+  <script src="game.js?v=20"></script>
   <script>
     // Registro del Service Worker (modo offline). Requiere HTTPS o localhost.
     if ('serviceWorker' in navigator) {

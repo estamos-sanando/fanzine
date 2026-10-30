@@ -457,6 +457,24 @@ function layout() {
     world.popups.forEach((p) => { p.x *= k; });
     world.gateX *= k;
   }
+
+  checkOrientation();
+}
+
+function checkOrientation() {
+  const modal = document.getElementById('rotate-device-modal');
+  if (!modal) return;
+  const isPortrait = window.innerHeight > window.innerWidth;
+  const isMobileOrTablet = ('ontouchstart' in window) ||
+    (navigator.maxTouchPoints > 0) ||
+    (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) ||
+    (Math.max(window.innerWidth, window.innerHeight) <= 1024);
+
+  if (isPortrait && isMobileOrTablet) {
+    modal.classList.add('is-active');
+  } else {
+    modal.classList.remove('is-active');
+  }
 }
 
 function buildGroundTile() {
@@ -1178,9 +1196,9 @@ stateHandlers[STATES.INTRO_BUS] = {
       }
       case 'stepping': {
         b.busOffsetX = 0;
-        // El personaje baja del colectivo hasta apoyarse en el asfalto de la calle
+        // El personaje baja del colectivo hasta apoyarse en el asfalto de la calle (cota exacta de la calzada)
         b.charX = bg.x + (190 / 1366) * bg.w;
-        const busOffsetY = (155 / 768) * bg.h;
+        const busOffsetY = (196 / 768) * bg.h;
         const stepY = bg.y + busOffsetY + (469 / 768) * bg.h;
         const groundWalkY = bg.y + busOffsetY + (476 / 768) * bg.h;
         const stepP = clamp(b.t / 0.8, 0, 1);
@@ -1209,7 +1227,7 @@ stateHandlers[STATES.INTRO_BUS] = {
         b.charWalkT += dt;
         const walkSpeed = Math.max(W * 0.38, 190);
         b.charX += walkSpeed * dt;
-        const busOffsetY = (155 / 768) * bg.h;
+        const busOffsetY = (196 / 768) * bg.h;
         b.charY = bg.y + busOffsetY + (476 / 768) * bg.h;
         // Camina hacia la derecha hasta salir de la pantalla para cambio de escena manteniendo el mismo fondo
         if (b.charX > W + 80) {
@@ -1240,8 +1258,8 @@ stateHandlers[STATES.INTRO_BUS] = {
       g.fillRect(0, 0, W, H);
     }
 
-    // Bus 620 en sus distintas fases de animación (ubicado en la calle sobre el asfalto)
-    const busOffsetY = (155 / 768) * bg.h;
+    // Bus 620 en sus distintas fases de animación (asentado sobre el asfalto en la cota de la calle)
+    const busOffsetY = (196 / 768) * bg.h;
     const busY = bg.y + busOffsetY;
     if (b.phase === 'stepping') {
       const saleImg = IMG.bus620sale[character];
@@ -2630,6 +2648,9 @@ const onResize = () => {
 };
 window.addEventListener('resize', onResize);
 window.addEventListener('orientationchange', onResize);
+if (screen && screen.orientation && screen.orientation.addEventListener) {
+  screen.orientation.addEventListener('change', onResize);
+}
 document.addEventListener('fullscreenchange', onResize);
 document.addEventListener('webkitfullscreenchange', onResize);
 
