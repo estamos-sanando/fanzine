@@ -453,7 +453,7 @@ async function loadAssets() {
  * ============================================================================= */
 let W = 0, H = 0, DPR = 1;
 let U = 100;              // alto del personaje en px
-let stripTop = 0, stripH = 0, groundY = 0, heroX = 0, safeTop = 0;
+let stripTop = 0, stripH = 0, groundY = 0, heroX = 0, safeTop = 0, safeLeft = 0, safeRight = 0, safeBottom = 0;
 let groundTile = null;    // canvas offscreen (vereda + espejo para tile sin costuras)
 let groundTileW = 0;      // ancho de UN tile en px CSS
 
@@ -475,7 +475,12 @@ function layout() {
   stripTop = H - stripH;
   groundY  = stripTop + stripH * L.feetInStrip;
   heroX    = Math.max(W * L.heroXFrac, U * 0.7);
-  safeTop  = parseFloat(getComputedStyle(dom.probe).paddingTop) || 0;
+
+  const probeStyle = getComputedStyle(dom.probe);
+  safeTop    = parseFloat(probeStyle.paddingTop) || 0;
+  safeLeft   = parseFloat(probeStyle.paddingLeft) || 0;
+  safeRight  = parseFloat(probeStyle.paddingRight) || 0;
+  safeBottom = parseFloat(probeStyle.paddingBottom) || 0;
 
   buildGroundTile();
 
@@ -2746,18 +2751,20 @@ function drawPopups() {
 
 function drawHUD() {
   const size = clamp(U * 0.2, 14, 28);
-  const y = safeTop + 14 + size / 2;
-  const m = 14;
+  // En móviles en horizontal, garantizar separación de la barra de estado y notch/isla dinámica
+  const y = Math.max(safeTop + 12, 16) + size / 2;
+  const marginL = Math.max(safeLeft + 16, 24);
+  const marginR = Math.max(safeRight + 16, 24);
   const isMilestone = world.milestoneT > 0 && Math.floor(world.milestoneT * 6) % 2 === 0;
   const isExtreme = world.isExtreme && state === STATES.PLAYING;
   const scoreText = 'PUNTOS ' + pad(world.score) + (isExtreme ? ' ⚡ EXTREMO' : '');
   const scoreColor = isMilestone ? UNLAM.light : (isExtreme ? '#ff3b30' : '#fff');
 
-  drawText(scoreText, m, y, size, {
+  drawText(scoreText, marginL, y, size, {
     align: 'left',
     color: scoreColor
   });
-  drawText('RÉCORD ' + pad(Math.max(personalRecord, world.score)), W - m, y, size,
+  drawText('RÉCORD ' + pad(Math.max(personalRecord, world.score)), W - marginR, y, size,
            { align: 'right', color: isExtreme ? '#ffd34d' : UNLAM.green });
 }
 
