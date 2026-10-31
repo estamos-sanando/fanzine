@@ -145,7 +145,8 @@ const CONFIG = {
   apiScores: '/api/scores',                     // endpoint local/Vercel (api/scores.js)
   cloudScores: 'https://api.restful-api.dev/objects/ff808181a09d98f701a18d9ecd606591', // cloud backend global compartido
   apiTimeout: 5500,                             // ms antes de alternar al cloud
-  maxScores: 5,                                 // Ranking Top 5
+  maxScores: 5,                                 // Cantidad visualizada en Top 5
+  maxScoresStored: 500,                         // Cantidad total conservada en el ranking global
   initialsLength: 3,
   storageChar: 'fanzine_runner_char',
   defaultCharacter: 'chica',
@@ -625,7 +626,7 @@ const Scores = {
       .filter((e) => e && Number.isFinite(Number(e.score)) && Number(e.score) > 0)
       .map((e) => ({ name: cleanName(e.name), score: Math.floor(Number(e.score)) }))
       .sort((a, b) => b.score - a.score);
-    return valid.length ? valid.slice(0, CONFIG.maxScores) : [...INITIAL_SCORES];
+    return valid.length ? valid.slice(0, CONFIG.maxScoresStored || 500) : [...INITIAL_SCORES];
   },
   // Muestra también los puntajes propios que aún no confirmó el servidor
   rebuild() {
@@ -643,8 +644,8 @@ const Scores = {
 
   best() { return this.list.length ? this.list[0].score : 0; },
   qualifies(score) {
-    return score > 0 && (this.list.length < CONFIG.maxScores ||
-                         score > this.list[this.list.length - 1].score);
+    // Todos los puntajes mayores a cero entran al ranking global
+    return Number.isFinite(score) && score > 0;
   },
   rankFor(score) {                            // puesto (1..n) que ocuparía; empates van abajo
     let i = 0;
@@ -1035,7 +1036,7 @@ function confirmEntry() {
   storageSet(CONFIG.storageInitials, initials);
   const sent = Scores.submit(initials, world.score);   // se ve ya mismo; el servidor lo confirma en segundo plano
   world.submitId = sent.id;
-  world.addedRank = sent.rank <= CONFIG.maxScores ? sent.rank : 0;
+  world.addedRank = sent.rank;
   entryUI.hits = [];
   transitionTo(STATES.GAME_OVER);
   world.deadAt = performance.now();             // evita reinicio accidental con el mismo toque
@@ -2868,11 +2869,13 @@ function drawDeadPanel(blink) {
 
   const f = clamp(Math.min(W * 0.05, H * 0.042), 11, 28);
   const cap = Math.min(CONFIG.maxScores, 5);
-  const rows = Scores.list.slice(0, cap).map((e, i) => ({ rank: i + 1, name: e.name, score: e.score, isNew: world.addedRank === i + 1 }));
-  if (world.addedRank > cap) {                  // el puesto nuevo quedó fuera del recorte: mostrarlo igual
-    const e = Scores.list[world.addedRank - 1];
-    if (e) rows[cap - 1] = { rank: world.addedRank, name: e.name, score: e.score, isNew: true };
-  }
+  // Solo se visualizan los primeros 5 en la tabla
+  const rows = Scores.list.slice(0, cap).map((e, i) => ({
+    rank: i + 1,
+    name: e.name,
+    score: e.score,
+    isNew: world.addedRank === i + 1
+  }));
 
   const medal = [UNLAM.green, '#d9dee8', '#e0a070', '#ffffff', '#ffffff'];
   const lines = [
@@ -2880,6 +2883,9 @@ function drawDeadPanel(blink) {
     { t: 'PUNTOS ' + pad(world.score), s: 1.15 },
     { t: 'TU RÉCORD ' + pad(personalRecord), s: 0.95, color: UNLAM.light }
   ];
+  if (world.addedRank > 5) {
+    lines.push({ t: 'TU PUESTO EN EL RANKING: #' + world.addedRank, s: 0.95, color: '#ffd34d', blink: true });
+  }
   if (world.newGlobalRecord) {
     lines.push({ t: '★ ¡NUEVO RÉCORD GLOBAL! ★', s: 0.95, color: '#ffd34d', blink: true });
   } else if (world.newPersonalRecord) {
@@ -3118,7 +3124,7 @@ function setupOverlay() {
   // Ranking global: al cambiar la lista se actualiza el récord, la pantalla de inicio y el puesto obtenido
   Scores.onChange = () => { hiScore = Scores.best(); renderOverlayScores(); };
   Scores.onRank = (id, rank) => {
-    if (id === world.submitId) world.addedRank = rank > 0 && rank <= CONFIG.maxScores ? rank : 0;
+    if (id === world.submitId && rank > 0) world.addedRank = rank;
   };
   window.addEventListener('online', () => Scores.refresh());   // reenvía lo pendiente al volver la conexión
 }

@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const MAX_SCORES = 10;
+const MAX_SCORES = 500;
 const CLOUD_URL = 'https://api.restful-api.dev/objects/ff808181a09d98f701a18d9ecd606591';
 const LOCAL_FILE = path.join(__dirname, '..', 'data', 'scores.json');
 const TMP_FILE = '/tmp/fanzine_scores.json';
