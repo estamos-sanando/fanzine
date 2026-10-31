@@ -33,11 +33,18 @@ const ASSETS = {
     bus620open:    'ASSETS/620abrepoco.png',     // bondi con puerta abierta
   },
 
-  // Avión publicitario de Instagram (propulsor y cartel ondeando)
+  // Avión publicitario de Instagram en el tutorial (@nella_costa)
   avion: [
     'ASSETS/avion.png',
     'ASSETS/avion1.png',
     'ASSETS/avion2.png'
+  ],
+
+  // Avión oficial "No te rindas" durante el juego
+  avionNoTeRindas: [
+    'ASSETS/avionnoterindas.png',
+    'ASSETS/avionnoterindas1.png',
+    'ASSETS/avionnoterindas2.png'
   ],
 
   // Bus con personaje bajando
@@ -386,9 +393,13 @@ async function loadAssets() {
   IMG.tero = [];
   jobs.push(Promise.all(ASSETS.tero.map(loadImage)).then((arr) => { IMG.tero = arr.filter(Boolean); }));
 
-  // Avión promocional de Instagram (3 frames)
+  // Avión promocional de Instagram (tutorial)
   IMG.avion = [];
   jobs.push(Promise.all(ASSETS.avion.map(loadImage)).then((arr) => { IMG.avion = arr.filter(Boolean); }));
+
+  // Avión oficial durante el juego ("No te rindas")
+  IMG.avionNoTeRindas = [];
+  jobs.push(Promise.all(ASSETS.avionNoTeRindas.map(loadImage)).then((arr) => { IMG.avionNoTeRindas = arr.filter(Boolean); }));
 
   // Máquina expendedora frames
   IMG.maquina = [];
@@ -816,7 +827,7 @@ const world = {
   plane: { active: false, x: 0, y: 0, w: 0, h: 0, t: 0, speed: 150, timer: 1.5 }
 };
 
-/* ---------- Avión promocional de Instagram (@nella_costa) ---------- */
+/* ---------- Avión publicitario en el cielo (Tutorial: @nella_costa | Juego: No te rindas) ---------- */
 function updatePlane(dt) {
   const p = world.plane;
   if (!p) return;
@@ -835,8 +846,10 @@ function updatePlane(dt) {
       p.active = true;
       p.t = 0;
       p.h = clamp(H * 0.13, 44, 90);
-      const refImg = (IMG.avion && IMG.avion[0]) ? IMG.avion[0] : null;
-      const aspect = refImg ? (refImg.naturalWidth / refImg.naturalHeight) : (1178 / 222);
+      const isTut = state === STATES.TUTORIAL;
+      const frames = (isTut ? IMG.avion : (IMG.avionNoTeRindas && IMG.avionNoTeRindas.length ? IMG.avionNoTeRindas : IMG.avion));
+      const refImg = (frames && frames[0]) ? frames[0] : null;
+      const aspect = refImg ? (refImg.naturalWidth / refImg.naturalHeight) : (1119 / 220);
       p.w = p.h * aspect;
       p.x = W + 40;
       p.y = clamp(H * 0.09, 18, 80);
@@ -847,9 +860,12 @@ function updatePlane(dt) {
 
 function drawPlane(g = ctx) {
   const p = world.plane;
-  if (!p || !p.active || !IMG.avion || !IMG.avion.length) return;
+  if (!p || !p.active) return;
+  const isTut = state === STATES.TUTORIAL;
+  const frames = (isTut ? IMG.avion : (IMG.avionNoTeRindas && IMG.avionNoTeRindas.length ? IMG.avionNoTeRindas : IMG.avion));
+  if (!frames || !frames.length) return;
   const frameDur = 0.11;
-  const img = IMG.avion[Math.floor(p.t / frameDur) % IMG.avion.length];
+  const img = frames[Math.floor(p.t / frameDur) % frames.length];
   if (!img) return;
   g.drawImage(img, p.x, p.y, p.w, p.h);
 }
