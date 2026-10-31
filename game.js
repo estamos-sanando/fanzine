@@ -1386,12 +1386,10 @@ stateHandlers[STATES.INTRO_BUS] = {
         const padOffset = (6 / 152) * charH;
         b.charY = bg.y + busOffsetY + (476 / 768) * bg.h + padOffset;
 
-        // Despliegue sincronizado del logo hacia la derecha cuando el personaje comienza a correr
-        const charStartX = b.startCharX !== undefined ? b.startCharX : (bg.x + (185 / 1366) * bg.w);
-        const distanceRan = Math.max(0, b.charX - charStartX);
-        b.logoOffsetX = distanceRan * 1.35;
-        const maxExit = W * 0.68;
-        b.logoAlpha = 1 - clamp(b.logoOffsetX / maxExit, 0, 1);
+        // Se desvanece de a poco en el mismo lugar cuando el personaje comienza a correr
+        b.logoOffsetX = 0;
+        const fadeDur = 1.4; // desvanecimiento gradual en el mismo lugar
+        b.logoAlpha = Math.max(0, 1 - (b.charWalkT / fadeDur));
 
         // Camina hacia la derecha hasta salir de la pantalla para cambio de escena manteniendo el mismo fondo
         if (b.charX > W + 80) {
@@ -1500,11 +1498,11 @@ stateHandlers[STATES.TUTORIAL] = {
     if (hero.landT > 0) hero.landT -= dt;
     if (tut.stumbleT > 0) tut.stumbleT -= dt;
 
-    // Si arrancó directamente en el tutorial, el logo se despliega hacia la derecha en sincronía
+    // Si arrancó directamente en el tutorial, el logo se desvanece de a poco en el mismo lugar
     if (tut.showLogo && tut.logoAlpha > 0) {
       tut.logoT += dt;
-      tut.logoOffsetX = tut.logoT * world.speed * 1.35;
-      tut.logoAlpha = 1 - clamp(tut.logoT / 0.9, 0, 1);
+      tut.logoOffsetX = 0;
+      tut.logoAlpha = Math.max(0, 1 - (tut.logoT / 1.4));
       if (tut.logoAlpha <= 0) tut.showLogo = false;
     }
 
