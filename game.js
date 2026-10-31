@@ -137,6 +137,7 @@ const CONFIG = {
   debug: /[?&]debug\b/.test(location.search),   // ?debug muestra hitboxes
   godMode: /[?&]god\b/.test(location.search),   // ?god activa modo invencible para testing visual
   skipCinematic: /[?&]skip\b/.test(location.search), // ?skip salta las cinemáticas
+  extremeTest: /[?&]extreme\b/.test(location.search), // ?extreme arranca en modo extremo (10.000 pts) para testing visual
   storageScores:   'fanzine_runner_global_v2',  // copia local del ranking global (para mostrar sin conexión)
   storagePending:  'fanzine_runner_pending',    // puntajes que todavía no se pudieron enviar al servidor
   storageInitials: 'fanzine_runner_initials',   // últimas iniciales usadas
@@ -886,6 +887,19 @@ function resetRun() {
   world.teroAlt = 0;                            // 0 = más arriba, 1 = más abajo (alterna)
   world.newRecord = false;
   world.plane = { active: false, x: 0, y: 0, w: 0, h: 0, t: 0, speed: 150, timer: 1.5 };
+  world.isExtreme = false;
+  world.extremeFlash = 0;
+  if (dom && dom.canvas) dom.canvas.classList.remove('is-extreme');
+  if (document.body) document.body.classList.remove('is-extreme');
+
+  if (CONFIG.extremeTest) {
+    world.bonus = 10000;
+    world.score = 10000;
+    world.isExtreme = true;
+    if (dom && dom.canvas) dom.canvas.classList.add('is-extreme');
+    if (document.body) document.body.classList.add('is-extreme');
+  }
+
   Object.assign(hero, { h: 0, vy: 0, grounded: true, jumps: 0, animT: 0, sinceJump: 0, sinceDouble: 99, landT: 0, buffer: 0, airTime: 0 });
 }
 
@@ -1128,7 +1142,11 @@ function spawnPattern() {
   const S = CONFIG.spawn;
   const p = world.p;
   const x0 = W + U;
-  const isHorse = world.spawned >= S.safeObstacles && Math.random() < lerp(S.horseChance[0], S.horseChance[1], p);
+  const isExtreme = world.score >= 10000;
+
+  // A partir de los 10.000 puntos aumenta la probabilidad de caballos y obstáculos dobles
+  const horseFactor = isExtreme ? Math.min(0.68, lerp(S.horseChance[0], S.horseChance[1], p) + 0.15) : lerp(S.horseChance[0], S.horseChance[1], p);
+  const isHorse = world.spawned >= S.safeObstacles && Math.random() < horseFactor;
   let width;
 
   if (isHorse) {
@@ -1141,7 +1159,8 @@ function spawnPattern() {
     }
   } else {
     const d = obstacleDims('book');
-    const double = world.spawned >= 4 && Math.random() < lerp(S.doubleBookChance[0], S.doubleBookChance[1], p);
+    const doubleFactor = isExtreme ? Math.min(0.50, lerp(S.doubleBookChance[0], S.doubleBookChance[1], p) + 0.15) : lerp(S.doubleBookChance[0], S.doubleBookChance[1], p);
+    const double = world.spawned >= 4 && Math.random() < doubleFactor;
     world.obstacles.push({ kind: 'book', x: x0 });
     width = d.w;
     if (double) { world.obstacles.push({ kind: 'book', x: x0 + d.w * 1.05 }); width = d.w * 2.05; }
@@ -1165,8 +1184,11 @@ function spawnPattern() {
     });
   }
 
-  const gapSec = rand(lerp(S.gapMin[0], S.gapMin[1], p), lerp(S.gapMax[0], S.gapMax[1], p))
+  let gapSec = rand(lerp(S.gapMin[0], S.gapMin[1], p), lerp(S.gapMax[0], S.gapMax[1], p))
                + (isHorse ? S.horseExtraGap : 0);
+  if (isExtreme) {
+    gapSec *= 0.82; // Espacio entre obstáculos más ajustado en modo extremo
+  }
   const gapPx = gapSec * world.speed;
   world.spawnDist = width + gapPx;
 
@@ -1202,9 +1224,11 @@ function spawnSkyTero(isEmergency = false) {
   }
 
   // Velocidad de vuelo horizontal para cruzar fluidamente la pantalla desde la derecha
-  const flySpeed = isEmergency
+  const isExtreme = world.score >= 10000;
+  const baseFlySpeed = isEmergency
     ? (W * 0.40 + world.speed * 0.32)
     : (W * 0.28 + world.speed * 0.22);
+  const flySpeed = baseFlySpeed * (isExtreme ? 1.25 : 1);
 
   world.obstacles.push({
     kind: 'tero',
@@ -2163,7 +2187,11 @@ stateHandlers[STATES.PLAYING] = {
       world.dinoSpeed = Math.min(S.max, world.dinoSpeed + S.acceleration * frames);
     }
     world.p = clamp((world.dinoSpeed - S.start) / (S.max - S.start), 0, 1);
-    world.speed = W * lerp(S.startFrac, S.maxFrac, world.p);
+
+    // A partir de los 10.000 puntos aumenta la dificultad y velocidad
+    const isExtreme = world.score >= 10000;
+    const extremeBoost = isExtreme ? Math.min(1.36, 1.18 + ((world.score - 10000) / 10000) * 0.18) : 1;
+    world.speed = W * lerp(S.startFrac, S.maxFrac, world.p) * extremeBoost;
     const dx = world.speed * dt;
 
     world.groundScroll += dx;
@@ -2174,7 +2202,8 @@ stateHandlers[STATES.PLAYING] = {
     world.dist += world.dinoSpeed * frames;
 
     // Puntuación idéntica a Google Dino (DistanceMeter COEFFICIENT: 0.025) + bonus
-    const prev100 = Math.floor(world.score / 100);
+    const prevScore = world.score;
+    const prev100 = Math.floor(prevScore / 100);
     world.score = Math.floor(world.dist * 0.025) + world.bonus;
     const new100 = Math.floor(world.score / 100);
     if (new100 > prev100 && world.score >= 100) {
@@ -2183,7 +2212,43 @@ stateHandlers[STATES.PLAYING] = {
     }
     if (world.milestoneT > 0) world.milestoneT -= dt;
 
-    // Actualiza el avión promocional de Instagram en el cielo
+    // Activación del Modo Extremo a partir de los 10.000 puntos:
+    // Aumenta la dificultad y transforma los colores del juego
+    if (world.score >= 10000) {
+      if (!world.isExtreme) {
+        world.isExtreme = true;
+        world.extremeFlash = 1.0;
+        if (dom.canvas) dom.canvas.classList.add('is-extreme');
+        if (document.body) document.body.classList.add('is-extreme');
+        Sfx.play('milestone');
+        Sfx.tone(960, 480, 0.35, 'sawtooth', 0.15);
+        world.popups.push({
+          text: '⚡ ¡MODO EXTREMO: 10.000 PTS! ⚡',
+          x: W / 2,
+          y: groundY - U * 1.6,
+          t: 0,
+          gold: true
+        });
+        world.popups.push({
+          text: '¡DIFICULTAD MÁXIMA!',
+          x: W / 2,
+          y: groundY - U * 1.1,
+          t: 0,
+          gold: true
+        });
+      }
+    } else {
+      if (world.isExtreme) {
+        world.isExtreme = false;
+        if (dom.canvas) dom.canvas.classList.remove('is-extreme');
+        if (document.body) document.body.classList.remove('is-extreme');
+      }
+    }
+    if (world.extremeFlash > 0) {
+      world.extremeFlash = Math.max(0, world.extremeFlash - dt * 2.5);
+    }
+
+    // Actualiza el avión publicitario en el cielo
     updatePlane(dt);
 
     // --- Héroe ---
@@ -2214,7 +2279,9 @@ stateHandlers[STATES.PLAYING] = {
     world.teroTimer -= dt;
     if (world.teroTimer <= 0) {
       spawnSkyTero(false);
-      world.teroTimer = rand(T.intervalMin, T.intervalMax);
+      world.teroTimer = (world.score >= 10000)
+        ? rand(5.5, 9.0) // Más teros en el cielo en modo extremo
+        : rand(T.intervalMin, T.intervalMax);
     }
 
     // --- Monitoreo de persistencia en la zona aérea (anti-abuso: > 10 seg) ---
@@ -2293,6 +2360,10 @@ stateHandlers[STATES.PLAYING] = {
     drawHero();
     drawPopups();
     if (CONFIG.debug) drawDebug();
+    if (world.extremeFlash > 0) {
+      g.fillStyle = `rgba(255, 255, 255, ${world.extremeFlash * 0.55})`;
+      g.fillRect(0, 0, W, H);
+    }
     drawHUD();
   }
 };
@@ -2674,12 +2745,16 @@ function drawHUD() {
   const y = safeTop + 14 + size / 2;
   const m = 14;
   const isMilestone = world.milestoneT > 0 && Math.floor(world.milestoneT * 6) % 2 === 0;
-  drawText('PUNTOS ' + pad(world.score), m, y, size, {
+  const isExtreme = world.score >= 10000;
+  const scoreText = 'PUNTOS ' + pad(world.score) + (isExtreme ? ' ⚡ EXTREMO' : '');
+  const scoreColor = isMilestone ? UNLAM.light : (isExtreme ? '#ff3b30' : '#fff');
+
+  drawText(scoreText, m, y, size, {
     align: 'left',
-    color: isMilestone ? UNLAM.light : '#fff'
+    color: scoreColor
   });
   drawText('RÉCORD ' + pad(Math.max(personalRecord, world.score)), W - m, y, size,
-           { align: 'right', color: UNLAM.green });
+           { align: 'right', color: isExtreme ? '#ffd34d' : UNLAM.green });
 }
 
 function drawPanel(lines) {
