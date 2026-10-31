@@ -12,7 +12,7 @@
   <meta name="format-detection" content="telephone=no">
   <link rel="icon" href="ASSETS/chicaquieta.png" type="image/png">
   <link rel="apple-touch-icon" href="ASSETS/chicaquieta.png">
-  <link rel="stylesheet" href="style.css?v=21">
+  <link rel="stylesheet" href="style.css?v=22">
 </head>
 <body>
   <!-- Canvas del juego -->
@@ -64,7 +64,11 @@
       <p class="start__hint"><b>Tocá</b> o barra espaciadora para saltar · ¡ojo con el <b>tero</b> en el cielo!</p>
 
       <section id="hiscores-box" class="scores" aria-label="Ranking global">
-        <h2 class="scores__title">★ Ranking global · Top 10 ★</h2>
+        <h2 class="scores__title">★ Ranking global · Top 5 ★</h2>
+        <div class="scores__personal" id="scores-personal" aria-label="Tu récord actual">
+          <span class="scores__personal-label">Tu récord actual</span>
+          <span class="scores__personal-pts" id="personal-record-pts">00000</span>
+        </div>
         <ol id="hiscores" class="scores__list"></ol>
         <p id="hiscores-status" class="scores__status" data-state="loading" role="status"></p>
       </section>
@@ -77,7 +81,7 @@
   <!-- Volver a la pantalla de inicio (solo visible en game over) -->
   <button id="menu-btn" class="menu-btn" type="button">↩ Menú</button>
 
-  <script src="game.js?v=25"></script>
+  <script src="game.js?v=26"></script>
   <script>
     // Registro del Service Worker (modo offline). Requiere HTTPS o localhost.
     if ('serviceWorker' in navigator) {

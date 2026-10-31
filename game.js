@@ -132,10 +132,11 @@ const CONFIG = {
   storageScores:   'fanzine_runner_global_v2',  // copia local del ranking global (para mostrar sin conexión)
   storagePending:  'fanzine_runner_pending',    // puntajes que todavía no se pudieron enviar al servidor
   storageInitials: 'fanzine_runner_initials',   // últimas iniciales usadas
+  storagePersonalRecord: 'fanzine_runner_personal_record', // récord personal en este dispositivo
   apiScores: '/api/scores',                     // endpoint local/Vercel (api/scores.js)
   cloudScores: 'https://api.restful-api.dev/objects/ff808181a09d98f701a18d9ecd606591', // cloud backend global compartido
   apiTimeout: 5500,                             // ms antes de alternar al cloud
-  maxScores: 10,
+  maxScores: 5,                                 // Ranking Top 5
   initialsLength: 3,
   storageChar: 'fanzine_runner_char',
   defaultCharacter: 'chica',
@@ -230,6 +231,7 @@ const dom = {
   scoresBox:       $('hiscores-box'),
   scoresList:      $('hiscores'),
   scoresState:     $('hiscores-status'),
+  scoresPersonal:  $('personal-record-pts'),
   menuBtn:         $('menu-btn'),
   skipTutorialBtn: $('skip-tutorial-btn')
 };
@@ -760,6 +762,29 @@ const Scores = {
   }
 };
 Scores.load();
+
+let personalRecord = parseInt(storageGet(CONFIG.storagePersonalRecord, '0'), 10) || 0;
+
+function updatePersonalRecord(newScore = 0) {
+  if (newScore > personalRecord) {
+    personalRecord = Math.floor(newScore);
+    storageSet(CONFIG.storagePersonalRecord, personalRecord);
+  } else if (personalRecord === 0) {
+    const currentInitials = cleanName(storageGet(CONFIG.storageInitials, ''));
+    if (currentInitials && currentInitials !== 'AAA') {
+      const myEntries = Scores.list.filter((e) => e.name === currentInitials);
+      if (myEntries.length) {
+        personalRecord = Math.max(...myEntries.map((e) => e.score));
+        storageSet(CONFIG.storagePersonalRecord, personalRecord);
+      }
+    }
+  }
+  if (dom.scoresPersonal) {
+    dom.scoresPersonal.textContent = pad(personalRecord);
+  }
+}
+
+updatePersonalRecord();
 
 let hiScore = Scores.best();
 let initials = cleanName(storageGet(CONFIG.storageInitials, 'AAA'));
@@ -2489,7 +2514,7 @@ function drawHUD() {
     align: 'left',
     color: isMilestone ? UNLAM.light : '#fff'
   });
-  drawText('RÉCORD ' + pad(Math.max(hiScore, world.score)), W - m, y, size,
+  drawText('RÉCORD ' + pad(Math.max(personalRecord, world.score)), W - m, y, size,
            { align: 'right', color: UNLAM.green });
 }
 
@@ -2592,24 +2617,29 @@ function drawDeadPanel(blink) {
   ctx.fillRect(0, 0, W, H);
 
   const f = clamp(Math.min(W * 0.05, H * 0.042), 11, 28);
-  const cap = Math.min(CONFIG.maxScores, H >= 540 ? 10 : (H >= 450 ? 8 : 5));
+  const cap = Math.min(CONFIG.maxScores, 5);
   const rows = Scores.list.slice(0, cap).map((e, i) => ({ rank: i + 1, name: e.name, score: e.score, isNew: world.addedRank === i + 1 }));
   if (world.addedRank > cap) {                  // el puesto nuevo quedó fuera del recorte: mostrarlo igual
     const e = Scores.list[world.addedRank - 1];
-    rows[cap - 1] = { rank: world.addedRank, name: e.name, score: e.score, isNew: true };
+    if (e) rows[cap - 1] = { rank: world.addedRank, name: e.name, score: e.score, isNew: true };
   }
 
-  const medal = [UNLAM.green, '#d9dee8', '#e0a070'];
+  const medal = [UNLAM.green, '#d9dee8', '#e0a070', '#ffffff', '#ffffff'];
   const lines = [
     { t: 'GAME OVER', s: 1.9, color: '#ff6b6b', gap: 0.3 },
-    { t: 'PUNTOS ' + pad(world.score), s: 1.15 }
+    { t: 'PUNTOS ' + pad(world.score), s: 1.15 },
+    { t: 'TU RÉCORD ' + pad(personalRecord), s: 0.95, color: UNLAM.light }
   ];
-  if (world.newRecord) lines.push({ t: '¡NUEVO RÉCORD GLOBAL!', s: 1.0, color: UNLAM.light, blink: true });
+  if (world.newGlobalRecord) {
+    lines.push({ t: '★ ¡NUEVO RÉCORD GLOBAL! ★', s: 0.95, color: '#ffd34d', blink: true });
+  } else if (world.newPersonalRecord) {
+    lines.push({ t: '★ ¡SUPERASTE TU RÉCORD! ★', s: 0.95, color: UNLAM.light, blink: true });
+  }
   if (rows.length) {
-    lines.push({ t: '— RANKING GLOBAL —', s: 0.9, color: UNLAM.green, gap: 0.5 });
+    lines.push({ t: '— RANKING GLOBAL (TOP 5) —', s: 0.85, color: UNLAM.green, gap: 0.4 });
     rows.forEach((r) => lines.push({
       t: String(r.rank).padStart(2, ' ') + '. ' + r.name + '  ' + pad(r.score),
-      s: 1.0, color: medal[r.rank - 1] || '#fff', blink: r.isNew, alt: UNLAM.light
+      s: 0.95, color: medal[r.rank - 1] || '#fff', blink: r.isNew, alt: UNLAM.light
     }));
   }
   const note = Scores.status === 'offline'
@@ -2652,12 +2682,17 @@ function die() {
   world.deadAt = performance.now();
   world.deadT = 0;
   Sfx.play('hit');
-  world.newRecord = world.score > Scores.best();
+  const prevPersonal = personalRecord;
+  const bestGlobal = Scores.best();
+  world.newGlobalRecord = world.score > 0 && world.score > bestGlobal;
+  world.newPersonalRecord = world.score > 0 && world.score > prevPersonal;
+  world.newRecord = world.newPersonalRecord || world.newGlobalRecord;
+  updatePersonalRecord(world.score);
   world.addedRank = 0;
   world.submitId = null;
   entryUI.hits = [];
   Scores.refresh();                            // trae el ranking global más reciente
-  if (Scores.qualifies(world.score)) {         // entra en el top 10 -> pide iniciales
+  if (Scores.qualifies(world.score)) {         // entra en el top 5 -> pide iniciales
     transitionTo(STATES.ENTRY);
     entryUI.letters = initials.split('');
     entryUI.slot = 0;
@@ -2733,6 +2768,7 @@ function selectCharacter(id) {
 
 function renderOverlayScores() {
   if (!dom.scoresList) return;
+  updatePersonalRecord();
   dom.scoresList.textContent = '';
   const top = Scores.list.slice(0, CONFIG.maxScores);
   top.forEach((e, i) => {
