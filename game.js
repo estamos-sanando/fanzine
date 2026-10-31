@@ -887,20 +887,28 @@ function resetRun() {
   world.teroAlt = 0;                            // 0 = más arriba, 1 = más abajo (alterna)
   world.newRecord = false;
   world.plane = { active: false, x: 0, y: 0, w: 0, h: 0, t: 0, speed: 150, timer: 1.5 };
-  world.isExtreme = false;
-  world.extremeFlash = 0;
-  if (dom && dom.canvas) dom.canvas.classList.remove('is-extreme');
-  if (document.body) document.body.classList.remove('is-extreme');
+  setExtremeMode(false);
 
   if (CONFIG.extremeTest) {
     world.bonus = 10000;
     world.score = 10000;
-    world.isExtreme = true;
-    if (dom && dom.canvas) dom.canvas.classList.add('is-extreme');
-    if (document.body) document.body.classList.add('is-extreme');
+    setExtremeMode(true);
   }
 
   Object.assign(hero, { h: 0, vy: 0, grounded: true, jumps: 0, animT: 0, sinceJump: 0, sinceDouble: 99, landT: 0, buffer: 0, airTime: 0 });
+}
+
+function setExtremeMode(active) {
+  world.isExtreme = !!active;
+  if (!active) {
+    world.extremeFlash = 0;
+  }
+  if (dom && dom.canvas) {
+    dom.canvas.classList.toggle('is-extreme', !!active);
+  }
+  if (document.body) {
+    document.body.classList.toggle('is-extreme', !!active);
+  }
 }
 
 /* ---------- Dimensiones y hitboxes ---------- */
@@ -2216,10 +2224,8 @@ stateHandlers[STATES.PLAYING] = {
     // Aumenta la dificultad y transforma los colores del juego
     if (world.score >= 10000) {
       if (!world.isExtreme) {
-        world.isExtreme = true;
+        setExtremeMode(true);
         world.extremeFlash = 1.0;
-        if (dom.canvas) dom.canvas.classList.add('is-extreme');
-        if (document.body) document.body.classList.add('is-extreme');
         Sfx.play('milestone');
         Sfx.tone(960, 480, 0.35, 'sawtooth', 0.15);
         world.popups.push({
@@ -2239,9 +2245,7 @@ stateHandlers[STATES.PLAYING] = {
       }
     } else {
       if (world.isExtreme) {
-        world.isExtreme = false;
-        if (dom.canvas) dom.canvas.classList.remove('is-extreme');
-        if (document.body) document.body.classList.remove('is-extreme');
+        setExtremeMode(false);
       }
     }
     if (world.extremeFlash > 0) {
@@ -2745,7 +2749,7 @@ function drawHUD() {
   const y = safeTop + 14 + size / 2;
   const m = 14;
   const isMilestone = world.milestoneT > 0 && Math.floor(world.milestoneT * 6) % 2 === 0;
-  const isExtreme = world.score >= 10000;
+  const isExtreme = world.isExtreme && state === STATES.PLAYING;
   const scoreText = 'PUNTOS ' + pad(world.score) + (isExtreme ? ' ⚡ EXTREMO' : '');
   const scoreColor = isMilestone ? UNLAM.light : (isExtreme ? '#ff3b30' : '#fff');
 
@@ -2920,6 +2924,8 @@ function drawDebug() {
 function die() {
   world.deadAt = performance.now();
   world.deadT = 0;
+  // Al perder (incluso tras superar los 10.000 pts), deja de cambiar de color de inmediato
+  setExtremeMode(false);
   Sfx.play('hit');
   const prevPersonal = personalRecord;
   const bestGlobal = Scores.best();
@@ -2942,6 +2948,8 @@ function die() {
 }
 
 function beginRunFromMenu() {
+  setExtremeMode(false);
+  resetRun();
   if (CONFIG.skipCinematic) {
     transitionTo(STATES.PLAYING);
   } else {
@@ -2951,6 +2959,7 @@ function beginRunFromMenu() {
 
 function showMenu() {
   if (state !== STATES.GAME_OVER) return;
+  setExtremeMode(false);
   resetRun();
   transitionTo(STATES.CHARACTER_SELECT);
 }
