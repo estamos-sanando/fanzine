@@ -367,7 +367,7 @@ img { -webkit-user-drag: none; user-select: none; pointer-events: none; }
   align-items: center;
   gap: 6px;
   border: 1.5px solid rgba(66, 191, 160, 0.55);
-  background: rgba(11, 13, 20, 0.85);
+  background: rgba(11, 13, 20, 0.68);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   color: var(--ink);

@@ -2345,9 +2345,9 @@ function drawTutorialDialog(tut) {
   const boxY = safeTop + 14;
 
   ctx.save();
-  // Glassmorphic backdrop
-  ctx.fillStyle = 'rgba(10, 14, 24, 0.92)';
-  ctx.strokeStyle = 'rgba(66, 191, 160, 0.55)';
+  // Glassmorphic translúcido: más transparente para apreciar el fondo del juego
+  ctx.fillStyle = 'rgba(10, 14, 24, 0.65)';
+  ctx.strokeStyle = 'rgba(66, 191, 160, 0.50)';
   ctx.lineWidth = 2;
   rrect(boxX, boxY, boxW, boxH, 14);
   ctx.fill();
@@ -2372,6 +2372,12 @@ function drawTutorialDialog(tut) {
 
   const charCount = Number.isFinite(tut.charCount) ? tut.charCount : fullInstruction.length;
   const visibleText = fullInstruction.slice(0, charCount);
+
+  // Sombra suave en los textos para nitidez y legibilidad óptima sobre fondos translúcidos
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.85)';
+  ctx.shadowBlur = 4;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 1;
 
   // Title
   ctx.font = `800 ${clamp(boxH * 0.17, 9, 13)}px "Press Start 2P", monospace, sans-serif`;
