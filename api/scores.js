@@ -5,7 +5,7 @@ const path = require('path');
 
 const MAX_SCORES = 10;
 const CLOUD_URL = 'https://api.restful-api.dev/objects/ff808181a09d98f701a18d9ecd606591';
-const LOCAL_FILE = path.join(__dirname, 'scores.json');
+const LOCAL_FILE = path.join(__dirname, '..', 'data', 'scores.json');
 const TMP_FILE = '/tmp/fanzine_scores.json';
 
 const INITIAL_SCORES = [
@@ -118,7 +118,11 @@ function getFromFile() {
 function saveToFile(scores) {
   try {
     const json = JSON.stringify(scores, null, 2);
-    try { fs.writeFileSync(LOCAL_FILE, json, 'utf8'); } catch (_) {}
+    try {
+      const dir = path.dirname(LOCAL_FILE);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(LOCAL_FILE, json, 'utf8');
+    } catch (_) {}
     try { fs.writeFileSync(TMP_FILE, json, 'utf8'); } catch (_) {}
   } catch (_) {}
 }
