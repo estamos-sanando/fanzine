@@ -1493,6 +1493,7 @@ stateHandlers[STATES.TUTORIAL] = {
       stumbleT: 0,
       passedBook: false,
       passedHorse: false,
+      passedTero: false,
       runX: 0,
       showLogo: !cameFromBus,
       logoT: 0,
@@ -1542,6 +1543,7 @@ stateHandlers[STATES.TUTORIAL] = {
 
     const textPhase1 = 'Un toque / Barra espaciadora: Salto simple (esquiva manuales)';
     const textPhase2 = 'Doble toque / Doble espacio: Doble salto (esquiva el caballo)';
+    const textPhase3 = '¡Ojo en el cielo! Esquivá los teros (no saltes cuando pasen)';
     const charsPerSec = 34; // velocidad de escritura fluida
 
     switch (tut.phase) {
@@ -1676,6 +1678,73 @@ stateHandlers[STATES.TUTORIAL] = {
             // Superado con éxito mediante doble salto
             tut.passedHorse = true;
             tut.obstacle = null;
+            tut.phase = 'dialog3';
+            tut.t = 0;
+            tut.charCount = 0;
+            tut.lastCharCount = 0;
+            tut.dialogTimer = 0;
+            tut.dialogFrame = 0;
+            Sfx.play('pickup');
+          }
+        }
+        break;
+
+      case 'dialog3':
+        world.groundScroll += world.speed * dt;
+        world.bgScroll += (world.speed * 0.45) * dt;
+        tut.popAlpha = 1;
+        const count3 = Math.min(textPhase3.length, Math.floor(tut.t * charsPerSec));
+        tut.charCount = count3;
+        if (count3 < textPhase3.length) {
+          // El personaje está hablando: anima boca en sincronía con el texto
+          tut.dialogTimer += dt;
+          tut.dialogFrame = Math.floor(tut.dialogTimer / 0.11) % 6;
+          if (count3 > (tut.lastCharCount || 0)) {
+            tut.lastCharCount = count3;
+            if (textPhase3[count3 - 1] !== ' ' && count3 % 2 === 0) Sfx.play('talk');
+          }
+        } else {
+          tut.dialogFrame = 0;
+          tut.dialogTimer = 0;
+        }
+        if (tut.t > 2.8) {
+          tut.phase = 'practiceTero';
+          tut.t = 0;
+          tut.charCount = textPhase3.length;
+          tut.dialogFrame = 0;
+          Sfx.tone(850, 680, 0.08, 'sine', 0.04);
+          tut.obstacle = {
+            kind: 'tero',
+            x: W + U * 0.9,
+            t: 0,
+            phase: 0,
+            flySpeed: world.speed * 1.25,
+            skyY: streetY - U * 1.35
+          };
+        }
+        break;
+
+      case 'practiceTero':
+        world.groundScroll += world.speed * dt;
+        world.bgScroll += (world.speed * 0.45) * dt;
+        tut.popAlpha = 1;
+        tut.charCount = textPhase3.length;
+        tut.dialogFrame = 0; // Boca en reposo
+        if (tut.obstacle) {
+          tut.obstacle.x -= tut.obstacle.flySpeed * dt;
+          tut.obstacle.t += dt;
+          tut.obstacle.phase += dt * 4.5;
+          const hr = heroRect(streetY);
+          const or = obstacleRect(tut.obstacle, streetY);
+          if (overlap(hr, or) && tut.stumbleT <= 0) {
+            // Golpe con el tero en el aire: tropiezo didáctico
+            tut.stumbleT = 0.55;
+            Sfx.play('hit');
+            tut.obstacle.x = W + U * 1.1;
+          } else if (tut.obstacle.x < -U * 0.8) {
+            // Superado con éxito dejándolo pasar en el cielo
+            tut.passedTero = true;
+            tut.obstacle = null;
             tut.phase = 'fadeOut';
             tut.t = 0;
             tut.dialogFrame = 0;
@@ -1717,12 +1786,16 @@ stateHandlers[STATES.TUTORIAL] = {
 
     const streetY = tutorialStreetY();
 
-    // Obstáculo de práctica en la calle
+    // Obstáculo de práctica en la calle / cielo
     if (tut.obstacle) {
-      const img = IMG[tut.obstacle.kind];
-      if (img) {
-        const { w, h } = obstacleDims(tut.obstacle.kind);
-        g.drawImage(img, tut.obstacle.x, streetY - h + U * 0.04, w, h);
+      if (tut.obstacle.kind === 'tero') {
+        drawTero(tut.obstacle);
+      } else {
+        const img = IMG[tut.obstacle.kind];
+        if (img) {
+          const { w, h } = obstacleDims(tut.obstacle.kind);
+          g.drawImage(img, tut.obstacle.x, streetY - h + U * 0.04, w, h);
+        }
       }
     }
 
@@ -1768,6 +1841,13 @@ stateHandlers[STATES.TUTORIAL] = {
       const size = clamp(U * 0.19, 11, 20);
       drawText('¡DOBLE TOQUE O DOBLE ESPACIO PARA DOBLE SALTO!', W / 2, H - U * 0.42, size, {
         color: blink ? '#ffd34d' : '#ffffff',
+        alpha: 0.95
+      });
+    } else if (tut.phase === 'practiceTero') {
+      const blink = Math.floor(performance.now() / 380) % 2 === 0;
+      const size = clamp(U * 0.19, 11, 20);
+      drawText('¡CUIDADO CON EL TERO EN EL CIELO!', W / 2, H - U * 0.42, size, {
+        color: blink ? '#ff6b6b' : '#ffffff',
         alpha: 0.95
       });
     }
@@ -2475,6 +2555,8 @@ function drawTutorialDialog(tut) {
     fullInstruction = 'Un toque / Barra espaciadora: Salto simple (esquiva manuales)';
   } else if (tut.phase === 'dialog2' || tut.phase === 'practiceHorse') {
     fullInstruction = 'Doble toque / Doble espacio: Doble salto (esquiva el caballo)';
+  } else if (tut.phase === 'dialog3' || tut.phase === 'practiceTero') {
+    fullInstruction = '¡Ojo en el cielo! Esquivá los teros (no saltes cuando pasen)';
   }
 
   const charCount = Number.isFinite(tut.charCount) ? tut.charCount : fullInstruction.length;
