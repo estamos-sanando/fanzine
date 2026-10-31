@@ -19,6 +19,7 @@
 const ASSETS = {
   // Escenario, obstáculos y coleccionables
   images: {
+    logo:          'ASSETS/logonoterindas.png',  // Logo oficial "¡No te rindas!"
     fondoinfinito: 'ASSETS/fondoinfinito.png',   // fondo infinito durante la carrera (Teatro, Auditorio, Biblioteca)
     ground:        'ASSETS/SUELO.png',           // vereda
     book:          'ASSETS/manualobstaculo.png', // obstáculo bajo
@@ -1289,7 +1290,10 @@ stateHandlers[STATES.INTRO_BUS] = {
       charX: 0,
       charY: 0,
       charWalkT: 0,
-      fadeAlpha: 0
+      fadeAlpha: 0,
+      logoOffsetX: 0,
+      logoAlpha: 1,
+      startCharX: 0
     };
     Sfx.play('busHorn');
   },
@@ -1306,6 +1310,8 @@ stateHandlers[STATES.INTRO_BUS] = {
         const p = clamp(b.t / dur, 0, 1);
         const eased = 1 - Math.pow(1 - p, 3); // ease-out cubic
         b.busOffsetX = lerp(-bg.w * 0.98, 0, eased);
+        b.logoAlpha = 1;
+        b.logoOffsetX = 0;
         if (p >= 1) {
           b.busOffsetX = 0;
           b.phase = 'stopping';
@@ -1315,6 +1321,8 @@ stateHandlers[STATES.INTRO_BUS] = {
       }
       case 'stopping': {
         b.busOffsetX = 0;
+        b.logoAlpha = 1;
+        b.logoOffsetX = 0;
         if (b.t > 0.4) {
           b.phase = 'doorOpen';
           b.t = 0;
@@ -1324,6 +1332,8 @@ stateHandlers[STATES.INTRO_BUS] = {
       }
       case 'doorOpen': {
         b.busOffsetX = 0;
+        b.logoAlpha = 1;
+        b.logoOffsetX = 0;
         if (b.t > 0.6) {
           b.phase = 'stepping';
           b.t = 0;
@@ -1333,6 +1343,8 @@ stateHandlers[STATES.INTRO_BUS] = {
       }
       case 'stepping': {
         b.busOffsetX = 0;
+        b.logoAlpha = 1;
+        b.logoOffsetX = 0;
         // El personaje baja del colectivo hasta apoyarse en el asfalto de la calle (proporcional al 620)
         b.charX = bg.x + (185 / 1366) * bg.w;
         const busOffsetY = (196 / 768) * bg.h;
@@ -1355,10 +1367,13 @@ stateHandlers[STATES.INTRO_BUS] = {
         const p = clamp(b.t / dur, 0, 1);
         const eased = p * p; // ease-in para arrancar progresivamente
         b.busOffsetX = lerp(0, bg.w + 180, eased);
+        b.logoAlpha = 1;
+        b.logoOffsetX = 0;
         if (p >= 1) {
           b.phase = 'charWalkRight';
           b.t = 0;
           b.charWalkT = 0;
+          b.startCharX = b.charX;
         }
         break;
       }
@@ -1370,6 +1385,14 @@ stateHandlers[STATES.INTRO_BUS] = {
         const charH = (185 / 768) * bg.h;
         const padOffset = (6 / 152) * charH;
         b.charY = bg.y + busOffsetY + (476 / 768) * bg.h + padOffset;
+
+        // Despliegue sincronizado del logo hacia la derecha cuando el personaje comienza a correr
+        const charStartX = b.startCharX !== undefined ? b.startCharX : (bg.x + (185 / 1366) * bg.w);
+        const distanceRan = Math.max(0, b.charX - charStartX);
+        b.logoOffsetX = distanceRan * 1.35;
+        const maxExit = W * 0.68;
+        b.logoAlpha = 1 - clamp(b.logoOffsetX / maxExit, 0, 1);
+
         // Camina hacia la derecha hasta salir de la pantalla para cambio de escena manteniendo el mismo fondo
         if (b.charX > W + 80) {
           b.phase = 'done';
@@ -1397,6 +1420,14 @@ stateHandlers[STATES.INTRO_BUS] = {
     } else {
       g.fillStyle = '#10141e';
       g.fillRect(0, 0, W, H);
+    }
+
+    // Logo "¡No te rindas!" en el cielo (se despliega hacia la derecha sincronizado con la carrera)
+    if (b.logoAlpha > 0.01) {
+      const logoW = clamp(W * 0.46, 220, 520);
+      const targetX = (W - logoW) / 2 + (b.logoOffsetX || 0);
+      const targetY = clamp(H * 0.08, 14, 46) + safeTop;
+      drawIntroLogo(g, targetX, targetY, b.logoAlpha);
     }
 
     // Bus 620 en sus distintas fases de animación (asentado sobre el asfalto en la cota de la calle)
@@ -1435,6 +1466,7 @@ stateHandlers[STATES.INTRO_BUS] = {
 /* ---------- TUTORIAL (Estado 2: Práctica interactiva - Aprender Jugando) ---------- */
 stateHandlers[STATES.TUTORIAL] = {
   enter() {
+    const cameFromBus = cinema.bus && cinema.bus.phase === 'done';
     cinema.tutorial = {
       t: 0,
       phase: 'enterWalk',  // enterWalk → running → dialog1 → practiceBook → dialog2 → practiceHorse → fadeOut → runToEnd → done
@@ -1447,7 +1479,11 @@ stateHandlers[STATES.TUTORIAL] = {
       stumbleT: 0,
       passedBook: false,
       passedHorse: false,
-      runX: 0
+      runX: 0,
+      showLogo: !cameFromBus,
+      logoT: 0,
+      logoOffsetX: 0,
+      logoAlpha: !cameFromBus ? 1 : 0
     };
     resetRun();
     world.speed = Math.max(W * 0.36, 180);
@@ -1463,6 +1499,14 @@ stateHandlers[STATES.TUTORIAL] = {
     hero.buffer = Math.max(0, hero.buffer - dt);
     if (hero.landT > 0) hero.landT -= dt;
     if (tut.stumbleT > 0) tut.stumbleT -= dt;
+
+    // Si arrancó directamente en el tutorial, el logo se despliega hacia la derecha en sincronía
+    if (tut.showLogo && tut.logoAlpha > 0) {
+      tut.logoT += dt;
+      tut.logoOffsetX = tut.logoT * world.speed * 1.35;
+      tut.logoAlpha = 1 - clamp(tut.logoT / 0.9, 0, 1);
+      if (tut.logoAlpha <= 0) tut.showLogo = false;
+    }
 
     // Actualiza el vuelo del avión en el tutorial
     updatePlane(dt);
@@ -1679,6 +1723,14 @@ stateHandlers[STATES.TUTORIAL] = {
       } else {
         drawHero(streetY);
       }
+    }
+
+    // Logo "¡No te rindas!" desplegándose hacia la derecha
+    if (tut.showLogo && tut.logoAlpha > 0.01) {
+      const logoW = clamp(W * 0.46, 220, 520);
+      const targetX = (W - logoW) / 2 + (tut.logoOffsetX || 0);
+      const targetY = clamp(H * 0.08, 14, 46) + safeTop;
+      drawIntroLogo(g, targetX, targetY, tut.logoAlpha);
     }
 
     // Pop-up flotante con cuadro de diálogo y assets chico/chica dialogando
@@ -2345,6 +2397,22 @@ function drawStreetBackground() {
     ctx.drawImage(img, 0, bg.y, bg.w, bg.h);
     ctx.restore();
   }
+}
+
+function drawIntroLogo(g, x, y, alpha = 1) {
+  const img = IMG.logo;
+  if (!img || alpha <= 0.01) return;
+  const logoW = clamp(W * 0.46, 220, 520);
+  const logoH = logoW * (img.naturalHeight / img.naturalWidth);
+  const ctxTarget = g || ctx;
+  ctxTarget.save();
+  ctxTarget.globalAlpha = clamp(alpha, 0, 1);
+  ctxTarget.shadowColor = 'rgba(0, 0, 0, 0.45)';
+  ctxTarget.shadowBlur = 10;
+  ctxTarget.shadowOffsetX = 0;
+  ctxTarget.shadowOffsetY = 3;
+  ctxTarget.drawImage(img, x, y, logoW, logoH);
+  ctxTarget.restore();
 }
 
 function getCampusRect() {
