@@ -137,7 +137,7 @@ const CONFIG = {
   debug: /[?&]debug\b/.test(location.search),   // ?debug muestra hitboxes
   godMode: /[?&]god\b/.test(location.search),   // ?god activa modo invencible para testing visual
   skipCinematic: /[?&]skip\b/.test(location.search), // ?skip salta las cinemáticas
-  extremeTest: /[?&]extreme\b/.test(location.search), // ?extreme arranca en modo extremo (10.000 pts) para testing visual
+  extremeTest: /[?&]extreme\b/.test(location.search), // ?extreme arranca en modo extremo (20.000 pts) para testing visual
   storageScores:   'fanzine_runner_global_v5',  // copia local del ranking global (para mostrar sin conexión)
   storagePending:  'fanzine_runner_pending',    // puntajes que todavía no se pudieron enviar al servidor
   storageInitials: 'fanzine_runner_initials',   // últimas iniciales usadas
@@ -826,7 +826,7 @@ const Scores = {
 Scores.load();
 
 let personalRecord = parseInt(storageGet(CONFIG.storagePersonalRecord, '0'), 10) || 0;
-if (personalRecord >= 10000) {
+if (personalRecord >= 20000) {
   personalRecord = 0;
   storageSet(CONFIG.storagePersonalRecord, 0);
 }
@@ -943,8 +943,8 @@ function resetRun() {
   setExtremeMode(false);
 
   if (CONFIG.extremeTest) {
-    world.bonus = 10000;
-    world.score = 10000;
+    world.bonus = 20000;
+    world.score = 20000;
     setExtremeMode(true);
   }
 
@@ -1212,9 +1212,9 @@ function spawnPattern() {
   const S = CONFIG.spawn;
   const p = world.p;
   const x0 = W + U;
-  const isExtreme = world.score >= 10000;
+  const isExtreme = world.score >= 20000;
 
-  // A partir de los 10.000 puntos aumenta la probabilidad de caballos y obstáculos dobles
+  // A partir de los 20.000 puntos aumenta la probabilidad de caballos y obstáculos dobles
   const horseFactor = isExtreme ? Math.min(0.68, lerp(S.horseChance[0], S.horseChance[1], p) + 0.15) : lerp(S.horseChance[0], S.horseChance[1], p);
   const isHorse = world.spawned >= S.safeObstacles && Math.random() < horseFactor;
   let width;
@@ -1294,7 +1294,7 @@ function spawnSkyTero(isEmergency = false) {
   }
 
   // Velocidad de vuelo horizontal para cruzar fluidamente la pantalla desde la derecha
-  const isExtreme = world.score >= 10000;
+  const isExtreme = world.score >= 20000;
   const baseFlySpeed = isEmergency
     ? (W * 0.40 + world.speed * 0.32)
     : (W * 0.28 + world.speed * 0.22);
@@ -2258,9 +2258,9 @@ stateHandlers[STATES.PLAYING] = {
     }
     world.p = clamp((world.dinoSpeed - S.start) / (S.max - S.start), 0, 1);
 
-    // A partir de los 10.000 puntos aumenta la dificultad y velocidad
-    const isExtreme = world.score >= 10000;
-    const extremeBoost = isExtreme ? Math.min(1.36, 1.18 + ((world.score - 10000) / 10000) * 0.18) : 1;
+    // A partir de los 20.000 puntos aumenta la dificultad y velocidad
+    const isExtreme = world.score >= 20000;
+    const extremeBoost = isExtreme ? Math.min(1.36, 1.18 + ((world.score - 20000) / 10000) * 0.18) : 1;
     world.speed = W * lerp(S.startFrac, S.maxFrac, world.p) * extremeBoost;
     const dx = world.speed * dt;
 
@@ -2282,16 +2282,16 @@ stateHandlers[STATES.PLAYING] = {
     }
     if (world.milestoneT > 0) world.milestoneT -= dt;
 
-    // Activación del Modo Extremo a partir de los 10.000 puntos:
+    // Activación del Modo Extremo a partir de los 20.000 puntos:
     // Aumenta la dificultad y transforma los colores del juego
-    if (world.score >= 10000) {
+    if (world.score >= 20000) {
       if (!world.isExtreme) {
         setExtremeMode(true);
         world.extremeFlash = 1.0;
         Sfx.play('milestone');
         Sfx.tone(960, 480, 0.35, 'sawtooth', 0.15);
         world.popups.push({
-          text: '⚡ ¡MODO EXTREMO: 10.000 PTS! ⚡',
+          text: '⚡ ¡MODO EXTREMO: 20.000 PTS! ⚡',
           x: W / 2,
           y: groundY - U * 1.6,
           t: 0,
@@ -2345,7 +2345,7 @@ stateHandlers[STATES.PLAYING] = {
     world.teroTimer -= dt;
     if (world.teroTimer <= 0) {
       spawnSkyTero(false);
-      world.teroTimer = (world.score >= 10000)
+      world.teroTimer = (world.score >= 20000)
         ? rand(5.5, 9.0) // Más teros en el cielo en modo extremo
         : rand(T.intervalMin, T.intervalMax);
     }
@@ -2992,7 +2992,7 @@ function drawDebug() {
 function die() {
   world.deadAt = performance.now();
   world.deadT = 0;
-  // Al perder (incluso tras superar los 10.000 pts), deja de cambiar de color de inmediato
+  // Al perder (incluso tras superar los 20.000 pts), deja de cambiar de color de inmediato
   setExtremeMode(false);
   Sfx.play('hit');
   const prevPersonal = personalRecord;
