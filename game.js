@@ -138,13 +138,13 @@ const CONFIG = {
   godMode: /[?&]god\b/.test(location.search),   // ?god activa modo invencible para testing visual
   skipCinematic: /[?&]skip\b/.test(location.search), // ?skip salta las cinemáticas
   extremeTest: /[?&]extreme\b/.test(location.search), // ?extreme arranca en modo extremo (10.000 pts) para testing visual
-  storageScores:   'fanzine_runner_global_v2',  // copia local del ranking global (para mostrar sin conexión)
+  storageScores:   'fanzine_runner_global_v5',  // copia local del ranking global (para mostrar sin conexión)
   storagePending:  'fanzine_runner_pending',    // puntajes que todavía no se pudieron enviar al servidor
   storageInitials: 'fanzine_runner_initials',   // últimas iniciales usadas
   storagePersonalRecord: 'fanzine_runner_personal_record', // récord personal en este dispositivo
   apiScores: '/api/scores',                     // endpoint local/Vercel (api/scores.js)
   cloudScores: 'https://api.restful-api.dev/objects/ff808181a09d98f701a18d9ecd606591', // cloud backend global compartido
-  apiTimeout: 5500,                             // ms antes de alternar al cloud
+  apiTimeout: 3000,                             // ms antes de alternar al cloud
   maxScores: 5,                                 // Cantidad visualizada en Top 5
   maxScoresStored: 500,                         // Cantidad total conservada en el ranking global
   initialsLength: 3,
@@ -587,12 +587,7 @@ const INITIAL_SCORES = [
   { name: 'FAN', score: 950 },
   { name: 'MAT', score: 780 },
   { name: 'RUN', score: 620 },
-  { name: 'BOY', score: 500 },
-  { name: 'GRL', score: 420 },
-  { name: 'SAN', score: 350 },
-  { name: 'JMP', score: 280 },
-  { name: 'TOP', score: 200 },
-  { name: 'WIN', score: 150 }
+  { name: 'BOY', score: 500 }
 ];
 
 const Scores = {
@@ -607,8 +602,7 @@ const Scores = {
 
   load() {
     try {
-      const stored = JSON.parse(storageGet(CONFIG.storageScores, 'null')) ||
-                     JSON.parse(storageGet('fanzine_runner_global', 'null'));
+      const stored = JSON.parse(storageGet(CONFIG.storageScores, 'null'));
       this.remote = stored ? this.sanitize(stored) : [...INITIAL_SCORES];
     } catch (_) {
       this.remote = [...INITIAL_SCORES];
@@ -636,16 +630,17 @@ const Scores = {
   },
   save() {
     storageSet(CONFIG.storageScores, JSON.stringify(this.remote));
-    // Guardar también en la clave anterior como resguardo
-    storageSet('fanzine_runner_global', JSON.stringify(this.remote));
   },
   savePending() { storageSet(CONFIG.storagePending, JSON.stringify(this.pending)); },
   changed() { if (this.onChange) this.onChange(); },
 
   best() { return this.list.length ? this.list[0].score : 0; },
   qualifies(score) {
-    // Todos los puntajes mayores a cero entran al ranking global
-    return Number.isFinite(score) && score > 0;
+    // Califica para ingresar iniciales de arcade si entra al Top 5 (o empata el 5to puesto)
+    if (!Number.isFinite(score) || score <= 0) return false;
+    const cap = CONFIG.maxScores || 5;
+    if (this.list.length < cap) return true;
+    return score >= this.list[cap - 1].score;
   },
   rankFor(score) {                            // puesto (1..n) que ocuparía; empates van abajo
     let i = 0;
@@ -707,15 +702,13 @@ const Scores = {
     }
   },
 
-  // Baja el ranking global y fusiona sin borrar puntajes propios
+  // Baja el ranking global sincronizado
   async refresh() {
     const version = this.version;
     try {
       const data = await this.request('GET');
       if (data && Array.isArray(data.scores) && version === this.version) {
-        // Fusión atómica: conserva siempre los puntajes más altos
-        const combined = [...(this.remote || []), ...data.scores];
-        this.remote = this.sanitize(combined);
+        this.remote = this.sanitize(data.scores);
         this.rebuild();
         this.save();
       }
@@ -755,8 +748,7 @@ const Scores = {
           this.version++;
           this.savePending();
           if (data && Array.isArray(data.scores)) {
-            const combined = [...(this.remote || []), ...data.scores];
-            this.remote = this.sanitize(combined);
+            this.remote = this.sanitize(data.scores);
             this.rebuild();
             this.save();
           }
@@ -783,6 +775,10 @@ const Scores = {
 Scores.load();
 
 let personalRecord = parseInt(storageGet(CONFIG.storagePersonalRecord, '0'), 10) || 0;
+if (personalRecord >= 10000) {
+  personalRecord = 0;
+  storageSet(CONFIG.storagePersonalRecord, 0);
+}
 
 function updatePersonalRecord(newScore = 0) {
   if (newScore > personalRecord) {
@@ -2816,7 +2812,7 @@ function drawEntryPanel(blink) {
   let y = Math.max(safeTop + 8, (H - total) / 2);
   const hits = [];
 
-  drawText('¡NUEVO PUNTAJE!', W / 2, y + titleH / 2, f * 1.5, { color: UNLAM.green, alpha: blink ? 1 : 0.75 });
+  drawText('★ ¡ENTRASTE AL TOP 5! ★', W / 2, y + titleH / 2, f * 1.35, { color: UNLAM.green, alpha: blink ? 1 : 0.75 });
   y += titleH;
   drawText('PUNTOS ' + pad(world.score), W / 2, y + lineH / 2, f);
   y += lineH;
@@ -2857,12 +2853,12 @@ function drawEntryPanel(blink) {
   drawText('LISTO', W / 2, y + btnH / 2 + 1, f * 1.1, { color: '#ffffff', stroke: 'rgba(0,0,0,0)' });
   hits.push({ type: 'ok', x: bx, y, w: btnW, h: btnH });
   y += btnH;
-  drawText('Elegí tus iniciales', W / 2, y + f * 0.9, f * 0.7, { alpha: 0.7, weight: 600 });
+  drawText('Elegí tus iniciales para el Top 5', W / 2, y + f * 0.9, f * 0.7, { alpha: 0.7, weight: 600 });
 
   entryUI.hits = hits;
 }
 
-/* Game Over con ranking (top 5/8 según alto de pantalla) */
+/* Game Over con ranking arcade (Top 5) */
 function drawDeadPanel(blink) {
   ctx.fillStyle = 'rgba(6, 8, 16, 0.62)';
   ctx.fillRect(0, 0, W, H);
@@ -2883,16 +2879,15 @@ function drawDeadPanel(blink) {
     { t: 'PUNTOS ' + pad(world.score), s: 1.15 },
     { t: 'TU RÉCORD ' + pad(personalRecord), s: 0.95, color: UNLAM.light }
   ];
-  if (world.addedRank > 5) {
-    lines.push({ t: 'TU PUESTO EN EL RANKING: #' + world.addedRank, s: 0.95, color: '#ffd34d', blink: true });
-  }
-  if (world.newGlobalRecord) {
+  if (world.addedRank > 0 && world.addedRank <= 5) {
+    lines.push({ t: '★ ¡ENTRASTE AL TOP 5! (#' + world.addedRank + ') ★', s: 0.95, color: '#ffd34d', blink: true });
+  } else if (world.newGlobalRecord) {
     lines.push({ t: '★ ¡NUEVO RÉCORD GLOBAL! ★', s: 0.95, color: '#ffd34d', blink: true });
   } else if (world.newPersonalRecord) {
     lines.push({ t: '★ ¡SUPERASTE TU RÉCORD! ★', s: 0.95, color: UNLAM.light, blink: true });
   }
   if (rows.length) {
-    lines.push({ t: '— RANKING GLOBAL (TOP 5) —', s: 0.85, color: UNLAM.green, gap: 0.4 });
+    lines.push({ t: '— TOP 5 GLOBAL —', s: 0.85, color: UNLAM.green, gap: 0.4 });
     rows.forEach((r) => lines.push({
       t: String(r.rank).padStart(2, ' ') + '. ' + r.name + '  ' + pad(r.score),
       s: 0.95, color: medal[r.rank - 1] || '#fff', blink: r.isNew, alt: UNLAM.light
@@ -2950,6 +2945,11 @@ function die() {
   world.submitId = null;
   entryUI.hits = [];
   Scores.refresh();                            // trae el ranking global más reciente
+  // En modos de prueba (?extreme o ?god), no entra al ranking para no bloquear a los estudiantes
+  if (CONFIG.extremeTest || CONFIG.godMode) {
+    transitionTo(STATES.GAME_OVER);
+    return;
+  }
   if (Scores.qualifies(world.score)) {         // entra en el top 5 -> pide iniciales
     transitionTo(STATES.ENTRY);
     entryUI.letters = initials.split('');

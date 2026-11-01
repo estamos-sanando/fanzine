@@ -13,12 +13,7 @@ const INITIAL_SCORES = [
   { name: 'FAN', score: 950 },
   { name: 'MAT', score: 780 },
   { name: 'RUN', score: 620 },
-  { name: 'BOY', score: 500 },
-  { name: 'GRL', score: 420 },
-  { name: 'SAN', score: 350 },
-  { name: 'JMP', score: 280 },
-  { name: 'TOP', score: 200 },
-  { name: 'WIN', score: 150 }
+  { name: 'BOY', score: 500 }
 ];
 
 let memScores = null;
