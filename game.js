@@ -243,7 +243,8 @@ const dom = {
   scoresState:     $('hiscores-status'),
   scoresPersonal:  $('personal-record-pts'),
   menuBtn:         $('menu-btn'),
-  skipTutorialBtn: $('skip-tutorial-btn')
+  skipTutorialBtn: $('skip-tutorial-btn'),
+  fullscreenBtn:   $('fullscreen-btn')
 };
 const ctx = dom.canvas.getContext('2d', { alpha: false });
 
@@ -359,15 +360,64 @@ const Sfx = {
   }
 };
 
-/* ---------- Pantalla completa ---------- */
+/* ---------- Detección de dispositivos móviles y Pantalla Completa ---------- */
+function isMobileDevice() {
+  return ('ontouchstart' in window) ||
+    (navigator.maxTouchPoints > 0) ||
+    (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) ||
+    /Android|iPhone|iPad|iPod|Mobile|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || '');
+}
+
+function isFullscreenActive() {
+  return !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
+}
+
 function goFullscreen() {
+  if (isFullscreenActive()) return;
   const el = document.documentElement;
-  const fn = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
-  if (!fn) return;                                          // iPhone Safari: no soportado
+  const fn = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
+  if (fn) {
+    try {
+      const p = fn.call(el, { navigationUI: 'hide' });
+      if (p && p.then) {
+        p.then(() => {
+          if (screen.orientation && screen.orientation.lock) {
+            screen.orientation.lock('landscape').catch(() => {});
+          }
+        }).catch(() => {});
+      }
+    } catch (_) { /* ignorado */ }
+  }
+
+  // En Android Chrome y navegadores móviles, bloquear orientación en apaisado para ocultar barras de navegación
   try {
-    const p = fn.call(el, { navigationUI: 'hide' });
-    if (p && p.catch) p.catch(() => {});
-  } catch (_) { /* ignorado */ }
+    if (screen.orientation && screen.orientation.lock) {
+      screen.orientation.lock('landscape').catch(() => {});
+    }
+  } catch (_) {}
+
+  // En iOS Safari / navegadores que no soportan Fullscreen API
+  try {
+    window.scrollTo(0, 1);
+  } catch (_) {}
+}
+
+function exitFullscreen() {
+  if (!isFullscreenActive()) return;
+  const fn = document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen || document.msExitFullscreen;
+  if (fn) {
+    try {
+      fn.call(document);
+    } catch (_) {}
+  }
+}
+
+function toggleFullscreen() {
+  if (isFullscreenActive()) {
+    exitFullscreen();
+  } else {
+    goFullscreen();
+  }
 }
 
 
@@ -500,15 +550,16 @@ function checkOrientation() {
   const modal = document.getElementById('rotate-device-modal');
   if (!modal) return;
   const isPortrait = window.innerHeight > window.innerWidth;
-  const isMobileOrTablet = ('ontouchstart' in window) ||
-    (navigator.maxTouchPoints > 0) ||
-    (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) ||
-    (Math.max(window.innerWidth, window.innerHeight) <= 1024);
+  const isMobile = isMobileDevice() || (Math.max(window.innerWidth, window.innerHeight) <= 1024);
 
-  if (isPortrait && isMobileOrTablet) {
+  if (isPortrait && isMobile) {
     modal.classList.add('is-active');
   } else {
     modal.classList.remove('is-active');
+    // Al estar en horizontal en móviles, asegurar pantalla completa
+    if (isMobile && !isFullscreenActive() && state !== STATES.LOADING) {
+      goFullscreen();
+    }
   }
 }
 
@@ -1097,9 +1148,18 @@ window.addEventListener('pointermove', (e) => {
   dom.canvas.style.cursor = 'default';
 });
 
+window.addEventListener('touchstart', (e) => {
+  if (isMobileDevice() && !isFullscreenActive()) {
+    goFullscreen();
+  }
+}, { passive: true });
+
 window.addEventListener('pointerdown', (e) => {
+  if (isMobileDevice() && !isFullscreenActive()) {
+    goFullscreen();
+  }
   if (state === STATES.LOADING || state === STATES.CHARACTER_SELECT) return;          // el menú usa sus propios botones
-  if (e.target && e.target.closest && e.target.closest('#menu-btn')) return;
+  if (e.target && e.target.closest && e.target.closest('#menu-btn, #fullscreen-btn, #skip-tutorial-btn')) return;
   e.preventDefault();
   Sfx.unlock();
   if (state === STATES.ENTRY) { handleEntryPointer(e.clientX, e.clientY); return; }
@@ -2984,6 +3044,7 @@ function showMenu() {
 let lastT = 0;
 let menuBtnShown = false;
 let skipTutorialBtnShown = false;
+let fullscreenBtnShown = true;
 
 function frame(t) {
   requestAnimationFrame(frame);
@@ -3008,6 +3069,13 @@ function frame(t) {
   if (wantSkipTutorial !== skipTutorialBtnShown) {
     skipTutorialBtnShown = wantSkipTutorial;
     if (dom.skipTutorialBtn) dom.skipTutorialBtn.classList.toggle('is-visible', wantSkipTutorial);
+  }
+
+  // Botón "Pantalla completa" visible en menú, game over y pausa; sutil/oculto durante carrera activa
+  const wantFullscreenBtn = state === STATES.CHARACTER_SELECT || state === STATES.GAME_OVER || state === STATES.PAUSED;
+  if (wantFullscreenBtn !== fullscreenBtnShown) {
+    fullscreenBtnShown = wantFullscreenBtn;
+    if (dom.fullscreenBtn) dom.fullscreenBtn.classList.toggle('is-hidden', !wantFullscreenBtn);
   }
 }
 
@@ -3088,16 +3156,45 @@ function handleMenuKey(e) {
 }
 
 function setupOverlay() {
-  dom.pickers.forEach((b) => b.addEventListener('click', (e) => {
-    e.stopPropagation();
-    selectCharacter(b.dataset.char);
-  }));
-  if (dom.startBtn) {
-    dom.startBtn.addEventListener('click', (e) => {
+  dom.pickers.forEach((b) => {
+    const onPick = (e) => {
       e.stopPropagation();
+      if (isMobileDevice()) goFullscreen();
+      selectCharacter(b.dataset.char);
+    };
+    b.addEventListener('pointerdown', () => { if (isMobileDevice()) goFullscreen(); });
+    b.addEventListener('touchstart', () => { if (isMobileDevice()) goFullscreen(); }, { passive: true });
+    b.addEventListener('click', onPick);
+  });
+
+  if (dom.startBtn) {
+    const onStart = (e) => {
+      e.stopPropagation();
+      goFullscreen();
       startGame();
-    });
+    };
+    dom.startBtn.addEventListener('pointerdown', () => goFullscreen());
+    dom.startBtn.addEventListener('touchstart', () => goFullscreen(), { passive: true });
+    dom.startBtn.addEventListener('click', onStart);
   }
+
+  if (dom.fullscreenBtn) {
+    const onToggleFs = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleFullscreen();
+    };
+    dom.fullscreenBtn.addEventListener('click', onToggleFs);
+    dom.fullscreenBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
+    dom.fullscreenBtn.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
+  }
+
+  const rotateModal = document.getElementById('rotate-device-modal');
+  if (rotateModal) {
+    rotateModal.addEventListener('click', () => { if (isMobileDevice()) goFullscreen(); });
+    rotateModal.addEventListener('touchstart', () => { if (isMobileDevice()) goFullscreen(); }, { passive: true });
+  }
+
   if (dom.menuBtn) {
     dom.menuBtn.addEventListener('click', (e) => {
       e.stopPropagation();

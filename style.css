@@ -20,7 +20,9 @@ html, body {
   margin: 0;
   padding: 0;
   width: 100%;
+  width: 100dvw;
   height: 100%;
+  height: 100dvh;
   overflow: hidden;
   background: radial-gradient(120% 90% at 50% 20%, #1c2236 0%, var(--bg) 70%);
   color: var(--ink);
@@ -46,7 +48,9 @@ img { -webkit-user-drag: none; user-select: none; pointer-events: none; }
   top: 0; left: 0;
   z-index: 2;
   width: 100vw;
+  width: 100dvw;
   height: 100vh;
+  height: 100dvh;
   display: block;
   background: #10141e;
   touch-action: none;
@@ -453,6 +457,55 @@ body.is-extreme {
   transform: translateY(1px) scale(0.97);
 }
 
+/* Botón de Pantalla Completa */
+.fullscreen-btn {
+  position: fixed;
+  bottom: max(14px, env(safe-area-inset-bottom));
+  right: max(14px, env(safe-area-inset-right));
+  z-index: 55;
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 1.5px solid rgba(66, 191, 160, 0.55);
+  background: rgba(11, 13, 20, 0.78);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: var(--ink);
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+  transition: transform 0.2s ease, background 0.2s ease, border-color 0.2s ease, opacity 0.25s ease;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.fullscreen-btn:hover {
+  background: rgba(41, 159, 128, 0.35);
+  border-color: var(--unlam-light);
+  transform: scale(1.08);
+}
+.fullscreen-btn:active {
+  transform: scale(0.92);
+}
+.fullscreen-btn.is-hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.75);
+}
+.fullscreen-btn .fs-icon--compress {
+  display: none;
+}
+:fullscreen .fullscreen-btn .fs-icon--expand,
+:-webkit-full-screen .fullscreen-btn .fs-icon--expand {
+  display: none;
+}
+:fullscreen .fullscreen-btn .fs-icon--compress,
+:-webkit-full-screen .fullscreen-btn .fs-icon--compress {
+  display: block;
+}
+
 @keyframes pulse {
   0%, 100% { transform: scale(1); }
   50%      { transform: scale(1.04); }
@@ -568,6 +621,12 @@ body.is-extreme {
     padding: 6px 14px;
     top: max(10px, env(safe-area-inset-top));
     right: max(10px, env(safe-area-inset-right));
+  }
+  .fullscreen-btn {
+    width: 36px;
+    height: 36px;
+    bottom: max(8px, env(safe-area-inset-bottom));
+    right: max(8px, env(safe-area-inset-right));
   }
 }
 
