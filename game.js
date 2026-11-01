@@ -28,7 +28,7 @@ const ASSETS = {
     tortilla:      'ASSETS/200puntostortilla.png',// +200
     mate:          'ASSETS/500puntosmate.png',   // +500 recompensa alta especial
     fondoInicio:   'ASSETS/fondoinicio.png',    // fondo escena del bondi
-    fondoEntrada:  'ASSETS/fondoentrada.png',    // fondo de la entrada a UNLaM
+    fondoEntrada:  'ASSETS/Entrada.png',        // fondo de la entrada a UNLaM
     bus620closed:  'ASSETS/620cerrado.png',      // bondi cerrado
     bus620open:    'ASSETS/620abrepoco.png',     // bondi con puerta abierta
   },
@@ -1956,6 +1956,7 @@ stateHandlers[STATES.CAMPUS_ENTRANCE] = {
       phase: 'fadeIn',     // fadeIn → walkForward → walkToDoor → fadeOut → done
       charX: -60,
       charY: 0,
+      startX: 0,
       walkT: 0,
       fadeAlpha: 1
     };
@@ -1967,10 +1968,11 @@ stateHandlers[STATES.CAMPUS_ENTRANCE] = {
     if (!c) return;
     c.t += dt;
     const bg = getCampusRect();
-    // Posición exacta del pasaje de entrada (cruz roja de referencia entre las rejas abiertas)
-    const gateTargetX = bg.x + (755 / 1366) * bg.w;
+    // Posición exacta del pasaje de entrada (centro de la puerta indicado con cruz roja en Entrada.png)
+    const turnStartX = bg.x + (820 / 1366) * bg.w;
+    const gateTargetX = bg.x + (932 / 1366) * bg.w;
     const sidewalkY = bg.y + (710 / 768) * bg.h;
-    const thresholdY = bg.y + (515 / 768) * bg.h;
+    const thresholdY = bg.y + (508 / 768) * bg.h;
 
     switch (c.phase) {
       case 'fadeIn':
@@ -1983,13 +1985,13 @@ stateHandlers[STATES.CAMPUS_ENTRANCE] = {
         break;
 
       case 'walkForward':
-        // Continúa caminando hacia la derecha (entra por la izquierda hasta el pasaje marcado con la cruz roja)
+        // Continúa caminando hacia la derecha por la vereda hasta iniciar el giro hacia el centro de la puerta
         c.walkT += dt;
         c.charX += Math.max(W * 0.28, 170) * dt;
         c.charY = sidewalkY;
-        // Al alcanzar la posición de la cruz roja en el pasaje entre las rejas, cambia de perspectiva hacia el fondo
-        if (c.charX >= gateTargetX) {
-          c.charX = gateTargetX;
+        // Al aproximarse a la abertura de la reja, comienza la curva hacia el centro del portal
+        if (c.charX >= turnStartX) {
+          c.startX = c.charX;
           c.phase = 'walkToDoor';
           c.t = 0;
           c.walkT = 0;
@@ -1997,19 +1999,25 @@ stateHandlers[STATES.CAMPUS_ENTRANCE] = {
         break;
 
       case 'walkToDoor':
-        // Avanza en dirección al portal de la universidad a través de la abertura (hacia el fondo)
+        // Avanza en perspectiva curvando hacia el centro de la puerta (cruz roja entre las rejas abiertas)
         c.walkT += dt;
         const walkDur = 2.0;
         const p = clamp(c.t / walkDur, 0, 1);
+        const curveP = Math.sin(p * Math.PI * 0.5);
+        c.charX = lerp(c.startX || turnStartX, gateTargetX, curveP);
         c.charY = lerp(sidewalkY, thresholdY, p);
         if (p >= 1) {
+          c.charX = gateTargetX;
+          c.charY = thresholdY;
           c.phase = 'fadeOut';
           c.t = 0;
         }
         break;
 
       case 'fadeOut':
-        // Al llegar al umbral interior, fade a negro total
+        // Al traspasar el centro del umbral, continúa caminando hacia adentro y hace fade a negro
+        c.walkT += dt;
+        c.charY = thresholdY - (c.t / 0.6) * (14 / 768) * bg.h;
         c.fadeAlpha = clamp(c.t / 0.6, 0, 1);
         if (c.fadeAlpha >= 1) {
           transitionTo(STATES.VENDING_MACHINE);
@@ -2024,7 +2032,7 @@ stateHandlers[STATES.CAMPUS_ENTRANCE] = {
     if (!cm) return;
     const bg = getCampusRect();
 
-    // Fondo: entrada de la universidad (UNLaM - fondoentrada)
+    // Fondo: entrada de la universidad (UNLaM - Entrada)
     if (IMG.fondoEntrada) {
       g.drawImage(IMG.fondoEntrada, bg.x, bg.y, bg.w, bg.h);
     } else {
@@ -2038,9 +2046,9 @@ stateHandlers[STATES.CAMPUS_ENTRANCE] = {
       // Vista lateral caminando hacia la derecha
       drawWalkingChar(cm.charX, cm.walkT, cm.charY, baseH);
     } else if (cm.phase === 'walkToDoor' || cm.phase === 'fadeOut') {
-      // Vista de espaldas en perspectiva hacia el portal
+      // Vista de espaldas en perspectiva hacia el centro del portal
       const sidewalkY = bg.y + (710 / 768) * bg.h;
-      const thresholdY = bg.y + (515 / 768) * bg.h;
+      const thresholdY = bg.y + (508 / 768) * bg.h;
       const p = clamp((cm.charY - thresholdY) / (sidewalkY - thresholdY), 0, 1);
       const scale = lerp(0.65, 1.0, p);
       const curH = baseH * scale;
@@ -2653,8 +2661,16 @@ function getCampusRect() {
   const scale = Math.max(W / nw, H / nh);
   const w = nw * scale;
   const h = nh * scale;
-  const x = (W - w) / 2;
+  let x = (W - w) / 2;
   const y = H - h;
+  // Mantener el portal de la entrada (a 932/1366 del ancho) dentro de pantalla en formatos estrechos
+  const gateX = x + (932 / nw) * w;
+  const margin = Math.min(60, W * 0.12);
+  if (gateX > W - margin) {
+    x = W - margin - (932 / nw) * w;
+  }
+  if (x > 0) x = 0;
+  if (x < W - w) x = W - w;
   return { x, y, w, h, scale };
 }
 
