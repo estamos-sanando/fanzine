@@ -1,10 +1,10 @@
 /* =========================================================
- * Service Worker · Fanzine Runner v38
+ * Service Worker · Fanzine Runner v39
  * - install : precachea el juego (tolerante a fallos)
  * - fetch   : Network-First para HTML/JS/CSS (garantiza código actualizado)
  *             Cache-First para imágenes y audios pesados (máxima velocidad)
  * ========================================================= */
-const CACHE_VERSION = 'v39';
+const CACHE_VERSION = 'v40';
 const CACHE_NAME = 'fanzine-runner-' + CACHE_VERSION;
 
 // Mantener sincronizado con el diccionario ASSETS de game.js
@@ -83,7 +83,10 @@ const PRECACHE = [
   'ASSETS/chicosalto.png',
   'ASSETS/chicosalto1.png',
   'ASSETS/chicosalto2.png',
-  'ASSETS/chicosalto3.png'
+  'ASSETS/chicosalto3.png',
+  // Música (game.js la descarga con fetch y la reproduce desde un blob)
+  'ASSETS/Musica.mp3',
+  'ASSETS/Musicaperder (1).mp3'
 ];
 
 self.addEventListener('install', (event) => {
@@ -115,6 +118,8 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
   // No interceptar endpoints de API (ej: /api/scores) para tener siempre datos frescos en red
   if (url.pathname.startsWith('/api/')) return;
+  // Pedidos parciales (Range) de audio/video: los resuelve el navegador (una respuesta 206 no se puede cachear)
+  if (req.headers.has('range')) return;
 
   const isNav = req.mode === 'navigate';
   const isCode = isNav || url.pathname.endsWith('.js') || url.pathname.endsWith('.css');

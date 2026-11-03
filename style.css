@@ -413,11 +413,11 @@ body.is-extreme {
   transform: translateX(-50%) scale(1.05);
 }
 
-/* Botón para saltar el tutorial */
+/* Botón para saltar el tutorial (a la izquierda de la tuerca ⚙) */
 .skip-tutorial-btn {
   position: fixed;
-  top: max(16px, env(safe-area-inset-top));
-  right: max(16px, env(safe-area-inset-right));
+  top: calc(max(14px, env(safe-area-inset-top)) + 4px);
+  right: calc(max(16px, env(safe-area-inset-right)) + 54px);
   z-index: 50;
   appearance: none;
   display: inline-flex;
@@ -504,6 +504,240 @@ body.is-extreme {
 :fullscreen .fullscreen-btn .fs-icon--compress,
 :-webkit-full-screen .fullscreen-btn .fs-icon--compress {
   display: block;
+}
+
+/* ---------- Configuración: tuerca ⚙ + menú desplegable (arriba a la derecha) ---------- */
+.settings {
+  --gear-size: 44px;
+  --gear-top: max(14px, env(safe-area-inset-top));
+  --gear-right: max(16px, env(safe-area-inset-right));
+  position: fixed;
+  top: var(--gear-top);
+  right: var(--gear-right);
+  z-index: 60;
+  font-family: var(--font-ui);
+}
+.settings__btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--gear-size);
+  height: var(--gear-size);
+  padding: 0;
+  border: 1.5px solid rgba(66, 191, 160, 0.55);
+  background: rgba(11, 13, 20, 0.78);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: var(--ink);
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+  transition: transform 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.settings__btn:hover {
+  background: rgba(41, 159, 128, 0.35);
+  border-color: var(--unlam-light);
+}
+.settings__btn:active { transform: scale(0.92); }
+.settings__btn:focus-visible {
+  outline: 2px solid var(--unlam-glow);
+  outline-offset: 3px;
+}
+.settings__gear { transition: transform 0.45s cubic-bezier(.3, 1.4, .5, 1); }
+.settings__btn:hover .settings__gear { transform: rotate(45deg); }
+.settings.is-open .settings__btn {
+  background: rgba(41, 159, 128, 0.45);
+  border-color: var(--unlam-glow);
+}
+.settings.is-open .settings__gear { transform: rotate(90deg); }
+
+.settings__panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: min(272px, calc(100vw - 32px));
+  max-height: calc(100vh - var(--gear-size) - 40px);
+  max-height: calc(100dvh - var(--gear-size) - 40px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 14px 16px 12px;
+  border: 1.5px solid rgba(66, 191, 160, 0.55);
+  border-radius: 16px;
+  background: rgba(11, 13, 20, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: var(--ink);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(0, 0, 0, 0.3);
+  transform-origin: top right;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(-6px) scale(0.96);
+  transition: opacity 0.18s ease, transform 0.18s ease, visibility 0s linear 0.18s;
+}
+.settings.is-open .settings__panel {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: none;
+  transition: opacity 0.18s ease, transform 0.18s ease, visibility 0s;
+}
+.settings__title {
+  margin: 0 0 12px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--unlam-light);
+}
+.settings__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.settings__label {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+.settings__value {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: rgba(246, 243, 234, 0.75);
+}
+.settings__volume {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.settings__mute {
+  appearance: none;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid rgba(66, 191, 160, 0.4);
+  border-radius: 10px;
+  background: rgba(41, 159, 128, 0.12);
+  color: var(--ink);
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.settings__mute:hover { background: rgba(41, 159, 128, 0.3); border-color: var(--unlam-light); }
+.settings__mute:focus-visible { outline: 2px solid var(--unlam-glow); outline-offset: 2px; }
+.settings__mute .settings__cross { display: none; }
+.settings__mute.is-muted { color: #ff8a8a; border-color: rgba(255, 107, 107, 0.5); background: rgba(255, 107, 107, 0.12); }
+.settings__mute.is-muted .settings__waves { display: none; }
+.settings__mute.is-muted .settings__cross { display: inline; }
+
+/* Control deslizante de volumen */
+.settings__range {
+  --fill: 60%;
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  touch-action: none;
+}
+.settings__range:focus { outline: none; }
+.settings__range::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--unlam-light) 0 var(--fill), rgba(255, 255, 255, 0.18) var(--fill) 100%);
+}
+.settings__range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  margin-top: -7px;
+  border-radius: 50%;
+  background: var(--ink);
+  border: 3px solid var(--unlam);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+  transition: box-shadow 0.15s ease;
+}
+.settings__range:focus-visible::-webkit-slider-thumb,
+.settings__range:active::-webkit-slider-thumb {
+  box-shadow: 0 0 0 6px rgba(66, 191, 160, 0.3), 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+.settings__range::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+}
+.settings__range::-moz-range-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--unlam-light);
+}
+.settings__range::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--ink);
+  border: 3px solid var(--unlam);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+
+.settings__sep {
+  margin: 12px 0 10px;
+  border: 0;
+  border-top: 1px solid rgba(66, 191, 160, 0.25);
+}
+.settings__link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  color: var(--ink);
+  text-decoration: none;
+  background: linear-gradient(135deg, rgba(131, 58, 180, 0.22), rgba(253, 29, 29, 0.16) 55%, rgba(252, 176, 69, 0.18));
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  transition: transform 0.15s ease, border-color 0.2s ease, background 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.settings__link:hover {
+  border-color: rgba(252, 176, 69, 0.6);
+  transform: translateY(-1px);
+}
+.settings__link:active { transform: scale(0.98); }
+.settings__link:focus-visible { outline: 2px solid var(--unlam-glow); outline-offset: 2px; }
+.settings__link svg { flex: none; color: #ffb3c7; }
+.settings__link-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.25;
+}
+.settings__link-label {
+  font-size: 10.5px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: rgba(246, 243, 234, 0.7);
+}
+.settings__link-handle {
+  font-size: 14px;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.settings__link-arrow {
+  margin-left: auto;
+  font-size: 16px;
+  opacity: 0.75;
 }
 
 @keyframes pulse {
@@ -619,9 +853,21 @@ body.is-extreme {
   .skip-tutorial-btn {
     font-size: 11px;
     padding: 6px 14px;
-    top: max(10px, env(safe-area-inset-top));
-    right: max(10px, env(safe-area-inset-right));
+    top: calc(max(8px, env(safe-area-inset-top)) + 3px);
+    right: calc(max(10px, env(safe-area-inset-right)) + 46px);
   }
+  .settings {
+    --gear-size: 36px;
+    --gear-top: max(8px, env(safe-area-inset-top));
+    --gear-right: max(10px, env(safe-area-inset-right));
+  }
+  .settings__btn svg { width: 19px; height: 19px; }
+  .settings__panel {
+    top: calc(100% + 6px);
+    padding: 10px 14px 10px;
+  }
+  .settings__title { margin-bottom: 8px; }
+  .settings__sep { margin: 8px 0 8px; }
   .fullscreen-btn {
     width: 36px;
     height: 36px;

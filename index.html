@@ -12,7 +12,7 @@
   <meta name="format-detection" content="telephone=no">
   <link rel="icon" href="ASSETS/chicaquieta.png" type="image/png">
   <link rel="apple-touch-icon" href="ASSETS/chicaquieta.png">
-  <link rel="stylesheet" href="style.css?v=26">
+  <link rel="stylesheet" href="style.css?v=27">
 </head>
 <body>
   <!-- Canvas del juego -->
@@ -91,7 +91,51 @@
   <!-- Volver a la pantalla de inicio (solo visible en game over) -->
   <button id="menu-btn" class="menu-btn" type="button">↩ Menú</button>
 
-  <script src="game.js?v=38"></script>
+  <!-- Configuración: tuerca arriba a la derecha con menú desplegable -->
+  <div id="settings" class="settings">
+    <button id="settings-btn" class="settings__btn" type="button" aria-label="Configuración" title="Configuración" aria-haspopup="true" aria-expanded="false" aria-controls="settings-panel">
+      <svg class="settings__gear" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+      </svg>
+    </button>
+
+    <div id="settings-panel" class="settings__panel" role="dialog" aria-label="Configuración" aria-hidden="true">
+      <h2 class="settings__title">Configuración</h2>
+
+      <div class="settings__row">
+        <label class="settings__label" for="music-volume">Música</label>
+        <output id="music-volume-value" class="settings__value" for="music-volume">60%</output>
+      </div>
+      <div class="settings__volume">
+        <button id="music-mute-btn" class="settings__mute" type="button" aria-label="Silenciar música" aria-pressed="false">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M11 5 6 9H2v6h4l5 4V5z" fill="currentColor"/>
+            <path class="settings__waves" d="M15.54 8.46a5 5 0 0 1 0 7.07M19.07 4.93a10 10 0 0 1 0 14.14"/>
+            <path class="settings__cross" d="m23 9-6 6m0-6 6 6"/>
+          </svg>
+        </button>
+        <input id="music-volume" class="settings__range" type="range" min="0" max="100" step="1" value="60" aria-label="Volumen de la música">
+      </div>
+
+      <hr class="settings__sep">
+
+      <a class="settings__link" href="https://www.instagram.com/nella_costa/" target="_blank" rel="noopener noreferrer">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
+          <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/>
+          <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>
+        </svg>
+        <span class="settings__link-text">
+          <span class="settings__link-label">Seguime en Instagram</span>
+          <span class="settings__link-handle">@nella_costa</span>
+        </span>
+        <span class="settings__link-arrow" aria-hidden="true">↗</span>
+      </a>
+    </div>
+  </div>
+
+  <script src="game.js?v=39"></script>
   <script>
     // Registro del Service Worker (modo offline). Requiere HTTPS o localhost.
     if ('serviceWorker' in navigator) {

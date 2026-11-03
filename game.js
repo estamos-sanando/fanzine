@@ -124,6 +124,12 @@ const ASSETS = {
     doubleJump: null,
     pickup:     null,
     hit:        null
+  },
+
+  // Música de fondo (mantener sincronizado con PRECACHE de sw.js)
+  music: {
+    main: 'ASSETS/Musica.mp3',              // tema principal, suena en loop
+    lose: 'ASSETS/Musicaperder (1).mp3'     // al chocar contra un obstáculo
   }
 };
 
@@ -150,6 +156,8 @@ const CONFIG = {
   initialsLength: 3,
   storageChar: 'fanzine_runner_char',
   defaultCharacter: 'chica',
+  storageMusicVolume: 'fanzine_runner_music_volume', // volumen de la música elegido en ⚙
+  musicVolume: 0.6,                                  // volumen inicial de la música (0..1)
 
   // Píxeles de SUELO.png (1920x1080) donde empieza la vereda
   groundSourceTop: 690,
@@ -244,7 +252,13 @@ const dom = {
   scoresPersonal:  $('personal-record-pts'),
   menuBtn:         $('menu-btn'),
   skipTutorialBtn: $('skip-tutorial-btn'),
-  fullscreenBtn:   $('fullscreen-btn')
+  fullscreenBtn:   $('fullscreen-btn'),
+  settings:        $('settings'),
+  settingsBtn:     $('settings-btn'),
+  settingsPanel:   $('settings-panel'),
+  musicVolume:     $('music-volume'),
+  musicVolumeOut:  $('music-volume-value'),
+  musicMuteBtn:    $('music-mute-btn')
 };
 const ctx = dom.canvas.getContext('2d', { alpha: false });
 
@@ -357,6 +371,212 @@ const Sfx = {
         this.tone(880, 1760, 0.10, 'triangle', 0.08, 0.16);
         break;
     }
+  }
+};
+
+/* ---------- Música de fondo (Musica.mp3 en loop · Musicaperder al chocar) ----------
+ * - Un único <audio> alterna entre pistas: en iOS, una vez "desbloqueado" con un
+ *   toque, ese mismo elemento puede cambiar de pista y sonar sin otro gesto
+ *   (por ej. en el momento del choque, que ocurre dentro del bucle del juego).
+ * - Las pistas se descargan con fetch y se reproducen desde un blob: así quedan
+ *   en la caché del Service Worker y suenan también sin conexión.
+ * - El volumen pasa por un GainNode de Web Audio porque en iOS la propiedad
+ *   audio.volume es de solo lectura (fallback: audio.volume). */
+const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
+
+const Music = {
+  el: null,
+  urls: {},           // pista -> URL lista para reproducir (blob: o ruta original)
+  ready: {},          // pista -> Promise<URL>
+  track: null,        // pista cargada en el elemento
+  current: null,      // pista que debería sonar ('main' | 'lose' | null)
+  volume: CONFIG.musicVolume,
+  lastVolume: CONFIG.musicVolume,   // para restaurar al quitar el silencio
+  unlocked: false,
+  suspended: false,   // pausada porque la pestaña está oculta
+  gain: null,
+  // Web Audio con archivos locales (file://) da silencio en Chrome: solo se usa sobre http(s)
+  useWebAudio: /^https?:$/.test(location.protocol),
+
+  init() {
+    const saved = parseFloat(storageGet(CONFIG.storageMusicVolume, ''));
+    if (Number.isFinite(saved)) this.volume = clamp(saved, 0, 1);
+    if (this.volume > 0) this.lastVolume = this.volume;
+    this.el = new Audio();
+    this.el.preload = 'auto';
+    this.el.setAttribute('playsinline', '');
+    this.applyVolume();
+  },
+
+  preload(name) {
+    const names = name ? [name] : Object.keys(ASSETS.music);
+    for (const n of names) {
+      if (this.ready[n]) continue;
+      const src = ASSETS.music[n];
+      this.ready[n] = fetch(src)
+        .then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); })
+        .then((b) => URL.createObjectURL(b))
+        .catch(() => src)                       // sin fetch/blob: reproducir directo desde la ruta
+        .then((url) => { this.urls[n] = url; return url; });
+    }
+  },
+
+  // Debe llamarse dentro de un gesto del usuario (toque, clic o tecla)
+  unlock() {
+    Sfx.unlock();
+    this.connect();
+    if (this.unlocked) {
+      // iOS puede frenar el audio al volver de segundo plano: se reanuda con el próximo toque
+      if (this.current && this.el.paused && !this.el.ended && !this.suspended) this.resume();
+      return;
+    }
+    this.unlocked = true;
+    const name = this.current || 'main';        // la música arranca con el primer toque
+    if (!this.urls[name]) {
+      // La pista todavía se descarga: se "bendice" el elemento con un silencio dentro del gesto
+      this.el.src = SILENT_WAV;
+      this.track = null;
+      this.resume();
+    }
+    this.play(name);
+  },
+
+  connect() {
+    if (this.gain || !this.useWebAudio || !Sfx.ac) return;
+    try {
+      const source = Sfx.ac.createMediaElementSource(this.el);
+      const gain = Sfx.ac.createGain();
+      source.connect(gain).connect(Sfx.ac.destination);
+      this.gain = gain;
+    } catch (_) { this.useWebAudio = false; }
+    this.applyVolume();
+  },
+
+  // Reproduce una pista desde el principio
+  play(name) {
+    if (!ASSETS.music[name]) return;
+    this.current = name;
+    const url = this.urls[name];
+    if (url) { this.start(name, url); return; }
+    this.preload(name);
+    this.ready[name].then((u) => { if (this.current === name) this.start(name, u); });
+  },
+
+  start(name, url) {
+    const el = this.el;
+    if (this.track !== name) { el.src = url; this.track = name; }
+    else { try { el.currentTime = 0; } catch (_) { /* aún sin metadata */ } }
+    el.loop = name === 'main';
+    if (this.unlocked && !this.suspended) this.resume();
+  },
+
+  resume() {
+    const p = this.el.play();
+    if (p && p.catch) p.catch(() => { /* bloqueado hasta el próximo gesto */ });
+  },
+
+  setSuspended(hidden) {
+    this.suspended = hidden;
+    if (hidden) this.el.pause();
+    else if (this.unlocked && this.current && !this.el.ended) this.resume();
+  },
+
+  setVolume(v) {
+    this.volume = clamp(v, 0, 1);
+    if (this.volume > 0) this.lastVolume = this.volume;
+    storageSet(CONFIG.storageMusicVolume, this.volume.toFixed(2));
+    this.applyVolume();
+  },
+
+  applyVolume() {
+    if (!this.el) return;
+    if (this.gain) {
+      this.el.volume = 1;
+      this.gain.gain.value = this.volume;
+    } else {
+      this.el.volume = this.volume;
+    }
+    this.el.muted = this.volume === 0;
+  }
+};
+
+/* ---------- Menú de configuración (tuerca ⚙ arriba a la derecha) ---------- */
+const Settings = {
+  open: false,
+
+  setup() {
+    const { settings, settingsBtn, settingsPanel, musicVolume, musicMuteBtn } = dom;
+    if (!settings || !settingsBtn || !settingsPanel) return;
+
+    settingsBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.toggle();
+    });
+
+    if (musicVolume) {
+      musicVolume.value = String(Math.round(Music.volume * 100));
+      musicVolume.addEventListener('input', () => {
+        Music.setVolume(Number(musicVolume.value) / 100);
+        this.render();
+      });
+    }
+    if (musicMuteBtn) {
+      musicMuteBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        Music.setVolume(Music.volume > 0 ? 0 : (Music.lastVolume || CONFIG.musicVolume));
+        if (musicVolume) musicVolume.value = String(Math.round(Music.volume * 100));
+        this.render();
+      });
+    }
+
+    // Los toques dentro del menú no deben hacer saltar al personaje ni activar otras capas
+    ['pointerdown', 'touchstart', 'mousedown'].forEach((n) =>
+      settings.addEventListener(n, (e) => e.stopPropagation(), { passive: true }));
+
+    // Tocar fuera del panel lo cierra (y ese toque no cuenta como salto)
+    document.addEventListener('pointerdown', (e) => {
+      if (!this.open || (e.target && e.target.closest && e.target.closest('#settings'))) return;
+      this.close();
+      e.stopPropagation();
+      e.preventDefault();
+    }, true);
+
+    this.render();
+  },
+
+  render() {
+    const pct = Math.round(Music.volume * 100);
+    if (dom.musicVolume) dom.musicVolume.style.setProperty('--fill', pct + '%');
+    if (dom.musicVolumeOut) dom.musicVolumeOut.textContent = pct + '%';
+    if (dom.musicMuteBtn) {
+      dom.musicMuteBtn.classList.toggle('is-muted', pct === 0);
+      dom.musicMuteBtn.setAttribute('aria-pressed', String(pct === 0));
+      dom.musicMuteBtn.setAttribute('aria-label', pct === 0 ? 'Activar música' : 'Silenciar música');
+    }
+  },
+
+  toggle() { this.open ? this.close() : this.openPanel(); },
+
+  openPanel() {
+    this.open = true;
+    // Abrir el menú en plena carrera pone el juego en pausa
+    if (state === STATES.PLAYING) { state = STATES.PAUSED; world.pausedAt = performance.now(); }
+    dom.settings.classList.add('is-open');
+    dom.settingsBtn.setAttribute('aria-expanded', 'true');
+    dom.settingsPanel.setAttribute('aria-hidden', 'false');
+  },
+
+  close() {
+    if (!this.open) return;
+    this.open = false;
+    dom.settings.classList.remove('is-open');
+    dom.settingsBtn.setAttribute('aria-expanded', 'false');
+    dom.settingsPanel.setAttribute('aria-hidden', 'true');
+    // Sin foco en el menú, la barra espaciadora vuelve a ser "saltar"
+    const a = document.activeElement;
+    if (a && dom.settings.contains(a) && a.blur) a.blur();
+    if (state === STATES.PAUSED) world.pausedAt = performance.now();
   }
 };
 
@@ -505,6 +725,7 @@ async function loadAssets() {
 let W = 0, H = 0, DPR = 1;
 let U = 100;              // alto del personaje en px
 let stripTop = 0, stripH = 0, groundY = 0, heroX = 0, safeTop = 0, safeLeft = 0, safeRight = 0, safeBottom = 0;
+let settingsInset = 0;    // px desde el borde derecho que ocupa el botón ⚙
 let groundTile = null;    // canvas offscreen (vereda + espejo para tile sin costuras)
 let groundTileW = 0;      // ancho de UN tile en px CSS
 
@@ -532,6 +753,12 @@ function layout() {
   safeLeft   = parseFloat(probeStyle.paddingLeft) || 0;
   safeRight  = parseFloat(probeStyle.paddingRight) || 0;
   safeBottom = parseFloat(probeStyle.paddingBottom) || 0;
+
+  // Espacio que ocupa la tuerca ⚙ (arriba a la derecha) para no tapar el HUD
+  if (dom.settingsBtn) {
+    const r = dom.settingsBtn.getBoundingClientRect();
+    settingsInset = r.width ? Math.max(0, W - r.left) : 0;
+  }
 
   buildGroundTile();
 
@@ -1159,7 +1386,7 @@ window.addEventListener('pointerdown', (e) => {
     goFullscreen();
   }
   if (state === STATES.LOADING || state === STATES.CHARACTER_SELECT) return;          // el menú usa sus propios botones
-  if (e.target && e.target.closest && e.target.closest('#menu-btn, #fullscreen-btn, #skip-tutorial-btn')) return;
+  if (e.target && e.target.closest && e.target.closest('#menu-btn, #fullscreen-btn, #skip-tutorial-btn, #settings')) return;
   e.preventDefault();
   Sfx.unlock();
   if (state === STATES.ENTRY) { handleEntryPointer(e.clientX, e.clientY); return; }
@@ -1169,6 +1396,12 @@ window.addEventListener('pointerdown', (e) => {
 }, { passive: false });
 
 window.addEventListener('keydown', (e) => {
+  // Menú de configuración: Escape lo cierra y, mientras está abierto, las teclas no controlan el juego
+  if (Settings.open) {
+    if (e.key === 'Escape') { e.preventDefault(); Settings.close(); }
+    return;
+  }
+  if (e.target && e.target.closest && e.target.closest('#settings')) return;
   if (state === STATES.LOADING) return;
   if (state === STATES.CHARACTER_SELECT) { handleMenuKey(e); return; }
   if (state === STATES.ENTRY) { handleEntryKey(e); return; }
@@ -1195,10 +1428,19 @@ window.addEventListener('keydown', (e) => {
 ['gesturestart', 'gesturechange', 'gestureend'].forEach((n) =>
   document.addEventListener(n, (e) => e.preventDefault()));
 document.addEventListener('contextmenu', (e) => e.preventDefault());
-document.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+// Bloquea el scroll/zoom táctil, salvo dentro del menú ⚙ (para poder arrastrar el control de volumen)
+document.addEventListener('touchmove', (e) => {
+  if (e.target && e.target.closest && e.target.closest('#settings')) return;
+  e.preventDefault();
+}, { passive: false });
 document.addEventListener('dblclick', (e) => e.preventDefault());
 
+// La música arranca con el primer gesto del usuario (requisito de autoplay de los navegadores)
+['pointerdown', 'pointerup', 'touchend', 'keydown', 'click'].forEach((n) =>
+  window.addEventListener(n, () => Music.unlock(), { capture: true, passive: true }));
+
 document.addEventListener('visibilitychange', () => {
+  Music.setSuspended(document.hidden);
   if (document.hidden) {
     if (state === STATES.PLAYING) { state = STATES.PAUSED; world.pausedAt = performance.now(); }
   }
@@ -2827,7 +3069,7 @@ function drawHUD() {
   // En móviles en horizontal, garantizar separación de la barra de estado y notch/isla dinámica
   const y = Math.max(safeTop + 12, 16) + size / 2;
   const marginL = Math.max(safeLeft + 16, 24);
-  const marginR = Math.max(safeRight + 16, 24);
+  const marginR = Math.max(safeRight + 16, 24, settingsInset + 12);   // deja lugar a la tuerca ⚙
   const isMilestone = world.milestoneT > 0 && Math.floor(world.milestoneT * 6) % 2 === 0;
   const isExtreme = world.isExtreme && state === STATES.PLAYING;
   const scoreText = 'PUNTOS ' + pad(world.score) + (isExtreme ? ' ⚡ EXTREMO' : '');
@@ -3011,6 +3253,7 @@ function die() {
   // Al perder (incluso tras superar los 20.000 pts), deja de cambiar de color de inmediato
   setExtremeMode(false);
   Sfx.play('hit');
+  Music.play('lose');                          // corta el tema principal y suena Musicaperder
   const prevPersonal = personalRecord;
   const bestGlobal = Scores.best();
   world.newGlobalRecord = world.score > 0 && world.score > bestGlobal;
@@ -3039,6 +3282,7 @@ function die() {
 function beginRunFromMenu() {
   setExtremeMode(false);
   resetRun();
+  Music.play('main');                          // nueva carrera: el tema principal vuelve a empezar
   if (CONFIG.skipCinematic) {
     transitionTo(STATES.PLAYING);
   } else {
@@ -3050,6 +3294,7 @@ function showMenu() {
   if (state !== STATES.GAME_OVER) return;
   setExtremeMode(false);
   resetRun();
+  Music.play('main');
   transitionTo(STATES.CHARACTER_SELECT);
 }
 
@@ -3244,7 +3489,9 @@ function setupOverlay() {
 
 async function main() {
   Sfx.init();
+  Music.init();
   setupOverlay();
+  Settings.setup();
   renderOverlayScores();
   selectCharacter(character);
   layout();
@@ -3253,6 +3500,7 @@ async function main() {
   Scores.refresh();                              // el ranking baja mientras cargan los assets
 
   await loadAssets();
+  Music.preload();                               // la música se descarga después de las imágenes
   layout();
   resetRun();
 
