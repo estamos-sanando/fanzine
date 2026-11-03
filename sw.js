@@ -1,10 +1,10 @@
 /* =========================================================
- * Service Worker · Fanzine Runner v44
+ * Service Worker · Fanzine Runner v45
  * - install : precachea el juego (tolerante a fallos)
  * - fetch   : Network-First para HTML/JS/CSS (garantiza código actualizado)
  *             Cache-First para imágenes y audios pesados (máxima velocidad)
  * ========================================================= */
-const CACHE_VERSION = 'v44';
+const CACHE_VERSION = 'v45';
 const CACHE_NAME = 'fanzine-runner-' + CACHE_VERSION;
 
 // Mantener sincronizado con el diccionario ASSETS de game.js
@@ -89,7 +89,8 @@ const PRECACHE = [
   'ASSETS/chicosalto2.png',
   'ASSETS/chicosalto3.png',
   // Música (game.js la descarga con fetch y la reproduce desde un blob)
-  'ASSETS/Musica.mp3',
+  'ASSETS/Musica intro.mp3',
+  'ASSETS/Musicajuego.mp3',
   'ASSETS/Musicaperder (1).mp3'
 ];
 

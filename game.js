@@ -132,8 +132,9 @@ const ASSETS = {
 
   // Música de fondo (mantener sincronizado con PRECACHE de sw.js)
   music: {
-    main: 'ASSETS/Musica.mp3',              // tema principal, suena en loop
-    lose: 'ASSETS/Musicaperder (1).mp3'     // al chocar contra un obstáculo
+    intro: 'ASSETS/Musica intro.mp3',       // intro: menú, bondi, tutorial y entrada hasta tocar la máquina expendedora
+    game:  'ASSETS/Musicajuego.mp3',        // carrera principal cuando se activa el juego
+    lose:  'ASSETS/Musicaperder (1).mp3'    // al chocar contra un obstáculo
   }
 };
 
@@ -300,6 +301,7 @@ function showToast(msg, ms = 4200) {
 /* ---------- Audio (sintetizado, sin archivos; usa ASSETS.sounds si existen) ---------- */
 const Sfx = {
   ac: null,
+  noiseBuf: null,
   files: {},
   init() {
     for (const [name, src] of Object.entries(ASSETS.sounds)) {
@@ -312,6 +314,60 @@ const Sfx = {
       if (AC) { try { this.ac = new AC(); } catch (_) { /* sin audio */ } }
     }
     if (this.ac && this.ac.state === 'suspended') this.ac.resume();
+  },
+  getNoiseBuffer() {
+    if (!this.ac) return null;
+    if (this.noiseBuf) return this.noiseBuf;
+    const len = Math.floor(this.ac.sampleRate * 1.0);
+    const buf = this.ac.createBuffer(1, len, this.ac.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+    this.noiseBuf = buf;
+    return buf;
+  },
+  noise(dur, filterType = 'bandpass', f0 = 1200, f1 = 1200, q = 1.5, vol = 0.08, delay = 0) {
+    if (!this.ac) return;
+    const buf = this.getNoiseBuffer();
+    if (!buf) return;
+    const t = this.ac.currentTime + delay;
+    const src = this.ac.createBufferSource();
+    src.buffer = buf;
+    src.loop = true;
+    const flt = this.ac.createBiquadFilter();
+    flt.type = filterType;
+    flt.Q.setValueAtTime(q, t);
+    flt.frequency.setValueAtTime(Math.max(20, f0), t);
+    if (f1 !== f0) flt.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
+    const g = this.ac.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(vol, t + Math.min(0.015, dur * 0.25));
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(flt).connect(g).connect(this.ac.destination);
+    src.start(t);
+    src.stop(t + dur + 0.02);
+  },
+  gulp(delay = 0, pitchMul = 1) {
+    if (!this.ac) return;
+    const t = this.ac.currentTime + delay;
+    const osc = this.ac.createOscillator();
+    const flt = this.ac.createBiquadFilter();
+    const g = this.ac.createGain();
+    osc.type = 'sine';
+    // Contorno clásico de trago ("glug"): baja al tragar y sube con la burbuja de líquido
+    osc.frequency.setValueAtTime(245 * pitchMul, t);
+    osc.frequency.exponentialRampToValueAtTime(135 * pitchMul, t + 0.065);
+    osc.frequency.exponentialRampToValueAtTime(385 * pitchMul, t + 0.175);
+    flt.type = 'lowpass';
+    flt.Q.setValueAtTime(5.0, t);
+    flt.frequency.setValueAtTime(480, t);
+    flt.frequency.exponentialRampToValueAtTime(860, t + 0.18);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.22, t + 0.025);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.19);
+    osc.connect(flt).connect(g).connect(this.ac.destination);
+    osc.start(t);
+    osc.stop(t + 0.21);
+    this.noise(0.09, 'bandpass', 560 * pitchMul, 780 * pitchMul, 3.8, 0.07, delay + 0.02);
   },
   tone(f0, f1, dur, type = 'square', vol = 0.08, delay = 0) {
     if (!this.ac) return;
@@ -386,12 +442,37 @@ const Sfx = {
         this.tone(120, 80, 0.08, 'square', 0.04);
         break;
       case 'vendingDrop':
-        this.tone(600, 200, 0.25, 'triangle', 0.10);
-        this.tone(200, 120, 0.15, 'square', 0.06, 0.22);
+        // 1) Doble beep electrónico del botón + clic
+        this.tone(1480, 1480, 0.055, 'sine', 0.11, 0);
+        this.tone(1860, 1860, 0.075, 'sine', 0.12, 0.075);
+        this.noise(0.03, 'bandpass', 1800, 1200, 2.0, 0.09, 0);
+        // 2) Motor / espiral mecánica girando para empujar la lata
+        this.tone(128, 152, 0.36, 'sawtooth', 0.075, 0.15);
+        this.noise(0.34, 'bandpass', 340, 480, 3.0, 0.07, 0.16);
+        // 3) Caída pesada y rebote metálico en el cajón dispensador
+        this.tone(210, 54, 0.22, 'triangle', 0.24, 0.52);
+        this.tone(360, 118, 0.14, 'square', 0.09, 0.52);
+        this.noise(0.16, 'bandpass', 920, 360, 1.4, 0.20, 0.52);
+        this.tone(155, 48, 0.14, 'triangle', 0.15, 0.68);
+        this.noise(0.11, 'bandpass', 760, 300, 1.8, 0.12, 0.68);
+        // 4) Golpecito de la tapa al retirar la bebida
+        this.noise(0.07, 'lowpass', 680, 260, 1.2, 0.10, 0.90);
+        break;
+      case 'canOpen':
+        // "Clack-pssshhh": apertura de lata fría con gas
+        this.tone(2400, 920, 0.035, 'triangle', 0.14, 0);
+        this.noise(0.035, 'highpass', 2600, 2600, 1.2, 0.18, 0);
+        this.tone(3100, 1400, 0.03, 'sine', 0.10, 0.045);
+        this.noise(0.36, 'bandpass', 3400, 5200, 0.9, 0.15, 0.055);
         break;
       case 'drink':
-        this.tone(300, 450, 0.12, 'sine', 0.06);
-        this.tone(450, 600, 0.10, 'sine', 0.05, 0.10);
+        // Tragos rítmicos ("glug, glug, glug") de alguien bebiendo
+        this.gulp(0, 0.96 + opt * 0.06);
+        break;
+      case 'drinkAhh':
+        // Exhalación suave de alivio al terminar de beber
+        this.noise(0.26, 'bandpass', 1150, 680, 1.3, 0.09, 0);
+        this.tone(310, 215, 0.22, 'sine', 0.055, 0.02);
         break;
       case 'startRun':
         this.tone(440, 880, 0.12, 'square', 0.08);
@@ -402,10 +483,10 @@ const Sfx = {
   }
 };
 
-/* ---------- Música de fondo (Musica.mp3 en loop · Musicaperder al chocar) ----------
+/* ---------- Música de fondo (Musica intro · Musicajuego · Musicaperder) ----------
  * - Un único <audio> alterna entre pistas: en iOS, una vez "desbloqueado" con un
  *   toque, ese mismo elemento puede cambiar de pista y sonar sin otro gesto
- *   (por ej. en el momento del choque, que ocurre dentro del bucle del juego).
+ *   (por ej. al iniciar la carrera tras la bebida o en el momento del choque).
  * - Las pistas se descargan con fetch y se reproducen desde un blob: así quedan
  *   en la caché del Service Worker y suenan también sin conexión.
  * - El volumen pasa por un GainNode de Web Audio porque en iOS la propiedad
@@ -417,7 +498,7 @@ const Music = {
   urls: {},           // pista -> URL lista para reproducir (blob: o ruta original)
   ready: {},          // pista -> Promise<URL>
   track: null,        // pista cargada en el elemento
-  current: null,      // pista que debería sonar ('main' | 'lose' | null)
+  current: 'intro',   // pista que debería sonar ('intro' | 'game' | 'lose' | null)
   volume: CONFIG.musicVolume,
   lastVolume: CONFIG.musicVolume,   // para restaurar al quitar el silencio
   unlocked: false,
@@ -441,10 +522,11 @@ const Music = {
     for (const n of names) {
       if (this.ready[n]) continue;
       const src = ASSETS.music[n];
-      this.ready[n] = fetch(src)
+      if (!src) continue;
+      this.ready[n] = fetch(encodeURI(src))
         .then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); })
         .then((b) => URL.createObjectURL(b))
-        .catch(() => src)                       // sin fetch/blob: reproducir directo desde la ruta
+        .catch(() => encodeURI(src))            // sin fetch/blob: reproducir directo desde la ruta
         .then((url) => { this.urls[n] = url; return url; });
     }
   },
@@ -454,19 +536,19 @@ const Music = {
     Sfx.unlock();
     this.connect();
     if (this.unlocked) {
-      // iOS puede frenar el audio al volver de segundo plano: se reanuda con el próximo toque
+      // iOS puede frenar el audio al volver de segundo plano: se reanuda solo si hay una pista activa
       if (this.current && this.el.paused && !this.el.ended && !this.suspended) this.resume();
       return;
     }
     this.unlocked = true;
-    const name = this.current || 'main';        // la música arranca con el primer toque
-    if (!this.urls[name]) {
-      // La pista todavía se descarga: se "bendice" el elemento con un silencio dentro del gesto
+    const name = this.current;
+    if (!name || !this.urls[name]) {
+      // Se "bendice" el elemento con un silencio dentro del gesto
       this.el.src = SILENT_WAV;
       this.track = null;
       this.resume();
     }
-    this.play(name);
+    if (name) this.play(name, false);
   },
 
   connect() {
@@ -480,21 +562,36 @@ const Music = {
     this.applyVolume();
   },
 
-  // Reproduce una pista desde el principio
-  play(name) {
+  // Reproduce una pista (si restart=false y ya está sonando esa misma pista, no la corta)
+  play(name, restart = true) {
     if (!ASSETS.music[name]) return;
+    if (!restart && this.current === name && this.track === name && this.el && !this.el.paused) {
+      return;
+    }
     this.current = name;
     const url = this.urls[name];
-    if (url) { this.start(name, url); return; }
+    if (url) { this.start(name, url, restart); return; }
     this.preload(name);
-    this.ready[name].then((u) => { if (this.current === name) this.start(name, u); });
+    this.ready[name].then((u) => { if (this.current === name) this.start(name, u, restart); });
   },
 
-  start(name, url) {
+  // Corta la música inmediatamente (ej. al tocar la máquina expendedora)
+  stop() {
+    this.current = null;
+    if (!this.el) return;
+    this.el.pause();
+    try { this.el.currentTime = 0; } catch (_) {}
+  },
+
+  start(name, url, restart = true) {
     const el = this.el;
-    if (this.track !== name) { el.src = url; this.track = name; }
-    else { try { el.currentTime = 0; } catch (_) { /* aún sin metadata */ } }
-    el.loop = name === 'main';
+    if (this.track !== name) {
+      el.src = url;
+      this.track = name;
+    } else if (restart) {
+      try { el.currentTime = 0; } catch (_) { /* aún sin metadata */ }
+    }
+    el.loop = name === 'intro' || name === 'game';
     if (this.unlocked && !this.suspended) this.resume();
   },
 
@@ -1715,7 +1812,10 @@ function triggerVendingDrop() {
   if (!cinema.vending || cinema.vending.phase !== 'idle') return;
   cinema.vending.phase = 'drop';
   cinema.vending.dropT = 0;
-  Sfx.play('vendingDrop');
+  cinema.vending.gulpStep = 0;
+  Music.stop();            // al tocar la máquina expendedora se corta la música de intro
+  Music.preload('game');   // asegura que Musicajuego.mp3 esté lista apenas arranque la carrera
+  Sfx.play('vendingDrop'); // sonido de máquina expendedora y caída de la bebida
 }
 
 
@@ -1744,6 +1844,7 @@ stateHandlers[STATES.LOADING] = {
 /* ---------- CHARACTER_SELECT (Estado 0: Menú de Selección) ---------- */
 stateHandlers[STATES.CHARACTER_SELECT] = {
   enter() {
+    Music.play('intro', false);
     dom.overlay.classList.remove('is-hidden');
     dom.overlay.classList.remove('is-loading');
     renderOverlayScores();
@@ -2559,22 +2660,35 @@ stateHandlers[STATES.VENDING_MACHINE] = {
         break;
 
       case 'drop':
-        // Cae una botella de bebida al compartimento de salida (sprites maquina 1-4)
+        // Cae la bebida al compartimento de salida (sprites maquina 1-4 sincronizados con el sonido)
         v.dropT += dt;
-        v.maqFrame = Math.min(Math.floor(v.dropT / 0.20), 3);
-        if (v.dropT > 0.8) {
+        if (v.dropT < 0.22) v.maqFrame = 0;
+        else if (v.dropT < 0.50) v.maqFrame = 1;
+        else if (v.dropT < 0.88) v.maqFrame = 2;
+        else v.maqFrame = 3;
+        if (v.dropT > 1.08) {
           v.phase = 'drink';
           v.t = 0;
           v.drinkT = 0;
-          Sfx.play('drink');
+          v.gulpStep = 0;
+          Sfx.play('canOpen'); // destape con gas ("clack-pssshhh")
         }
         break;
 
       case 'drink':
-        // El personaje bebe la gaseosa (animación cocachica / cocachico frames 1-4)
+        // El personaje bebe la gaseosa (animación cocachica / cocachico frames 1-4 + tragos)
         v.drinkT += dt;
-        v.drinkFrame = Math.min(Math.floor(v.drinkT / 0.45), 3);
-        if (v.drinkT > 1.8) {
+        if (v.drinkT < 0.50) v.drinkFrame = 0;
+        else if (v.drinkT < 0.88) v.drinkFrame = 1;
+        else if (v.drinkT < 1.42) v.drinkFrame = 2;
+        else v.drinkFrame = 3;
+
+        if (v.gulpStep === 0 && v.drinkT >= 0.86) { v.gulpStep = 1; Sfx.play('drink', 0); }
+        if (v.gulpStep === 1 && v.drinkT >= 1.20) { v.gulpStep = 2; Sfx.play('drink', 1); }
+        if (v.gulpStep === 2 && v.drinkT >= 1.54) { v.gulpStep = 3; Sfx.play('drink', 2); }
+        if (v.gulpStep === 3 && v.drinkT >= 1.86) { v.gulpStep = 4; Sfx.play('drinkAhh'); }
+
+        if (v.drinkT > 2.15) {
           v.phase = 'ready';
           v.t = 0;
           Sfx.play('startRun');
@@ -2583,7 +2697,7 @@ stateHandlers[STATES.VENDING_MACHINE] = {
 
       case 'ready':
         // Regresa a la pose estándar de carrera (run) antes de iniciar
-        if (v.t > 0.4) {
+        if (v.t > 0.38) {
           world.vendingX = v.maqX;
           transitionTo(STATES.PLAYING);
         }
@@ -2694,6 +2808,7 @@ stateHandlers[STATES.PLAYING] = {
     resetRun();
     world.vendingX = savedVendingX;
     layout();
+    Music.play('game'); // cuando se activa el juego comienza Musicajuego.mp3
   },
 
   update(dt) {
@@ -3389,38 +3504,29 @@ function drawPickups() {
     const py = groundY - p.hU * U - h / 2 + bob;
 
     if (p.kind === 'bonus') {
-      // Parpadeo marcado para diferenciar el bonus (+1000 y carrito de golf)
+      // Parpadeo marcado para diferenciar el nuevo bonus transparente (+1000 y carrito de golf)
       const blinkOn = Math.floor(world.time * 8) % 2 === 0;
-      const scale = blinkOn ? 1.10 : 0.95;
+      const scale = blinkOn ? 1.10 : 0.94;
       const dw = w * scale, dh = h * scale;
       const cx = p.x + w / 2, cy = py + h / 2;
-      const radius = dw * 0.452; // recorta las esquinas blancas del PNG dejando el emblema redondo limpio
+      const radius = Math.max(dw, dh) * 0.50;
 
-      // Resplandor y anillo exterior parpadeante
+      // Halo exterior parpadeante alrededor del emblema transparente
       ctx.save();
-      if (blinkOn) {
-        ctx.shadowColor = '#ffd34d';
-        ctx.shadowBlur = 18;
-      }
       ctx.beginPath();
-      ctx.arc(cx, cy, radius + U * (blinkOn ? 0.07 : 0.03), 0, Math.PI * 2);
+      ctx.arc(cx, cy, radius + U * (blinkOn ? 0.06 : 0.025), 0, Math.PI * 2);
       ctx.strokeStyle = blinkOn ? '#ffd34d' : '#ffffff';
-      ctx.lineWidth = blinkOn ? 4 : 2;
-      ctx.globalAlpha = blinkOn ? 1 : 0.55;
+      ctx.lineWidth = blinkOn ? 3.5 : 2;
+      ctx.globalAlpha = blinkOn ? 0.95 : 0.45;
       ctx.stroke();
       ctx.restore();
 
-      // Emblema circular nítido con pulso de parpadeo
+      // Emblema PNG transparente con resplandor dorado pulsante
       ctx.save();
-      ctx.globalAlpha = blinkOn ? 1 : 0.72;
-      ctx.beginPath();
-      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-      ctx.clip();
+      ctx.globalAlpha = blinkOn ? 1 : 0.68;
+      ctx.shadowColor = blinkOn ? '#ffd34d' : '#ffffff';
+      ctx.shadowBlur = blinkOn ? 18 : 6;
       ctx.drawImage(img, cx - dw / 2, cy - dh / 2, dw, dh);
-      if (blinkOn) {
-        ctx.fillStyle = 'rgba(255, 235, 130, 0.22)';
-        ctx.fillRect(cx - dw / 2, cy - dh / 2, dw, dh);
-      }
       ctx.restore();
       continue;
     }
@@ -3713,10 +3819,10 @@ function die() {
 function beginRunFromMenu() {
   setExtremeMode(false);
   resetRun();
-  Music.play('main');                          // nueva carrera: el tema principal vuelve a empezar
   if (CONFIG.skipCinematic) {
-    transitionTo(STATES.PLAYING);
+    transitionTo(STATES.PLAYING);                // STATES.PLAYING.enter() inicia Musicajuego.mp3
   } else {
+    Music.play('intro');                         // vuelve a sonar Musica intro.mp3 hasta la máquina expendedora
     transitionTo(STATES.INTRO_BUS);
   }
 }
@@ -3725,7 +3831,7 @@ function showMenu() {
   if (state !== STATES.GAME_OVER) return;
   setExtremeMode(false);
   resetRun();
-  Music.play('main');
+  Music.play('intro');
   transitionTo(STATES.CHARACTER_SELECT);
 }
 
