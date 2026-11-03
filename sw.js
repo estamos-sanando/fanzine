@@ -91,6 +91,7 @@ const PRECACHE = [
   // Música (game.js la descarga con fetch y la reproduce desde un blob)
   'ASSETS/Musica intro.mp3',
   'ASSETS/Musicajuego.mp3',
+  'ASSETS/bonus1.mp3',
   'ASSETS/bonus.mp3',
   'ASSETS/Musicaperder (1).mp3'
 ];

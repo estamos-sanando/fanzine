@@ -134,7 +134,7 @@ const ASSETS = {
   music: {
     intro: 'ASSETS/Musica intro.mp3',       // intro: menú, bondi, tutorial y entrada hasta tocar la máquina expendedora
     game:  'ASSETS/Musicajuego.mp3',        // carrera principal cuando se activa el juego
-    bonus: 'ASSETS/bonus.mp3',             // música especial durante el bonus de carrito de golf
+    bonus: 'ASSETS/bonus1.mp3',            // música especial durante el bonus de carrito de golf (bonus1)
     lose:  'ASSETS/Musicaperder (1).mp3'    // al chocar contra un obstáculo
   }
 };
@@ -241,7 +241,7 @@ const CONFIG = {
   // Bonus del carrito de golf (bonus.png -> golfchica / golfchico)
   golf: {
     thresholds: [3000, 15000],          // aparece a partir de 3.000 pts; si lo agarrás una vez, vuelve a partir de 15.000 pts
-    duration: 5.0,                      // segundos que dura el carrito de golf
+    duration: 14.16,                    // dura exactamente lo que dura el mp3 de bonus (~14.16s)
     graceAfter: 0.35,                   // margen breve al volver a correr por si sale de un obstáculo justo al terminar
     heightMul: 1.45,                    // alto visual del carrito en U
     magnetRangeFrac: 0.60,              // alcance horizontal del imán como fracción del ancho de pantalla
@@ -499,6 +499,7 @@ const Music = {
   el: null,
   urls: {},           // pista -> URL lista para reproducir (blob: o ruta original)
   ready: {},          // pista -> Promise<URL>
+  durations: {},      // pista -> duración en segundos
   track: null,        // pista cargada en el elemento
   current: 'intro',   // pista que debería sonar ('intro' | 'game' | 'lose' | null)
   volume: CONFIG.musicVolume,
@@ -527,7 +528,19 @@ const Music = {
       if (!src) continue;
       this.ready[n] = fetch(encodeURI(src))
         .then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); })
-        .then((b) => URL.createObjectURL(b))
+        .then((b) => {
+          const url = URL.createObjectURL(b);
+          try {
+            const probe = new Audio(url);
+            probe.onloadedmetadata = () => {
+              if (Number.isFinite(probe.duration) && probe.duration > 0) {
+                this.durations[n] = probe.duration;
+                if (n === 'bonus') CONFIG.golf.duration = probe.duration;
+              }
+            };
+          } catch (_) {}
+          return url;
+        })
         .catch(() => encodeURI(src))            // sin fetch/blob: reproducir directo desde la ruta
         .then((url) => { this.urls[n] = url; return url; });
     }
@@ -593,7 +606,21 @@ const Music = {
     } else if (restart) {
       try { el.currentTime = 0; } catch (_) { /* aún sin metadata */ }
     }
-    el.loop = name === 'intro' || name === 'game' || name === 'bonus';
+    el.loop = name === 'intro' || name === 'game';
+    el.onloadedmetadata = () => {
+      if (Number.isFinite(el.duration) && el.duration > 0) {
+        this.durations[name] = el.duration;
+        if (name === 'bonus') CONFIG.golf.duration = el.duration;
+      }
+    };
+    el.onended = () => {
+      if (this.current === 'bonus' && state === STATES.PLAYING) {
+        world.golfTimer = 0;
+        world.golfGraceTimer = CONFIG.golf.graceAfter;
+        Sfx.play('bonusEnd');
+        this.play('game', false);
+      }
+    };
     if (this.unlocked && !this.suspended) this.resume();
   },
 
@@ -3074,7 +3101,13 @@ stateHandlers[STATES.PLAYING] = {
         world.score = Math.floor(world.dist * 0.025) + world.bonus;
         if (p.kind === 'bonus') {
           world.bonusTakenCount = (world.bonusTakenCount || 0) + 1;
-          world.golfTimer = G.duration;
+          const dur = (Music.durations['bonus'] && Music.durations['bonus'] > 0)
+            ? Music.durations['bonus']
+            : (Music.track === 'bonus' && Number.isFinite(Music.el.duration) && Music.el.duration > 0
+              ? Music.el.duration
+              : G.duration);
+          CONFIG.golf.duration = dur;
+          world.golfTimer = dur;
           world.golfGraceTimer = 0;
           if (!hero.grounded && hero.vy > 0) hero.vy *= 0.35;
           world.popups.push({
