@@ -134,6 +134,7 @@ const ASSETS = {
   music: {
     intro: 'ASSETS/Musica intro.mp3',       // intro: menú, bondi, tutorial y entrada hasta tocar la máquina expendedora
     game:  'ASSETS/Musicajuego.mp3',        // carrera principal cuando se activa el juego
+    bonus: 'ASSETS/bonus.mp3',             // música especial durante el bonus de carrito de golf
     lose:  'ASSETS/Musicaperder (1).mp3'    // al chocar contra un obstáculo
   }
 };
@@ -592,7 +593,7 @@ const Music = {
     } else if (restart) {
       try { el.currentTime = 0; } catch (_) { /* aún sin metadata */ }
     }
-    el.loop = name === 'intro' || name === 'game';
+    el.loop = name === 'intro' || name === 'game' || name === 'bonus';
     if (this.unlocked && !this.suspended) this.resume();
   },
 
@@ -2907,6 +2908,9 @@ stateHandlers[STATES.PLAYING] = {
       if (world.golfTimer === 0) {
         world.golfGraceTimer = G.graceAfter;
         Sfx.play('bonusEnd');
+        if (state === STATES.PLAYING) {
+          Music.play('game', false);
+        }
       }
     } else if (world.golfGraceTimer > 0) {
       world.golfGraceTimer = Math.max(0, world.golfGraceTimer - dt);
@@ -3081,6 +3085,7 @@ stateHandlers[STATES.PLAYING] = {
             gold: true
           });
           Sfx.play('bonus');
+          Music.play('bonus');
           world.milestoneT = 1.5;
         } else {
           const isMate = p.kind === 'mate';
