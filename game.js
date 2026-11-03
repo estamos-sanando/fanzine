@@ -3582,6 +3582,14 @@ function drawPickups() {
       ctx.stroke();
       ctx.restore();
 
+      // 3.5) Base circular blanca para garantizar maximo contraste contra el fondo
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius * 0.94, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+      ctx.restore();
+
       // 4) Emblema del bonus del tamaño estándar de los pickups con iluminación
       ctx.save();
       ctx.shadowColor = '#ffd34d';
