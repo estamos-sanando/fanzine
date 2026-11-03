@@ -238,7 +238,7 @@ const CONFIG = {
 
   // Bonus del carrito de golf (bonus.png -> golfchica / golfchico)
   golf: {
-    thresholds: [5000, 15000],          // aparece a partir de 5.000 pts; si lo agarrás una vez, vuelve a partir de 15.000 pts
+    thresholds: [3000, 15000],          // aparece a partir de 3.000 pts; si lo agarrás una vez, vuelve a partir de 15.000 pts
     duration: 5.0,                      // segundos que dura el carrito de golf
     graceAfter: 0.35,                   // margen breve al volver a correr por si sale de un obstáculo justo al terminar
     heightMul: 1.45,                    // alto visual del carrito en U
@@ -1296,7 +1296,7 @@ function resetRun() {
   world.golfTimer = 0;                          // segundos restantes del bonus de carrito de golf
   world.golfGraceTimer = 0;                     // margen breve tras finalizar el carrito
   world.bonusTakenCount = 0;                    // cuántas veces se agarró bonus.png en la partida (0, 1, 2)
-  world.bonusArmedTier = -1;                    // escalón armado (-1 ninguno, 0 = 5.000 pts, 1 = 15.000 pts)
+  world.bonusArmedTier = -1;                    // escalón armado (-1 ninguno, 0 = 3.000 pts, 1 = 15.000 pts)
   world.bonusSpawnDelay = 0;                    // espera aleatoria antes de spawnear bonus.png
   world.plane = { active: false, x: 0, y: 0, w: 0, h: 0, t: 0, speed: 150, timer: 1.5 };
   setExtremeMode(false);
@@ -1662,7 +1662,7 @@ function spawnPattern() {
   const gapPx = gapSec * world.speed;
   world.spawnDist = extraOffset + width + gapPx;
 
-  // Bonus del carrito de golf (bonus.png): aparece a partir de 5.000 pts y, si se agarró una vez, vuelve a partir de 15.000 pts
+  // Bonus del carrito de golf (bonus.png): aparece a partir de 3.000 pts y, si se agarró una vez, vuelve a partir de 15.000 pts
   const tier = world.bonusTakenCount || 0;
   const canSpawnBonus = IMG.bonus
     && tier < CONFIG.golf.thresholds.length
@@ -2894,7 +2894,7 @@ stateHandlers[STATES.PLAYING] = {
     if (bonusTier < G.thresholds.length && world.score >= G.thresholds[bonusTier]) {
       if (world.bonusArmedTier !== bonusTier) {
         world.bonusArmedTier = bonusTier;
-        world.bonusSpawnDelay = Math.max(world.golfTimer > 0 ? world.golfTimer + 2.5 : 0, rand(1.5, 4.0));
+        world.bonusSpawnDelay = Math.max(world.golfTimer > 0 ? world.golfTimer + 2.0 : 0, rand(0.8, 2.2));
       } else if (world.golfTimer <= 0 && !world.pickups.some((p) => p.kind === 'bonus' && !p.taken)) {
         if (world.bonusSpawnDelay > 0) world.bonusSpawnDelay -= dt;
       }
