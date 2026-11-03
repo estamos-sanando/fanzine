@@ -1578,7 +1578,8 @@ window.addEventListener('pointerdown', (e) => {
     goFullscreen();
   }
   if (state === STATES.LOADING || state === STATES.CHARACTER_SELECT) return;          // el menú usa sus propios botones
-  if (e.target && e.target.closest && e.target.closest('#menu-btn, #fullscreen-btn, #skip-tutorial-btn, #settings')) return;
+  if (dom.fullScoresModal && dom.fullScoresModal.classList.contains('is-open')) return;
+  if (e.target && e.target.closest && e.target.closest('#menu-btn, #gameover-actions, #gameover-scores-btn, #full-scores-modal, #full-scores-btn, #fullscreen-btn, #skip-tutorial-btn, #settings')) return;
   e.preventDefault();
   Sfx.unlock();
   if (state === STATES.ENTRY) { handleEntryPointer(e.clientX, e.clientY); return; }
@@ -1593,7 +1594,12 @@ window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') { e.preventDefault(); Settings.close(); }
     return;
   }
-  if (e.target && e.target.closest && e.target.closest('#settings')) return;
+  // Modal de ranking completo: Escape lo cierra y, mientras está abierto, las teclas no controlan el juego
+  if (dom.fullScoresModal && dom.fullScoresModal.classList.contains('is-open')) {
+    if (e.key === 'Escape') { e.preventDefault(); closeFullScoresModal(); }
+    return;
+  }
+  if (e.target && e.target.closest && e.target.closest('#settings, #full-scores-modal')) return;
   if (state === STATES.LOADING) return;
   if (state === STATES.CHARACTER_SELECT) { handleMenuKey(e); return; }
   if (state === STATES.ENTRY) { handleEntryKey(e); return; }
@@ -1620,9 +1626,9 @@ window.addEventListener('keydown', (e) => {
 ['gesturestart', 'gesturechange', 'gestureend'].forEach((n) =>
   document.addEventListener(n, (e) => e.preventDefault()));
 document.addEventListener('contextmenu', (e) => e.preventDefault());
-// Bloquea el scroll/zoom táctil, salvo dentro del menú ⚙ (para poder arrastrar el control de volumen)
+// Bloquea el scroll/zoom táctil, salvo dentro del menú ⚙ o el ranking completo (para scroll y volumen)
 document.addEventListener('touchmove', (e) => {
-  if (e.target && e.target.closest && e.target.closest('#settings')) return;
+  if (e.target && e.target.closest && e.target.closest('#settings, #full-scores-modal')) return;
   e.preventDefault();
 }, { passive: false });
 document.addEventListener('dblclick', (e) => e.preventDefault());
@@ -3936,6 +3942,7 @@ function die() {
 }
 
 function beginRunFromMenu() {
+  closeFullScoresModal();
   setExtremeMode(false);
   resetRun();
   // Al reiniciar tras perder, va directo al inicio del juego luego de la gaseosa
@@ -3946,6 +3953,7 @@ function beginRunFromMenu() {
 
 function showMenu() {
   if (state !== STATES.GAME_OVER) return;
+  closeFullScoresModal();
   setExtremeMode(false);
   resetRun();
   Music.play('intro');
@@ -4076,12 +4084,18 @@ function openFullScoresModal() {
     dom.fullScoresModal.setAttribute('aria-hidden', 'false');
     dom.fullScoresModal.classList.add('is-open');
   }
+  if (state === STATES.GAME_OVER) {
+    world.deadAt = performance.now();
+  }
 }
 
 function closeFullScoresModal() {
   if (dom.fullScoresModal) {
     dom.fullScoresModal.setAttribute('aria-hidden', 'true');
     dom.fullScoresModal.classList.remove('is-open');
+  }
+  if (state === STATES.GAME_OVER) {
+    world.deadAt = performance.now();
   }
 }
 
@@ -4152,30 +4166,52 @@ function handleMenuKey(e) {
 function setupOverlay() {
   // Listeners para modal de ranking completo
   if (dom.fullScoresBtn) {
-    dom.fullScoresBtn.addEventListener('click', (e) => {
+    const onOpen = (e) => {
+      e.preventDefault();
       e.stopPropagation();
       openFullScoresModal();
-    });
+    };
+    dom.fullScoresBtn.addEventListener('click', onOpen);
+    dom.fullScoresBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
+    dom.fullScoresBtn.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
   }
   if (dom.gameOverScoresBtn) {
-    dom.gameOverScoresBtn.addEventListener('click', (e) => {
+    const onGameOverOpen = (e) => {
+      e.preventDefault();
       e.stopPropagation();
       openFullScoresModal();
-    });
+    };
+    dom.gameOverScoresBtn.addEventListener('click', onGameOverOpen);
+    dom.gameOverScoresBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
+    dom.gameOverScoresBtn.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
+  }
+  if (dom.gameOverActions) {
+    dom.gameOverActions.addEventListener('pointerdown', (e) => e.stopPropagation());
+    dom.gameOverActions.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
   }
   if (dom.fullScoresClose) {
-    dom.fullScoresClose.addEventListener('click', (e) => {
+    const onClose = (e) => {
+      e.preventDefault();
       e.stopPropagation();
       closeFullScoresModal();
-    });
+    };
+    dom.fullScoresClose.addEventListener('click', onClose);
+    dom.fullScoresClose.addEventListener('pointerdown', (e) => e.stopPropagation());
+    dom.fullScoresClose.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
   }
   if (dom.fullScoresCloseBtn) {
-    dom.fullScoresCloseBtn.addEventListener('click', (e) => {
+    const onCloseBtn = (e) => {
+      e.preventDefault();
       e.stopPropagation();
       closeFullScoresModal();
-    });
+    };
+    dom.fullScoresCloseBtn.addEventListener('click', onCloseBtn);
+    dom.fullScoresCloseBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
+    dom.fullScoresCloseBtn.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
   }
   if (dom.fullScoresModal) {
+    dom.fullScoresModal.addEventListener('pointerdown', (e) => e.stopPropagation());
+    dom.fullScoresModal.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
     dom.fullScoresModal.addEventListener('click', (e) => {
       if (e.target === dom.fullScoresModal || (e.target && e.target.classList && e.target.classList.contains('full-scores-modal__backdrop'))) {
         e.stopPropagation();
@@ -4229,6 +4265,8 @@ function setupOverlay() {
   }
 
   if (dom.menuBtn) {
+    dom.menuBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
+    dom.menuBtn.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
     dom.menuBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       showMenu();
