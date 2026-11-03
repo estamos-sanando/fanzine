@@ -272,6 +272,16 @@ const dom = {
   scoresState:     $('hiscores-status'),
   scoresPersonal:  $('personal-record-pts'),
   menuBtn:         $('menu-btn'),
+  gameOverActions: $('gameover-actions'),
+  gameOverScoresBtn: $('gameover-scores-btn'),
+  fullScoresBtn:   $('full-scores-btn'),
+  fullScoresModal: $('full-scores-modal'),
+  fullScoresClose: $('full-scores-close'),
+  fullScoresCloseBtn: $('full-scores-close-btn'),
+  fullScoresList:  $('full-scores-list'),
+  fullScoresCount: $('full-scores-count'),
+  fullScoresPersonalRank: $('full-scores-personal-rank'),
+  fullScoresPersonalPts:  $('full-scores-personal-pts'),
   skipTutorialBtn: $('skip-tutorial-btn'),
   fullscreenBtn:   $('fullscreen-btn'),
   settings:        $('settings'),
@@ -1453,6 +1463,7 @@ function tryJump() {
 }
 
 function onPress() {
+  if (dom.fullScoresModal && dom.fullScoresModal.classList.contains('is-open')) return;
   switch (state) {
     case STATES.PLAYING:
       tryJump();
@@ -3961,11 +3972,12 @@ function frame(t) {
     if (handler.draw) handler.draw(ctx);
   }
 
-  // Botón "Menú" solo en la pantalla de game over
+  // Botones de Game Over solo en la pantalla de game over
   const wantMenuBtn = state === STATES.GAME_OVER;
   if (wantMenuBtn !== menuBtnShown) {
     menuBtnShown = wantMenuBtn;
-    if (dom.menuBtn) dom.menuBtn.classList.toggle('is-visible', wantMenuBtn);
+    if (dom.gameOverActions) dom.gameOverActions.classList.toggle('is-visible', wantMenuBtn);
+    else if (dom.menuBtn) dom.menuBtn.classList.toggle('is-visible', wantMenuBtn);
   }
 
   // Botón "Saltar tutorial" solo durante el tutorial
@@ -3996,6 +4008,80 @@ function selectCharacter(id) {
   if (dom.startBtn) {
     dom.startBtn.disabled = false;
     dom.startBtn.textContent = '▶ COMENZAR';
+  }
+}
+
+
+function renderFullScores() {
+  if (!dom.fullScoresList) return;
+  updatePersonalRecord();
+  dom.fullScoresList.textContent = '';
+  const list = Scores.list || [];
+
+  if (dom.fullScoresCount) {
+    dom.fullScoresCount.textContent = list.length
+      ? `${list.length} puntajes registrados`
+      : (Scores.status === 'loading' ? 'Cargando ranking…' : 'Sin puntajes registrados');
+  }
+
+  if (dom.fullScoresPersonalPts) {
+    dom.fullScoresPersonalPts.textContent = pad(personalRecord);
+  }
+  if (dom.fullScoresPersonalRank) {
+    const rank = personalRecord > 0 ? Scores.rankFor(personalRecord) : 0;
+    dom.fullScoresPersonalRank.textContent = rank > 0 ? `Tu récord: Puesto #${rank}` : 'Aún sin récord';
+  }
+
+  const medalIcons = ['🥇', '🥈', '🥉'];
+  list.forEach((e, i) => {
+    const rank = i + 1;
+    const li = document.createElement('li');
+    li.className = 'full-scores-row';
+    if (rank <= 3) li.classList.add('is-podium', 'is-rank-' + rank);
+    else if (rank <= 5) li.classList.add('is-top5');
+    if (world.addedRank === rank) li.classList.add('is-new');
+
+    const rankSpan = document.createElement('span');
+    rankSpan.className = 'col-rank';
+    rankSpan.textContent = (rank <= 3 ? medalIcons[rank - 1] + ' ' : '') + '#' + rank;
+
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'col-name';
+    nameSpan.textContent = e.name;
+
+    const ptsSpan = document.createElement('span');
+    ptsSpan.className = 'col-pts';
+    ptsSpan.textContent = pad(e.score);
+
+    li.appendChild(rankSpan);
+    li.appendChild(nameSpan);
+    li.appendChild(ptsSpan);
+    dom.fullScoresList.appendChild(li);
+  });
+
+  if (!list.length) {
+    const emptyLi = document.createElement('li');
+    emptyLi.className = 'full-scores-row is-empty';
+    emptyLi.textContent = Scores.status === 'loading'
+      ? 'Cargando ranking…'
+      : '¡Sé la primera persona en dejar su marca!';
+    dom.fullScoresList.appendChild(emptyLi);
+  }
+}
+
+function openFullScoresModal() {
+  Scores.refresh();
+  renderFullScores();
+  if (dom.fullScoresModal) {
+    dom.fullScoresModal.setAttribute('aria-hidden', 'false');
+    dom.fullScoresModal.classList.add('is-open');
+  }
+}
+
+function closeFullScoresModal() {
+  if (dom.fullScoresModal) {
+    dom.fullScoresModal.setAttribute('aria-hidden', 'true');
+    dom.fullScoresModal.classList.remove('is-open');
   }
 }
 
@@ -4048,6 +4134,10 @@ function startGame() {
 }
 
 function handleMenuKey(e) {
+  if (dom.fullScoresModal && dom.fullScoresModal.classList.contains('is-open')) {
+    if (e.key === 'Escape') closeFullScoresModal();
+    return;
+  }
   if (e.key === 'Enter' || e.key === ' ' || e.code === 'Space') {
     e.preventDefault();
     if (!e.repeat) startGame();
@@ -4060,6 +4150,45 @@ function handleMenuKey(e) {
 }
 
 function setupOverlay() {
+  // Listeners para modal de ranking completo
+  if (dom.fullScoresBtn) {
+    dom.fullScoresBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openFullScoresModal();
+    });
+  }
+  if (dom.gameOverScoresBtn) {
+    dom.gameOverScoresBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openFullScoresModal();
+    });
+  }
+  if (dom.fullScoresClose) {
+    dom.fullScoresClose.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeFullScoresModal();
+    });
+  }
+  if (dom.fullScoresCloseBtn) {
+    dom.fullScoresCloseBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeFullScoresModal();
+    });
+  }
+  if (dom.fullScoresModal) {
+    dom.fullScoresModal.addEventListener('click', (e) => {
+      if (e.target === dom.fullScoresModal || (e.target && e.target.classList && e.target.classList.contains('full-scores-modal__backdrop'))) {
+        e.stopPropagation();
+        closeFullScoresModal();
+      }
+    });
+  }
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && dom.fullScoresModal && dom.fullScoresModal.classList.contains('is-open')) {
+      closeFullScoresModal();
+    }
+  });
+
   dom.pickers.forEach((b) => {
     const onPick = (e) => {
       e.stopPropagation();
@@ -4123,7 +4252,13 @@ function setupOverlay() {
   }
 
   // Ranking global: al cambiar la lista se actualiza el récord, la pantalla de inicio y el puesto obtenido
-  Scores.onChange = () => { hiScore = Scores.best(); renderOverlayScores(); };
+  Scores.onChange = () => {
+    hiScore = Scores.best();
+    renderOverlayScores();
+    if (dom.fullScoresModal && dom.fullScoresModal.classList.contains('is-open')) {
+      renderFullScores();
+    }
+  };
   Scores.onRank = (id, rank) => {
     if (id === world.submitId && rank > 0) world.addedRank = rank;
   };

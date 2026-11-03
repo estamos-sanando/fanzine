@@ -12,7 +12,7 @@
   <meta name="format-detection" content="telephone=no">
   <link rel="icon" href="ASSETS/chicaquieta.png" type="image/png">
   <link rel="apple-touch-icon" href="ASSETS/chicaquieta.png">
-  <link rel="stylesheet" href="style.css?v=27">
+  <link rel="stylesheet" href="style.css?v=28">
 </head>
 <body>
   <!-- Canvas del juego -->
@@ -34,6 +34,42 @@
       <h2 class="rotate-modal__title">¡GIRÁ TU PANTALLA!</h2>
       <p class="rotate-modal__text">Para jugar a <b>Fanzine Runner</b> colocá tu celular en <b>modo horizontal</b> (apaisado).</p>
       <div class="rotate-modal__badge">📱 ↺ Modo Horizontal</div>
+    </div>
+  </aside>
+
+    <!-- Modal: Ranking Global Completo -->
+  <aside id="full-scores-modal" class="full-scores-modal" aria-hidden="true" role="dialog" aria-label="Ranking global completo">
+    <div class="full-scores-modal__backdrop"></div>
+    <div class="full-scores-modal__content">
+      <header class="full-scores-modal__header">
+        <div class="full-scores-modal__title-wrap">
+          <h2 class="full-scores-modal__title">★ RANKING GLOBAL ★</h2>
+          <span id="full-scores-count" class="full-scores-modal__subtitle">Cargando puntajes…</span>
+        </div>
+        <button id="full-scores-close" class="full-scores-modal__close" type="button" aria-label="Cerrar ranking">✕</button>
+      </header>
+
+      <div class="full-scores-modal__personal" id="full-scores-personal">
+        <div class="full-scores-modal__personal-left">
+          <span class="full-scores-modal__personal-label">⭐ Tu récord personal</span>
+          <span class="full-scores-modal__personal-rank" id="full-scores-personal-rank">Puesto #—</span>
+        </div>
+        <span class="full-scores-modal__personal-pts" id="full-scores-personal-pts">00000</span>
+      </div>
+
+      <div class="full-scores-modal__table-header">
+        <span class="col-rank">#</span>
+        <span class="col-name">JUGADOR</span>
+        <span class="col-pts">PUNTOS</span>
+      </div>
+
+      <div class="full-scores-modal__body">
+        <ol id="full-scores-list" class="full-scores-modal__list"></ol>
+      </div>
+
+      <footer class="full-scores-modal__footer">
+        <button id="full-scores-close-btn" class="full-scores-modal__btn" type="button">Cerrar</button>
+      </footer>
     </div>
   </aside>
 
@@ -70,6 +106,7 @@
           <span class="scores__personal-pts" id="personal-record-pts">00000</span>
         </div>
         <ol id="hiscores" class="scores__list"></ol>
+        <button id="full-scores-btn" class="scores__more-btn" type="button">🏆 Ver ranking completo</button>
         <p id="hiscores-status" class="scores__status" data-state="loading" role="status"></p>
       </section>
     </div>
@@ -89,7 +126,10 @@
   </button>
 
   <!-- Volver a la pantalla de inicio (solo visible en game over) -->
-  <button id="menu-btn" class="menu-btn" type="button">↩ Menú</button>
+  <div id="gameover-actions" class="gameover-actions">
+    <button id="menu-btn" class="menu-btn" type="button">↩ Menú</button>
+    <button id="gameover-scores-btn" class="menu-btn menu-btn--scores" type="button">🏆 Ranking completo</button>
+  </div>
 
   <!-- Configuración: tuerca arriba a la derecha con menú desplegable -->
   <div id="settings" class="settings">
@@ -135,7 +175,7 @@
     </div>
   </div>
 
-  <script src="game.js?v=53"></script>
+  <script src="game.js?v=54"></script>
   <script>
     // Registro del Service Worker (modo offline). Requiere HTTPS o localhost.
     if ('serviceWorker' in navigator) {
