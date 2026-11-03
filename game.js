@@ -178,7 +178,7 @@ const CONFIG = {
   },
 
   // Alto visual (en U) de cada sprite
-  size: { book: 0.55, horse: 1.30, virgen: 1.50, pickup: 0.50, mate: 0.58, bonus: 0.72, tero: 0.62 },
+  size: { book: 0.55, horse: 1.30, virgen: 1.50, pickup: 0.50, mate: 0.58, bonus: 0.50, tero: 0.62 },
 
   // Hitboxes: margen recortado en cada lado
   hitbox: {
@@ -3521,29 +3521,61 @@ function drawPickups() {
     const py = groundY - p.hU * U - h / 2 + bob;
 
     if (p.kind === 'bonus') {
-      // Parpadeo marcado para diferenciar el nuevo bonus transparente (+1000 y carrito de golf)
-      const blinkOn = Math.floor(world.time * 8) % 2 === 0;
-      const scale = blinkOn ? 1.10 : 0.94;
-      const dw = w * scale, dh = h * scale;
+      // Bonus con tamaño del resto de elementos (0.50 U) y luz radiante que resalta
       const cx = p.x + w / 2, cy = py + h / 2;
-      const radius = Math.max(dw, dh) * 0.50;
+      const radius = Math.max(w, h) * 0.50;
+      const pulse = Math.sin(world.time * 6.5) * 0.5 + 0.5; // 0..1
+      const blinkOn = Math.floor(world.time * 8) % 2 === 0;
 
-      // Halo exterior parpadeante alrededor del emblema transparente
+      // 1) Luz de fondo brillante (corona radial dorada/menta)
       ctx.save();
+      const glowRadius = radius * (2.1 + pulse * 0.4);
+      const grad = ctx.createRadialGradient(cx, cy, radius * 0.15, cx, cy, glowRadius);
+      grad.addColorStop(0, 'rgba(255, 255, 220, 0.85)');
+      grad.addColorStop(0.35, 'rgba(255, 215, 64, 0.50)');
+      grad.addColorStop(0.70, 'rgba(92, 212, 182, 0.22)');
+      grad.addColorStop(1, 'rgba(255, 215, 64, 0)');
+      ctx.fillStyle = grad;
       ctx.beginPath();
-      ctx.arc(cx, cy, radius + U * (blinkOn ? 0.06 : 0.025), 0, Math.PI * 2);
-      ctx.strokeStyle = blinkOn ? '#ffd34d' : '#ffffff';
-      ctx.lineWidth = blinkOn ? 3.5 : 2;
-      ctx.globalAlpha = blinkOn ? 0.95 : 0.45;
+      ctx.arc(cx, cy, glowRadius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      // 2) Destellos cruzados de luz radiante
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(world.time * 0.85);
+      ctx.strokeStyle = `rgba(255, 255, 255, ${0.5 + pulse * 0.4})`;
+      ctx.lineWidth = 2;
+      const flare = radius * (1.25 + pulse * 0.25);
+      ctx.beginPath();
+      ctx.moveTo(-flare, 0); ctx.lineTo(flare, 0);
+      ctx.moveTo(0, -flare); ctx.lineTo(0, flare);
+      ctx.stroke();
+      const dFlare = flare * 0.60;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(-dFlare, -dFlare); ctx.lineTo(dFlare, dFlare);
+      ctx.moveTo(-dFlare, dFlare); ctx.lineTo(dFlare, -dFlare);
       ctx.stroke();
       ctx.restore();
 
-      // Emblema PNG transparente con resplandor dorado pulsante
+      // 3) Anillo de luz exterior resplandeciente
       ctx.save();
-      ctx.globalAlpha = blinkOn ? 1 : 0.68;
-      ctx.shadowColor = blinkOn ? '#ffd34d' : '#ffffff';
-      ctx.shadowBlur = blinkOn ? 18 : 6;
-      ctx.drawImage(img, cx - dw / 2, cy - dh / 2, dw, dh);
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius * (1.10 + pulse * 0.12), 0, Math.PI * 2);
+      ctx.strokeStyle = blinkOn ? '#ffe066' : '#ffffff';
+      ctx.lineWidth = 2.4;
+      ctx.shadowColor = '#ffd34d';
+      ctx.shadowBlur = 12 + pulse * 8;
+      ctx.stroke();
+      ctx.restore();
+
+      // 4) Emblema del bonus del tamaño estándar de los pickups con iluminación
+      ctx.save();
+      ctx.shadowColor = '#ffd34d';
+      ctx.shadowBlur = 14 + pulse * 8;
+      ctx.drawImage(img, cx - w / 2, cy - h / 2, w, h);
       ctx.restore();
       continue;
     }
