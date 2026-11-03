@@ -3836,12 +3836,10 @@ function die() {
 function beginRunFromMenu() {
   setExtremeMode(false);
   resetRun();
-  if (CONFIG.skipCinematic) {
-    transitionTo(STATES.PLAYING);                // STATES.PLAYING.enter() inicia Musicajuego.mp3
-  } else {
-    Music.play('intro');                         // vuelve a sonar Musica intro.mp3 hasta la máquina expendedora
-    transitionTo(STATES.INTRO_BUS);
-  }
+  // Al reiniciar tras perder, va directo al inicio del juego luego de la gaseosa
+  world.vendingX = heroX + U * 0.58;
+  Sfx.play('startRun');
+  transitionTo(STATES.PLAYING);                // STATES.PLAYING.enter() conserva vendingX e inicia Musicajuego.mp3
 }
 
 function showMenu() {
