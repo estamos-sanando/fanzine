@@ -1029,7 +1029,10 @@ const Scores = {
   // Muestra también los puntajes propios que aún no confirmó el servidor
   rebuild() {
     const out = (this.remote && this.remote.length) ? this.remote.slice() : [...INITIAL_SCORES];
-    for (const p of this.pending) out.push({ name: p.name, score: p.score });
+    for (const p of this.pending) {
+      const alreadyInRemote = out.some((r) => r.name === p.name && r.score === p.score);
+      if (!alreadyInRemote) out.push({ name: p.name, score: p.score });
+    }
     this.list = this.sanitize(out);
   },
   save() {
@@ -1040,7 +1043,10 @@ const Scores = {
 
   best() { return this.list.length ? this.list[0].score : 0; },
   qualifies(score) {
-    // Califica para ingresar iniciales de arcade si entra al Top 5 (o empata el 5to puesto)
+    // Califica para ingresar iniciales siempre que el puntaje sea mayor a 0
+    return Number.isFinite(score) && score > 0;
+  },
+  isInTop5(score) {
     if (!Number.isFinite(score) || score <= 0) return false;
     const cap = CONFIG.maxScores || 5;
     if (this.list.length < cap) return true;
@@ -3714,11 +3720,14 @@ function drawEntryPanel(blink) {
   let y = Math.max(safeTop + 8, (H - total) / 2);
   const hits = [];
 
-  drawText('★ ¡ENTRASTE AL TOP 5! ★', W / 2, y + titleH / 2, f * 1.35, { color: UNLAM.green, alpha: blink ? 1 : 0.75 });
+  const inTop5 = entryUI.rank <= 5;
+  const titleText = inTop5 ? '★ ¡ENTRASTE AL TOP 5! ★' : '★ REGISTRÁ TU PUNTAJE ★';
+  const titleColor = inTop5 ? '#ffd34d' : UNLAM.green;
+  drawText(titleText, W / 2, y + titleH / 2, f * 1.35, { color: titleColor, alpha: blink ? 1 : 0.75 });
   y += titleH;
   drawText('PUNTOS ' + pad(world.score), W / 2, y + lineH / 2, f);
   y += lineH;
-  drawText('PUESTO #' + entryUI.rank, W / 2, y + lineH / 2, f * 0.9, { color: UNLAM.light });
+  drawText('PUESTO #' + entryUI.rank, W / 2, y + lineH / 2, f * 0.9, { color: inTop5 ? '#ffd34d' : UNLAM.light });
   y += lineH;
 
   const x0 = (W - (n * slot + (n - 1) * gap)) / 2;
@@ -3755,7 +3764,8 @@ function drawEntryPanel(blink) {
   drawText('LISTO', W / 2, y + btnH / 2 + 1, f * 1.1, { color: '#ffffff', stroke: 'rgba(0,0,0,0)' });
   hits.push({ type: 'ok', x: bx, y, w: btnW, h: btnH });
   y += btnH;
-  drawText('Elegí tus iniciales para el Top 5', W / 2, y + f * 0.9, f * 0.7, { alpha: 0.7, weight: 600 });
+  const hintText = inTop5 ? '¡Tu nombre aparecerá en el Top 5!' : 'Solo los 5 mejores puntajes se muestran en el Top 5';
+  drawText(hintText, W / 2, y + f * 0.9, f * 0.65, { alpha: 0.75, weight: 600 });
 
   entryUI.hits = hits;
 }
@@ -3786,7 +3796,10 @@ function drawDeadPanel(blink) {
   } else if (world.newGlobalRecord) {
     lines.push({ t: '★ ¡NUEVO RÉCORD GLOBAL! ★', s: 0.95, color: '#ffd34d', blink: true });
   } else if (world.newPersonalRecord) {
-    lines.push({ t: '★ ¡SUPERASTE TU RÉCORD! ★', s: 0.95, color: UNLAM.light, blink: true });
+    const rankTxt = world.addedRank > 0 ? ' (PUESTO #' + world.addedRank + ')' : '';
+    lines.push({ t: '★ ¡SUPERASTE TU RÉCORD!' + rankTxt + ' ★', s: 0.95, color: UNLAM.light, blink: true });
+  } else if (world.addedRank > 5) {
+    lines.push({ t: 'PUNTAJE REGISTRADO · PUESTO #' + world.addedRank, s: 0.85, color: '#aab3c5' });
   }
   if (rows.length) {
     lines.push({ t: '— TOP 5 GLOBAL —', s: 0.85, color: UNLAM.green, gap: 0.4 });
@@ -3855,7 +3868,7 @@ function die() {
     transitionTo(STATES.GAME_OVER);
     return;
   }
-  if (Scores.qualifies(world.score)) {         // entra en el top 5 -> pide iniciales
+  if (Scores.qualifies(world.score)) {         // cualquier puntaje > 0 pide iniciales para registrarlo
     transitionTo(STATES.ENTRY);
     entryUI.letters = initials.split('');
     entryUI.slot = 0;
