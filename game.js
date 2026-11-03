@@ -27,6 +27,7 @@ const ASSETS = {
     toast:         'ASSETS/100puntostostado.png',// +100
     tortilla:      'ASSETS/200puntostortilla.png',// +200
     mate:          'ASSETS/500puntosmate.png',   // +500 recompensa alta especial
+    bonus:         'ASSETS/bonus.png',           // +1000 y activa carrito de golf por 5s
     fondoInicio:   'ASSETS/fondoinicio.png',    // fondo escena del bondi
     fondoEntrada:  'ASSETS/Entrada.png',        // fondo de la entrada a UNLaM
     bus620closed:  'ASSETS/620cerrado.png',      // bondi cerrado
@@ -102,7 +103,8 @@ const ASSETS = {
       jumpTakeoff: 'ASSETS/chicasalto.png',
       jumpRise:    'ASSETS/chicasalto1.png',
       jumpApex:    'ASSETS/chicasalto2.png',
-      jumpFall:    'ASSETS/chicasalto3.png'
+      jumpFall:    'ASSETS/chicasalto3.png',
+      golf:        'ASSETS/golfchica.png'
     },
     chico: {
       idle:        'ASSETS/chicoquieto.png',
@@ -115,7 +117,8 @@ const ASSETS = {
       jumpTakeoff: 'ASSETS/chicosalto.png',
       jumpRise:    'ASSETS/chicosalto1.png',
       jumpApex:    'ASSETS/chicosalto2.png',
-      jumpFall:    'ASSETS/chicosalto3.png'
+      jumpFall:    'ASSETS/chicosalto3.png',
+      golf:        'ASSETS/golfchico.png'
     }
   },
 
@@ -173,7 +176,7 @@ const CONFIG = {
   },
 
   // Alto visual (en U) de cada sprite
-  size: { book: 0.55, horse: 1.30, pickup: 0.50, mate: 0.58, tero: 0.62 },
+  size: { book: 0.55, horse: 1.30, pickup: 0.50, mate: 0.58, bonus: 0.72, tero: 0.62 },
 
   // Hitboxes: margen recortado en cada lado
   hitbox: {
@@ -225,7 +228,17 @@ const CONFIG = {
     safeObstacles: 2                      // los primeros 2 obstáculos son siempre libros simples
   },
 
-  points: { toast: 100, tortilla: 200, mate: 500 },
+  points: { toast: 100, tortilla: 200, mate: 500, bonus: 1000 },
+
+  // Bonus del carrito de golf (bonus.png -> golfchica / golfchico)
+  golf: {
+    thresholds: [5000, 15000],          // aparece a partir de 5.000 pts; si lo agarrás una vez, vuelve a partir de 15.000 pts
+    duration: 5.0,                      // segundos que dura el carrito de golf
+    graceAfter: 0.35,                   // margen breve al volver a correr por si sale de un obstáculo justo al terminar
+    heightMul: 1.45,                    // alto visual del carrito en U
+    magnetRangeFrac: 0.60,              // alcance horizontal del imán como fracción del ancho de pantalla
+    magnetMinU: 6.0                     // alcance mínimo del imán en U
+  },
   deadInputLock: 450                      // ms antes de poder reiniciar
 };
 
@@ -339,6 +352,16 @@ const Sfx = {
         this.tone(587, 880, 0.08, 'triangle', 0.12);
         this.tone(880, 1318, 0.10, 'triangle', 0.12, 0.06);
         this.tone(1318, 1760, 0.16, 'square', 0.10, 0.12);
+        break;
+      case 'bonus': // fanfarria arcade al activar el carrito de golf (+1000 pts!)
+        this.tone(523, 659, 0.09, 'square', 0.11);
+        this.tone(659, 784, 0.09, 'square', 0.11, 0.07);
+        this.tone(784, 1046, 0.11, 'triangle', 0.13, 0.14);
+        this.tone(1046, 1568, 0.22, 'square', 0.11, 0.22);
+        break;
+      case 'bonusEnd': // aviso suave al finalizar los 5s del carrito
+        this.tone(784, 523, 0.12, 'triangle', 0.08);
+        this.tone(523, 392, 0.14, 'triangle', 0.07, 0.09);
         break;
       case 'hit':
         this.tone(220, 40, 0.4, 'sawtooth', 0.14);
@@ -1166,6 +1189,11 @@ function resetRun() {
   world.teroTimer = CONFIG.tero.firstDelay;      // primer tero a los 4.5 segundos
   world.teroAlt = 0;                            // 0 = más arriba, 1 = más abajo (alterna)
   world.newRecord = false;
+  world.golfTimer = 0;                          // segundos restantes del bonus de carrito de golf
+  world.golfGraceTimer = 0;                     // margen breve tras finalizar el carrito
+  world.bonusTakenCount = 0;                    // cuántas veces se agarró bonus.png en la partida (0, 1, 2)
+  world.bonusArmedTier = -1;                    // escalón armado (-1 ninguno, 0 = 5.000 pts, 1 = 15.000 pts)
+  world.bonusSpawnDelay = 0;                    // espera aleatoria antes de spawnear bonus.png
   world.plane = { active: false, x: 0, y: 0, w: 0, h: 0, t: 0, speed: 150, timer: 1.5 };
   setExtremeMode(false);
 
@@ -1232,7 +1260,7 @@ function obstacleRect(o, customGroundY = groundY) {
   };
 }
 function pickupDims(kind) {
-  const h = CONFIG.size.pickup * U;
+  const h = (CONFIG.size[kind] || CONFIG.size.pickup) * U;
   return { w: h * aspectOf(IMG[kind]), h };
 }
 function pickupRect(p) {
@@ -1483,6 +1511,36 @@ function spawnPattern() {
   }
   world.spawned++;
 
+  let gapSec = rand(lerp(S.gapMin[0], S.gapMin[1], p), lerp(S.gapMax[0], S.gapMax[1], p))
+               + (isHorse ? S.horseExtraGap : 0);
+  if (isExtreme) {
+    gapSec *= 0.82; // Espacio entre obstáculos más ajustado en modo extremo
+  }
+  const gapPx = gapSec * world.speed;
+  world.spawnDist = width + gapPx;
+
+  // Bonus del carrito de golf (bonus.png): aparece a partir de 5.000 pts y, si se agarró una vez, vuelve a partir de 15.000 pts
+  const tier = world.bonusTakenCount || 0;
+  const canSpawnBonus = IMG.bonus
+    && tier < CONFIG.golf.thresholds.length
+    && world.score >= CONFIG.golf.thresholds[tier]
+    && world.bonusArmedTier === tier
+    && world.bonusSpawnDelay <= 0
+    && world.golfTimer <= 0
+    && !world.pickups.some((pk) => pk.kind === 'bonus' && !pk.taken);
+
+  if (canSpawnBonus) {
+    const pd = pickupDims('bonus');
+    world.pickups.push({
+      kind: 'bonus',
+      x: x0 + width + gapPx * 0.5 - pd.w / 2,
+      hU: rand(1.15, 1.60),
+      phase: 0
+    });
+    world.bonusSpawnDelay = 999; // en pantalla; si pasa de largo sin agarrarse, se reprograma al salir
+    return;
+  }
+
   // Recompensa especial: ¡Mate de 500 puntos cada tanto!
   const isMateSpawn = world.spawned >= 3 && (world.spawned % 5 === 0 || Math.random() < 0.22);
   if (isMateSpawn) {
@@ -1495,14 +1553,6 @@ function spawnPattern() {
       phase: rand(0, 6.28)
     });
   }
-
-  let gapSec = rand(lerp(S.gapMin[0], S.gapMin[1], p), lerp(S.gapMax[0], S.gapMax[1], p))
-               + (isHorse ? S.horseExtraGap : 0);
-  if (isExtreme) {
-    gapSec *= 0.82; // Espacio entre obstáculos más ajustado en modo extremo
-  }
-  const gapPx = gapSec * world.speed;
-  world.spawnDist = width + gapPx;
 
   if (Math.random() < 0.35 && !isMateSpawn) {                          // tostado "gratis" en el piso
     const pd = pickupDims('toast');
@@ -2564,6 +2614,28 @@ stateHandlers[STATES.PLAYING] = {
       world.extremeFlash = Math.max(0, world.extremeFlash - dt * 2.5);
     }
 
+    // --- Temporizador del bonus Carrito de Golf (5 segundos) y aparición de bonus.png ---
+    const G = CONFIG.golf;
+    if (world.golfTimer > 0) {
+      world.golfTimer = Math.max(0, world.golfTimer - dt);
+      if (world.golfTimer === 0) {
+        world.golfGraceTimer = G.graceAfter;
+        Sfx.play('bonusEnd');
+      }
+    } else if (world.golfGraceTimer > 0) {
+      world.golfGraceTimer = Math.max(0, world.golfGraceTimer - dt);
+    }
+
+    const bonusTier = world.bonusTakenCount || 0;
+    if (bonusTier < G.thresholds.length && world.score >= G.thresholds[bonusTier]) {
+      if (world.bonusArmedTier !== bonusTier) {
+        world.bonusArmedTier = bonusTier;
+        world.bonusSpawnDelay = Math.max(world.golfTimer > 0 ? world.golfTimer + 2.5 : 0, rand(1.5, 4.0));
+      } else if (world.golfTimer <= 0 && !world.pickups.some((p) => p.kind === 'bonus' && !p.taken)) {
+        if (world.bonusSpawnDelay > 0) world.bonusSpawnDelay -= dt;
+      }
+    }
+
     // Actualiza el avión publicitario en el cielo
     updatePlane(dt);
 
@@ -2601,7 +2673,7 @@ stateHandlers[STATES.PLAYING] = {
     }
 
     // --- Monitoreo de persistencia en la zona aérea (anti-abuso: > 10 seg) ---
-    if (!hero.grounded && hero.h > 0.08) {
+    if (!hero.grounded && hero.h > 0.08 && world.golfTimer <= 0) {
       hero.airTime = (hero.airTime || 0) + dt;
       if (hero.airTime >= T.airAbuseTime) {
         spawnSkyTero(true); // ¡sale un tero inmediatamente para nivelar la dificultad!
@@ -2621,7 +2693,48 @@ stateHandlers[STATES.PLAYING] = {
       o.x -= spd * dt;
       if (o.kind === 'tero') { o.t += dt; o.phase += dt * 4.5; }   // aleteo + vaivén
     }
-    for (const p of world.pickups) { p.x -= dx; p.phase += dt * 4; }
+
+    // Imán de elementos con puntos mientras dura el bonus del carrito de golf
+    const magnetActive = world.golfTimer > 0;
+    const magnetRange = Math.max(W * G.magnetRangeFrac, U * G.magnetMinU);
+    const magnetTargetX = heroX;
+    const magnetTargetY = groundY - (hero.h + 0.55) * U;
+
+    for (const p of world.pickups) {
+      p.phase += dt * 4;
+      if (p.kind !== 'bonus' && !p.taken) {
+        if (magnetActive && p.x <= heroX + magnetRange && p.x >= -U * 0.8) {
+          p.magnetized = true;
+        }
+        if (p.magnetized) {
+          const pd = pickupDims(p.kind);
+          const cx = p.x + pd.w / 2;
+          const cy = groundY - p.hU * U;
+          const vx = magnetTargetX - cx;
+          const vy = magnetTargetY - cy;
+          const dist = Math.hypot(vx, vy);
+          const pullStep = Math.max(world.speed * 2.25, U * 16) * dt;
+          if (dist <= pullStep || dist < U * 0.35) {
+            p.x = magnetTargetX - pd.w / 2;
+            p.hU = (groundY - magnetTargetY) / U;
+          } else {
+            const nx = cx + (vx / dist) * pullStep;
+            const ny = cy + (vy / dist) * pullStep;
+            p.x = nx - pd.w / 2;
+            p.hU = (groundY - ny) / U;
+          }
+          continue;
+        }
+      }
+      p.x -= dx;
+    }
+
+    for (const p of world.pickups) {
+      if (p.kind === 'bonus' && !p.taken && p.x + pickupDims('bonus').w <= -U) {
+        // Si no lo agarró en esta pasada, vuelve a ofrecerse más adelante
+        world.bonusSpawnDelay = rand(5.5, 9.0);
+      }
+    }
     world.obstacles = world.obstacles.filter((o) => o.x + obstacleDims(o.kind).w > -U);
     world.pickups   = world.pickups.filter((p) => !p.taken && p.x + pickupDims(p.kind).w > -U);
 
@@ -2631,29 +2744,57 @@ stateHandlers[STATES.PLAYING] = {
 
     // --- Colisiones ---
     const hr = heroRect();
+    const golfPassGround = world.golfTimer > 0 || world.golfGraceTimer > 0;
     for (const o of world.obstacles) {
+      if (o.passedByGolf) continue;
       if (overlap(hr, obstacleRect(o))) {
+        // El carrito de golf atraviesa todos los elementos del suelo (manuales y caballo)
+        if (golfPassGround && o.kind !== 'tero') {
+          o.passedByGolf = true;
+          continue;
+        }
         if (!CONFIG.godMode) { die(); return; }
       }
     }
+
+    const pickupHr = world.golfTimer > 0
+      ? { l: heroX - U * 0.85, r: heroX + U * 0.85, t: hr.t - U * 0.35, b: hr.b + U * 0.12 }
+      : hr;
     for (const p of world.pickups) {
-      if (!p.taken && overlap(hr, pickupRect(p))) {
+      if (!p.taken && overlap(pickupHr, pickupRect(p))) {
         p.taken = true;
-        const pts = CONFIG.points[p.kind];
+        const pts = CONFIG.points[p.kind] || 100;
         world.bonus += pts;
-        const isMate = p.kind === 'mate';
-        world.popups.push({
-          text: '+' + pts,
-          x: heroX + U * 0.4,
-          y: groundY - (hero.h + 1.2) * U,
-          t: 0,
-          gold: isMate
-        });
-        if (isMate) {
-          Sfx.play('mate');
-          world.milestoneT = 1.2;
+        world.score = Math.floor(world.dist * 0.025) + world.bonus;
+        if (p.kind === 'bonus') {
+          world.bonusTakenCount = (world.bonusTakenCount || 0) + 1;
+          world.golfTimer = G.duration;
+          world.golfGraceTimer = 0;
+          if (!hero.grounded && hero.vy > 0) hero.vy *= 0.35;
+          world.popups.push({
+            text: '¡BONUS +' + pts + '!',
+            x: heroX + U * 0.45,
+            y: groundY - (hero.h + 1.45) * U,
+            t: 0,
+            gold: true
+          });
+          Sfx.play('bonus');
+          world.milestoneT = 1.5;
         } else {
-          Sfx.play('pickup');
+          const isMate = p.kind === 'mate';
+          world.popups.push({
+            text: '+' + pts,
+            x: heroX + U * 0.4,
+            y: groundY - (hero.h + 1.2) * U,
+            t: 0,
+            gold: isMate
+          });
+          if (isMate) {
+            Sfx.play('mate');
+            world.milestoneT = 1.2;
+          } else {
+            Sfx.play('pickup');
+          }
         }
       }
     }
@@ -2790,6 +2931,7 @@ function heroSprite() {
   const set = IMG.chars[character];
   if (!set) return null;
   if (state === STATES.LOADING || state === STATES.CHARACTER_SELECT) return set.idle;
+  if (world.golfTimer > 0 && set.golf) return set.golf;
   if (!hero.grounded) {
     // 1) despegue agachado (también al iniciar el doble salto)
     if (hero.sinceJump < 0.07 || (hero.jumps === 2 && hero.sinceDouble < 0.08)) return set.jumpTakeoff;
@@ -2808,12 +2950,46 @@ function heroSprite() {
 function drawHero(customGroundY = groundY) {
   const set = IMG.chars[character];
   if (!set || !set.idle) return;
-  const k = U / set.idle.naturalHeight;               // escala común para todos los frames
   const img = heroSprite();
   if (!img) return;
 
-  // Sombra en el piso
+  const isGolf = world.golfTimer > 0 && set.golf && img === set.golf;
   const shrink = 1 - Math.min(hero.h, 2) * 0.18;
+
+  if (isGolf) {
+    const h = U * CONFIG.golf.heightMul;
+    const w = h * (img.naturalWidth / img.naturalHeight);
+    const rumble = (hero.grounded && state === STATES.PLAYING) ? Math.sin(world.time * 42) * U * 0.012 : 0;
+    const padOffset = h * (character === 'chica' ? 0.045 : 0.028);
+    const endingBlink = world.golfTimer < 1.0 && Math.floor(world.time * 12) % 2 === 1;
+
+    // Sombra amplia bajo el carrito
+    ctx.fillStyle = 'rgba(0,0,0,0.34)';
+    ctx.beginPath();
+    ctx.ellipse(heroX, customGroundY + U * 0.03, w * 0.42 * shrink, U * 0.075 * shrink, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Aura magnética pulsante alrededor del carrito
+    ctx.save();
+    const pulse = (world.time * 2.2) % 1;
+    ctx.strokeStyle = pulse < 0.5 ? '#ffd34d' : UNLAM.glow;
+    ctx.globalAlpha = (1 - pulse) * 0.55;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.ellipse(heroX, customGroundY - hero.h * U - h * 0.44, w * (0.48 + pulse * 0.22), h * (0.44 + pulse * 0.18), 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.save();
+    if (endingBlink) ctx.globalAlpha = 0.55;
+    ctx.drawImage(img, heroX - w / 2, customGroundY - hero.h * U - h + padOffset + rumble, w, h);
+    ctx.restore();
+    return;
+  }
+
+  const k = U / set.idle.naturalHeight;               // escala común para todos los frames
+
+  // Sombra en el piso
   ctx.fillStyle = 'rgba(0,0,0,0.28)';
   ctx.beginPath();
   ctx.ellipse(heroX, customGroundY + U * 0.02, U * 0.30 * shrink, U * 0.06 * shrink, 0, 0, Math.PI * 2);
@@ -3033,8 +3209,57 @@ function drawPickups() {
     const img = IMG[p.kind];
     if (!img) continue;
     const { w, h } = pickupDims(p.kind);
-    const bob = Math.sin(p.phase) * U * 0.05;
-    ctx.drawImage(img, p.x, groundY - p.hU * U - h / 2 + bob, w, h);
+    const bob = p.magnetized ? 0 : Math.sin(p.phase) * U * 0.05;
+    const py = groundY - p.hU * U - h / 2 + bob;
+
+    if (p.kind === 'bonus') {
+      // Parpadeo marcado para diferenciar el bonus (+1000 y carrito de golf)
+      const blinkOn = Math.floor(world.time * 8) % 2 === 0;
+      const scale = blinkOn ? 1.10 : 0.95;
+      const dw = w * scale, dh = h * scale;
+      const cx = p.x + w / 2, cy = py + h / 2;
+      const radius = dw * 0.452; // recorta las esquinas blancas del PNG dejando el emblema redondo limpio
+
+      // Resplandor y anillo exterior parpadeante
+      ctx.save();
+      if (blinkOn) {
+        ctx.shadowColor = '#ffd34d';
+        ctx.shadowBlur = 18;
+      }
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius + U * (blinkOn ? 0.07 : 0.03), 0, Math.PI * 2);
+      ctx.strokeStyle = blinkOn ? '#ffd34d' : '#ffffff';
+      ctx.lineWidth = blinkOn ? 4 : 2;
+      ctx.globalAlpha = blinkOn ? 1 : 0.55;
+      ctx.stroke();
+      ctx.restore();
+
+      // Emblema circular nítido con pulso de parpadeo
+      ctx.save();
+      ctx.globalAlpha = blinkOn ? 1 : 0.72;
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.drawImage(img, cx - dw / 2, cy - dh / 2, dw, dh);
+      if (blinkOn) {
+        ctx.fillStyle = 'rgba(255, 235, 130, 0.22)';
+        ctx.fillRect(cx - dw / 2, cy - dh / 2, dw, dh);
+      }
+      ctx.restore();
+      continue;
+    }
+
+    if (p.magnetized) {
+      ctx.save();
+      ctx.strokeStyle = '#ffd34d';
+      ctx.globalAlpha = 0.65;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(p.x + w / 2, py + h / 2, Math.max(w, h) * 0.52, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+    ctx.drawImage(img, p.x, py, w, h);
   }
 }
 
@@ -3081,6 +3306,31 @@ function drawHUD() {
   });
   drawText('RÉCORD ' + pad(Math.max(personalRecord, world.score)), W - marginR, y, size,
            { align: 'right', color: isExtreme ? '#ffd34d' : UNLAM.green });
+
+  // Indicador activo del bonus de carrito de golf (5s)
+  if (world.golfTimer > 0) {
+    const subSize = clamp(size * 0.78, 11, 20);
+    const by = y + size * 1.25;
+    const frac = clamp(world.golfTimer / CONFIG.golf.duration, 0, 1);
+    const warn = world.golfTimer < 1.0 && Math.floor(world.time * 10) % 2 === 1;
+    drawText('★ BONUS ' + world.golfTimer.toFixed(1) + 's', marginL, by, subSize, {
+      align: 'left',
+      color: warn ? '#ffffff' : '#ffd34d'
+    });
+    const barW = clamp(U * 1.45, 96, 170);
+    const barH = Math.max(5, Math.round(subSize * 0.34));
+    const barY = by + subSize * 0.72;
+    ctx.save();
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+    rrect(marginL, barY, barW, barH, barH / 2);
+    ctx.fill();
+    if (frac > 0) {
+      ctx.fillStyle = warn ? '#ff8a65' : UNLAM.glow;
+      rrect(marginL, barY, Math.max(barH, barW * frac), barH, barH / 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
 }
 
 function drawPanel(lines) {
@@ -3250,6 +3500,8 @@ function drawDebug() {
 function die() {
   world.deadAt = performance.now();
   world.deadT = 0;
+  world.golfTimer = 0;
+  world.golfGraceTimer = 0;
   // Al perder (incluso tras superar los 20.000 pts), deja de cambiar de color de inmediato
   setExtremeMode(false);
   Sfx.play('hit');
