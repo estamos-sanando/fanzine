@@ -185,20 +185,21 @@ const CONFIG = {
     book:   { l: 0.14, r: 0.14, t: 0.10, b: 0.00 },
     horse:  { l: 0.16, r: 0.18, t: 0.08, b: 0.04 },
     virgen: { l: 0.18, r: 0.18, t: 0.11, b: 0.04 },
-    tero:   { l: 0.20, r: 0.20, t: 0.20, b: 0.22 }   // relativo a la caja de referencia del tero
+    tero:   { l: 0.24, r: 0.24, t: 0.24, b: 0.26 }   // ajustado al cuerpo del tero (perdona puntas de alas/cola)
   },
 
-  // Tero: entra volando desde la derecha (más rápido que el suelo) en alturas de salto.
-  // Poca cantidad en juego normal; si el jugador salta sin parar, sale un tero veloz a su altura.
+  // Tero: entra volando desde la derecha con dificultad progresiva (suave al inicio, más activo al avanzar).
   tero: {
-    refW: 130, refH: 110,   // caja de referencia (px del sprite) común a los 4 frames
-    bob: 0.08,              // vaivén vertical de aleteo (en U)
-    frameDur: 0.065,        // s por paso de aleteo fluido (ida y vuelta)
-    intervalMin: [9.0, 6.2],// segundos mínimos entre apariciones [inicio, vel. máx]
-    intervalMax: [14.0, 9.5],// segundos máximos entre apariciones [inicio, vel. máx]
-    firstDelay: 8.5,        // primer tero recién a los 8.5 segundos de arrancar
-    jumpHeatLimit: 6.5,     // umbral de saltos continuos antes de lanzar un tero cazador
-    emergencyCooldown: 7.0  // s mínimos entre teros cazadores consecutivos
+    refW: 130, refH: 110,     // caja de referencia (px del sprite) común a los 4 frames
+    bob: 0.07,                // vaivén vertical de aleteo (en U)
+    frameDur: 0.065,          // s por paso de aleteo fluido (ida y vuelta)
+    intervalMin: [13.5, 6.5], // segundos mínimos entre apariciones [inicio suave, vel. máx]
+    intervalMax: [18.5, 9.8], // segundos máximos entre apariciones [inicio suave, vel. máx]
+    firstDelay: 12.5,         // primer tero recién tras entrar en ritmo (~12.5 s y >= 700 pts)
+    minScoreRegular: 700,     // puntaje mínimo para empezar con teros periódicos
+    lowUnlockScore: 2200,     // antes de 2.200 pts solo vuelan medios/altos (no cortan el salto simple)
+    jumpHeatLimit: 6.6,       // umbral de saltos continuos antes de lanzar un tero cazador
+    emergencyCooldown: 7.5    // s mínimos entre teros cazadores consecutivos
   },
   hero: { halfWidth: 0.17, bottom: 0.08, top: 0.85 },   // en U
   pickupForgiveness: 0.20,                              // pickups más fáciles de agarrar
@@ -1341,7 +1342,7 @@ function teroCenterY(o) {
   const bob = Math.sin((o ? o.phase : 0)) * CONFIG.tero.bob * U;
   let swoopPx = 0;
   if (o && o.entryDropU) {
-    const settleX = heroX + U * 2.1;
+    const settleX = heroX + U * 2.8;
     const span = Math.max(U * 2.5, W - settleX);
     const k = clamp((o.x - settleX) / span, 0, 1);
     const smooth = k * k * (3 - 2 * k);
@@ -1608,19 +1609,19 @@ function spawnPattern() {
   // - si es medio/alto, generamos un manual bajo en vez de caballo/Virgen para no encerrar al jugador
   const tGroundArrive = world.speed > 1 ? (x0 - heroX) / world.speed : 99;
   const lowTeroConflict = world.obstacles.some((o) => {
-    if (o.kind !== 'tero' || !o.flySpeed || (o.skyHeightU !== undefined && o.skyHeightU >= 2.14)) return false;
+    if (o.kind !== 'tero' || !o.flySpeed || (o.skyHeightU !== undefined && o.skyHeightU >= 2.18)) return false;
     const tTeroArrive = (o.x - heroX) / o.flySpeed;
-    return tTeroArrive > 0 && Math.abs(tTeroArrive - tGroundArrive) < 0.50;
+    return tTeroArrive > 0 && Math.abs(tTeroArrive - tGroundArrive) < 0.75;
   });
   if (lowTeroConflict) {
-    extraOffset = U * 2.5;
+    extraOffset = U * 3.4;
     x0 += extraOffset;
   }
   const tAdjustedArrive = world.speed > 1 ? (x0 - heroX) / world.speed : 99;
   const anyTeroConflict = world.obstacles.some((o) => {
     if (o.kind !== 'tero' || !o.flySpeed) return false;
     const tTeroArrive = (o.x - heroX) / o.flySpeed;
-    return tTeroArrive > 0 && Math.abs(tTeroArrive - tAdjustedArrive) < 0.52;
+    return tTeroArrive > 0 && Math.abs(tTeroArrive - tAdjustedArrive) < 0.78;
   });
 
   // A partir de los 20.000 puntos aumenta la probabilidad de obstáculos altos (caballos / Virgen) y libros dobles
@@ -1707,12 +1708,14 @@ function spawnPattern() {
 function hasGroundConflictAtHero(xStart, flySpeed) {
   if (flySpeed <= 1 || world.speed <= 1) return null;
   const tArrive = (xStart - heroX) / flySpeed;
+  const padBack = world.score < 3000 ? U * 3.0 : U * 2.4;
+  const padFront = world.score < 3000 ? U * 3.4 : U * 2.8;
   for (const o of world.obstacles) {
     if (o.kind === 'tero') continue;
     const w = obstacleDims(o.kind).w;
     const futureL = o.x - world.speed * tArrive;
     const futureR = futureL + w;
-    if (futureR > heroX - U * 1.4 && futureL < heroX + U * 1.6) {
+    if (futureR > heroX - padBack && futureL < heroX + padFront) {
       return o.kind; // 'book' | 'horse' | 'virgen'
     }
   }
@@ -1721,21 +1724,25 @@ function hasGroundConflictAtHero(xStart, flySpeed) {
 
 function spawnSkyTero(isEmergency = false) {
   if (!IMG.tero || !IMG.tero.length) return false;
+  // Al inicio de la partida damos margen para entrar en calor antes del primer tero regular
+  if (!isEmergency && world.score < CONFIG.tero.minScoreRegular) {
+    return false;
+  }
   // Nunca acumular más de un tero en pantalla al mismo tiempo
   if (world.obstacles.some((o) => o.kind === 'tero' && o.x > -U * 0.4)) {
     return false;
   }
 
-  // El tero viene volando de frente (derecha -> izquierda), siempre más rápido que el desplazamiento del suelo
+  // Entra volando desde la derecha (más rápido que el suelo, pero más suave y legible al principio)
   const speedMul = isEmergency
-    ? lerp(1.62, 1.38, world.p)
-    : lerp(1.46, 1.28, world.p) * rand(0.97, 1.05);
-  const flySpeed = Math.max(world.speed * speedMul, W * 0.78);
+    ? lerp(1.38, 1.50, world.p)
+    : lerp(1.22, 1.35, world.p) * rand(0.98, 1.03);
+  const flySpeed = world.speed * speedMul;
   const tw = obstacleDims('tero').w;
   const startX = W + tw + 36; // nace completamente fuera del borde derecho y entra volando
   const conflictKind = hasGroundConflictAtHero(startX, flySpeed);
 
-  // Nunca superponer un tero con un caballo o la Virgen en heroX (el jugador necesita saltar alto ahí)
+  // Nunca superponer un tero con un caballo o la Virgen cerca de heroX (el jugador necesita saltar alto y aterrizar tranquilo)
   if (conflictKind === 'horse' || conflictKind === 'virgen') {
     return false;
   }
@@ -1744,8 +1751,8 @@ function spawnSkyTero(isEmergency = false) {
   if (isEmergency) {
     // Tero cazador cuando el jugador salta continuamente sin parar: apunta al corredor de salto
     skyHeightU = conflictKind === 'book'
-      ? rand(2.16, 2.48) // deja espacio para salto simple sobre manual, pero castiga multi-salto continuo
-      : rand(1.52, 1.95);
+      ? rand(2.18, 2.50) // deja espacio para salto simple sobre manual, pero castiga multi-salto continuo
+      : rand(1.56, 1.98);
     Sfx.tone(520, 250, 0.20, 'sawtooth', 0.12);
     world.popups.push({
       text: '¡CUIDADO CON EL TERO!',
@@ -1754,17 +1761,26 @@ function spawnSkyTero(isEmergency = false) {
       t: 0,
       gold: true
     });
+  } else if (world.score < CONFIG.tero.lowUnlockScore) {
+    // Inicio amigable (< 2.200 pts): los teros vuelan solo medios/altos para no complicar los saltos bajos iniciales
+    const highSlot = (world.teroAlt || 0) % 2;
+    world.teroAlt = (world.teroAlt || 0) + 1;
+    skyHeightU = highSlot === 0 ? rand(2.42, 2.72) : rand(2.08, 2.32);
+    if (conflictKind === 'book' && skyHeightU < 2.20) {
+      skyHeightU = rand(2.24, 2.58);
+    }
+    Sfx.tone(880, 690, 0.08, 'sine', 0.05);
   } else {
-    // Rota entre bajo (corta salto simple), medio (corta doble salto / tortillas) y alto (corta triple salto / mates)
+    // A partir de 2.200 pts se suma también el vuelo bajo para exigir lectura completa del cielo
     const slot = (world.teroAlt || 0) % 3;
     world.teroAlt = slot + 1;
-    if (slot === 0) skyHeightU = rand(1.38, 1.56);      // bajo: obliga a correr por la vereda sin saltar
-    else if (slot === 1) skyHeightU = rand(1.94, 2.22); // medio: castiga doble salto descuidado
-    else skyHeightU = rand(2.40, 2.70);                 // alto: protege la zona alta de mates / triple salto
+    if (slot === 0) skyHeightU = rand(1.46, 1.64);      // bajo: obliga a correr por la vereda sin saltar
+    else if (slot === 1) skyHeightU = rand(1.98, 2.24); // medio: castiga doble salto descuidado
+    else skyHeightU = rand(2.42, 2.72);                 // alto: protege la zona alta de mates / triple salto
 
-    // Si coincide con un manual en heroX, sube lo suficiente para permitir un salto simple limpio
-    if (conflictKind === 'book' && skyHeightU < 2.14) {
-      skyHeightU = rand(2.16, 2.54);
+    // Si coincide con un manual cerca de heroX, sube lo suficiente para permitir un salto simple limpio
+    if (conflictKind === 'book' && skyHeightU < 2.18) {
+      skyHeightU = rand(2.20, 2.56);
     }
     Sfx.tone(880, 690, 0.08, 'sine', 0.05);
   }
@@ -1774,7 +1790,7 @@ function spawnSkyTero(isEmergency = false) {
     x: startX,
     flySpeed,
     speedMul,
-    entryDropU: rand(0.38, 0.62), // entra planeando desde arriba a la derecha hacia su carril
+    entryDropU: rand(0.24, 0.42), // entra planeando suavemente y se nivela con anticipación
     phase: rand(0, 6.28),
     t: 0,
     skyHeightU,
@@ -2952,11 +2968,12 @@ stateHandlers[STATES.PLAYING] = {
     } else {
       hero.jumpHeat = Math.max(0, (hero.jumpHeat || 0) - dt * 2.6);
     }
-    if (world.golfTimer <= 0 && hero.jumpHeat >= T.jumpHeatLimit && world.emergencyTeroCd <= 0) {
+    const heatLimit = world.score < 2200 ? 7.8 : T.jumpHeatLimit;
+    if (world.golfTimer <= 0 && hero.jumpHeat >= heatLimit && world.emergencyTeroCd <= 0) {
       if (spawnSkyTero(true)) {
         hero.jumpHeat = 0;
         world.emergencyTeroCd = T.emergencyCooldown;
-        world.teroTimer = Math.max(world.teroTimer, 6.5);
+        world.teroTimer = Math.max(world.teroTimer, 7.5);
       }
     }
 
@@ -2967,7 +2984,7 @@ stateHandlers[STATES.PLAYING] = {
     // --- Entidades ---
     for (const o of world.obstacles) {
       const spd = o.kind === 'tero'
-        ? Math.max(o.flySpeed || 0, world.speed * (o.speedMul || 1.40))
+        ? Math.max(o.flySpeed || 0, world.speed * (o.speedMul || 1.25))
         : world.speed;
       o.x -= spd * dt;
       if (o.kind === 'tero') { o.t += dt; o.phase += dt * 6.0; }   // aleteo + vuelo activo
@@ -3472,9 +3489,9 @@ function drawTero(o) {
   // Inclinación natural de vuelo mientras entra planeando desde la derecha
   let tilt = Math.cos(o.phase || 0) * 0.04;
   if (o.entryDropU) {
-    const settleX = heroX + U * 2.1;
+    const settleX = heroX + U * 2.8;
     const k = clamp((o.x - settleX) / Math.max(U * 2.5, W - settleX), 0, 1);
-    tilt += 0.13 * (4 * k * (1 - k));
+    tilt += 0.11 * (4 * k * (1 - k));
   }
   ctx.save();
   ctx.translate(cx, cy);
