@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title>Fanzine Runner · ¡No te rindas!</title>
-  <meta name="description" content="Runner 2D arcade en el campus de la UNLaM. ¡No te rindas! Salto y multi-salto infinito. Funciona sin conexión.">
+  <meta name="description" content="Runner 2D arcade en el campus de la UNLaM. ¡No te rindas! Salto y hasta triple salto. Funciona sin conexión.">
   <meta name="theme-color" content="#0b0d14">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -61,7 +61,7 @@
       </section>
 
       <button id="start-btn" class="start__btn" type="button">Cargando…</button>
-      <p class="start__hint"><b>Tocá</b> o barra espaciadora para saltar · ¡ojo con el <b>tero</b> en el cielo!</p>
+      <p class="start__hint"><b>Tocá</b> o barra espaciadora para saltar (máx. 3) · ¡ojo con el <b>tero</b> en el cielo!</p>
 
       <section id="hiscores-box" class="scores" aria-label="Ranking global">
         <h2 class="scores__title">★ Ranking global · Top 5 ★</h2>
@@ -135,7 +135,7 @@
     </div>
   </div>
 
-  <script src="game.js?v=40"></script>
+  <script src="game.js?v=42"></script>
   <script>
     // Registro del Service Worker (modo offline). Requiere HTTPS o localhost.
     if ('serviceWorker' in navigator) {
