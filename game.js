@@ -166,10 +166,10 @@ const CONFIG = {
   godMode: /[?&]god\b/.test(location.search),   // ?god activa modo invencible para testing visual
   skipCinematic: /[?&]skip\b/.test(location.search), // ?skip salta las cinemáticas
   extremeTest: /[?&]extreme\b/.test(location.search), // ?extreme arranca en modo extremo (20.000 pts) para testing visual
-  storageScores:   'fanzine_runner_global_v5',  // copia local del ranking global (para mostrar sin conexión)
-  storagePending:  'fanzine_runner_pending',    // puntajes que todavía no se pudieron enviar al servidor
+  storageScores:   'fanzine_runner_global_v6',  // copia local del ranking global (para mostrar sin conexión)
+  storagePending:  'fanzine_runner_pending_v2', // puntajes que todavía no se pudieron enviar al servidor
   storageInitials: 'fanzine_runner_initials',   // últimas iniciales usadas
-  storagePersonalRecord: 'fanzine_runner_personal_record', // récord personal en este dispositivo
+  storagePersonalRecord: 'fanzine_runner_personal_record_v3', // récord personal en este dispositivo
   apiScores: '/api/scores',                     // endpoint local/Vercel (api/scores.js)
   cloudScores: 'https://api.restful-api.dev/objects/ff808181a09d98f701a18d9ecd606591', // cloud backend global compartido
   apiTimeout: 3000,                             // ms antes de alternar al cloud
