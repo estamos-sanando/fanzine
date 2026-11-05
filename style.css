@@ -203,6 +203,10 @@ body.is-extreme {
   cursor: pointer;
   pointer-events: auto;
   touch-action: manipulation;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
   transition: transform .18s ease, border-color .18s ease, background .18s ease, box-shadow .18s ease;
 }
 .picker__btn img {
@@ -249,6 +253,10 @@ body.is-extreme {
   box-shadow: 0 10px 28px rgba(41, 159, 128, .5), inset 0 -3px 0 rgba(0, 0, 0, .28);
   pointer-events: auto;
   touch-action: manipulation;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
   animation: pulse 1.4s ease-in-out infinite;
   transition: transform .15s ease, filter .15s ease, box-shadow .15s ease;
 }
@@ -498,12 +506,14 @@ body.is-extreme {
   display: none;
 }
 :fullscreen .fullscreen-btn .fs-icon--expand,
-:-webkit-full-screen .fullscreen-btn .fs-icon--expand {
-  display: none;
+:-webkit-full-screen .fullscreen-btn .fs-icon--expand,
+.fullscreen-btn.is-fullscreen .fs-icon--expand {
+  display: none !important;
 }
 :fullscreen .fullscreen-btn .fs-icon--compress,
-:-webkit-full-screen .fullscreen-btn .fs-icon--compress {
-  display: block;
+:-webkit-full-screen .fullscreen-btn .fs-icon--compress,
+.fullscreen-btn.is-fullscreen .fs-icon--compress {
+  display: block !important;
 }
 
 /* ---------- Configuración: tuerca ⚙ + menú desplegable (arriba a la derecha) ---------- */
@@ -869,8 +879,8 @@ body.is-extreme {
   .settings__title { margin-bottom: 8px; }
   .settings__sep { margin: 8px 0 8px; }
   .fullscreen-btn {
-    width: 36px;
-    height: 36px;
+    width: 40px;
+    height: 40px;
     bottom: max(8px, env(safe-area-inset-bottom));
     right: max(8px, env(safe-area-inset-right));
   }

@@ -770,47 +770,120 @@ function isMobileDevice() {
 }
 
 function isFullscreenActive() {
-  return !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
+  const d = document;
+  return !!(
+    d.fullscreenElement ||
+    d.webkitFullscreenElement ||
+    d.webkitCurrentFullScreenElement ||
+    d.mozFullScreenElement ||
+    d.msFullscreenElement
+  );
+}
+
+function updateFullscreenBtnState() {
+  if (!dom.fullscreenBtn) return;
+  const active = isFullscreenActive();
+  dom.fullscreenBtn.classList.toggle('is-fullscreen', active);
+  dom.fullscreenBtn.setAttribute('aria-label', active ? 'Salir de pantalla completa' : 'Pantalla completa');
+  dom.fullscreenBtn.setAttribute('title', active ? 'Salir de pantalla completa' : 'Pantalla completa');
+}
+
+function tryLockOrientation() {
+  try {
+    if (screen.orientation && screen.orientation.lock) {
+      screen.orientation.lock('landscape').catch(() => {
+        screen.orientation.lock('landscape-primary').catch(() => {});
+      });
+    } else if (screen.lockOrientation) {
+      screen.lockOrientation('landscape');
+    } else if (screen.webkitLockOrientation) {
+      screen.webkitLockOrientation('landscape');
+    } else if (screen.mozLockOrientation) {
+      screen.mozLockOrientation('landscape');
+    }
+  } catch (_) {}
 }
 
 function goFullscreen() {
-  if (isFullscreenActive()) return;
-  const el = document.documentElement;
-  const fn = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
-  if (fn) {
-    try {
-      const p = fn.call(el, { navigationUI: 'hide' });
-      if (p && p.then) {
-        p.then(() => {
-          if (screen.orientation && screen.orientation.lock) {
-            screen.orientation.lock('landscape').catch(() => {});
-          }
-        }).catch(() => {});
-      }
-    } catch (_) { /* ignorado */ }
+  if (isFullscreenActive()) {
+    updateFullscreenBtnState();
+    return;
   }
 
-  // En Android Chrome y navegadores móviles, bloquear orientación en apaisado para ocultar barras de navegación
-  try {
-    if (screen.orientation && screen.orientation.lock) {
-      screen.orientation.lock('landscape').catch(() => {});
-    }
-  } catch (_) {}
+  const doc = document;
+  const docEl = doc.documentElement;
+  const body = doc.body;
 
-  // En iOS Safari / navegadores que no soportan Fullscreen API
-  try {
-    window.scrollTo(0, 1);
-  } catch (_) {}
+  const reqFn = docEl.requestFullscreen ||
+                docEl.webkitRequestFullscreen ||
+                docEl.webkitRequestFullScreen ||
+                docEl.mozRequestFullScreen ||
+                docEl.msRequestFullscreen ||
+                (body && (body.requestFullscreen || body.webkitRequestFullscreen));
+
+  if (reqFn) {
+    let promise;
+    try {
+      promise = reqFn.call(docEl, { navigationUI: 'hide' });
+    } catch (_) {
+      try {
+        promise = reqFn.call(docEl);
+      } catch (_) {
+        if (body) {
+          try { promise = reqFn.call(body); } catch (_) {}
+        }
+      }
+    }
+
+    if (promise && promise.then) {
+      promise.then(() => {
+        tryLockOrientation();
+        updateFullscreenBtnState();
+        layout();
+      }).catch(() => {
+        try {
+          const p2 = reqFn.call(docEl);
+          if (p2 && p2.then) {
+            p2.then(() => {
+              tryLockOrientation();
+              updateFullscreenBtnState();
+            }).catch(() => {});
+          }
+        } catch (_) {}
+      });
+    }
+  } else {
+    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent || '');
+    if (isIOS) {
+      try { window.scrollTo(0, 1); } catch (_) {}
+      showToast('En iPhone: usá Compartir ↗ y "Agregar a pantalla de inicio" para pantalla completa real 📱', 5000);
+    }
+  }
+
+  tryLockOrientation();
+  try { window.scrollTo(0, 1); } catch (_) {}
+  updateFullscreenBtnState();
 }
 
 function exitFullscreen() {
-  if (!isFullscreenActive()) return;
-  const fn = document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen || document.msExitFullscreen;
-  if (fn) {
+  const doc = document;
+  const exitFn = doc.exitFullscreen ||
+                 doc.webkitExitFullscreen ||
+                 doc.webkitCancelFullScreen ||
+                 doc.mozCancelFullScreen ||
+                 doc.msExitFullscreen;
+  if (exitFn && isFullscreenActive()) {
     try {
-      fn.call(document);
+      const p = exitFn.call(doc);
+      if (p && p.then) {
+        p.then(() => {
+          updateFullscreenBtnState();
+          layout();
+        }).catch(() => {});
+      }
     } catch (_) {}
   }
+  updateFullscreenBtnState();
 }
 
 function toggleFullscreen() {
@@ -828,12 +901,34 @@ function toggleFullscreen() {
 const IMG = { chars: {} };
 const missingAssets = [];
 
-function loadImage(src) {
+function loadImage(src, timeoutMs = 4000) {
   return new Promise((resolve) => {
     const img = new Image();
-    img.decoding = 'async';
-    img.onload = () => resolve(img);
-    img.onerror = () => { missingAssets.push(src); resolve(null); };
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        missingAssets.push(src);
+        resolve(null);
+      }
+    }, timeoutMs);
+
+    img.onload = () => {
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
+        resolve(img);
+      }
+    };
+    img.onerror = () => {
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
+        missingAssets.push(src);
+        resolve(null);
+      }
+    };
+    try { img.decoding = 'async'; } catch (_) {}
     img.src = src;
   });
 }
@@ -4652,7 +4747,12 @@ function renderOverlayScores() {
 }
 
 function startGame() {
-  if (starting || state !== STATES.CHARACTER_SELECT) return;
+  if (starting) return;
+  if (state === STATES.LOADING) {
+    if (dom.overlay) dom.overlay.classList.remove('is-loading');
+    transitionTo(STATES.CHARACTER_SELECT);
+  }
+  if (state !== STATES.CHARACTER_SELECT) return;
   starting = true;
 
   // Audio y pantalla completa (requieren gesto del usuario)
@@ -4749,36 +4849,64 @@ function setupOverlay() {
   });
 
   dom.pickers.forEach((b) => {
+    let lastPick = 0;
     const onPick = (e) => {
-      e.stopPropagation();
-      if (isMobileDevice()) goFullscreen();
+      const now = performance.now();
+      if (now - lastPick < 350) return;
+      lastPick = now;
+      if (e) {
+        if (e.cancelable) e.preventDefault();
+        e.stopPropagation();
+      }
       selectCharacter(b.dataset.char);
+      Sfx.play('click');
     };
-    b.addEventListener('pointerdown', () => { if (isMobileDevice()) goFullscreen(); });
-    b.addEventListener('touchstart', () => { if (isMobileDevice()) goFullscreen(); }, { passive: true });
+    b.addEventListener('touchend', onPick, { passive: false });
+    b.addEventListener('pointerup', (e) => {
+      if (e.pointerType === 'touch' || e.pointerType === 'pen') onPick(e);
+    });
     b.addEventListener('click', onPick);
   });
 
   if (dom.startBtn) {
+    let lastStart = 0;
     const onStart = (e) => {
-      e.stopPropagation();
+      const now = performance.now();
+      if (now - lastStart < 500) return;
+      lastStart = now;
+      if (e) {
+        if (e.cancelable) e.preventDefault();
+        e.stopPropagation();
+      }
       goFullscreen();
       startGame();
     };
-    dom.startBtn.addEventListener('pointerdown', () => goFullscreen());
-    dom.startBtn.addEventListener('touchstart', () => goFullscreen(), { passive: true });
+
+    dom.startBtn.addEventListener('touchend', onStart, { passive: false });
+    dom.startBtn.addEventListener('pointerup', (e) => {
+      if (e.pointerType === 'touch' || e.pointerType === 'pen') onStart(e);
+    });
     dom.startBtn.addEventListener('click', onStart);
   }
 
   if (dom.fullscreenBtn) {
+    let lastFs = 0;
     const onToggleFs = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
+      const now = performance.now();
+      if (now - lastFs < 400) return;
+      lastFs = now;
+      if (e) {
+        if (e.cancelable) e.preventDefault();
+        e.stopPropagation();
+      }
       toggleFullscreen();
     };
+
+    dom.fullscreenBtn.addEventListener('touchend', onToggleFs, { passive: false });
+    dom.fullscreenBtn.addEventListener('pointerup', (e) => {
+      if (e.pointerType === 'touch' || e.pointerType === 'pen') onToggleFs(e);
+    });
     dom.fullscreenBtn.addEventListener('click', onToggleFs);
-    dom.fullscreenBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
-    dom.fullscreenBtn.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
   }
 
   const rotateModal = document.getElementById('rotate-device-modal');
@@ -4838,12 +4966,26 @@ async function main() {
   requestAnimationFrame(frame);
   Scores.refresh();                              // el ranking baja mientras cargan los assets
 
-  await loadAssets();
-  Music.preload();                               // la música se descarga después de las imágenes
+  try {
+    await Promise.race([
+      loadAssets(),
+      new Promise((r) => setTimeout(r, 3800))
+    ]);
+  } catch (err) {
+    console.warn('[Game] Carga continuó tras espera:', err);
+  }
+
+  try { Music.preload(); } catch (_) {}
   layout();
   resetRun();
 
   if (!IMG.chars[character] || !IMG.chars[character].idle) selectCharacter(CONFIG.defaultCharacter);
+
+  if (dom.overlay) dom.overlay.classList.remove('is-loading');
+  if (dom.startBtn) {
+    dom.startBtn.disabled = false;
+    dom.startBtn.textContent = '▶ COMENZAR';
+  }
 
   transitionTo(STATES.CHARACTER_SELECT);
 }
@@ -4858,7 +5000,7 @@ window.addEventListener('orientationchange', onResize);
 if (screen && screen.orientation && screen.orientation.addEventListener) {
   screen.orientation.addEventListener('change', onResize);
 }
-document.addEventListener('fullscreenchange', onResize);
-document.addEventListener('webkitfullscreenchange', onResize);
+document.addEventListener('fullscreenchange', () => { updateFullscreenBtnState(); onResize(); });
+document.addEventListener('webkitfullscreenchange', () => { updateFullscreenBtnState(); onResize(); });
 
 main();
