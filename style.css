@@ -1336,30 +1336,152 @@ body.is-extreme {
   transform: scale(1.04);
 }
 
-@media (max-height: 520px) and (orientation: landscape) {
+@media (max-height: 540px) and (orientation: landscape) {
+  .full-scores-modal {
+    padding: 6px 10px;
+  }
   .full-scores-modal__content {
-    max-height: 94vh;
+    width: min(96vw, 760px);
+    max-height: 96vh;
+    border-radius: 14px;
+    border: 2px solid #00e676;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.85), 0 0 28px rgba(0, 230, 118, 0.22);
+    background: radial-gradient(circle at 50% 0%, #11202b 0%, #090e17 100%);
   }
   .full-scores-modal__header {
-    padding: 8px 14px 6px;
+    padding: 7px 14px 5px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  .full-scores-modal__title {
+    font-size: 13.5px;
+    color: #00e676;
+    letter-spacing: .08em;
+  }
+  .full-scores-modal__subtitle {
+    font-size: 9.5px;
+    color: #94a3b8;
+  }
+  .full-scores-modal__close {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    min-height: 32px;
+    font-size: 15px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    color: #ffffff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform .15s ease, background .2s ease;
+  }
+  .full-scores-modal__close:active {
+    transform: scale(0.92);
+    background: rgba(255, 255, 255, 0.22);
   }
   .full-scores-modal__personal {
-    margin: 4px 14px 6px;
+    margin: 4px 12px 3px;
     padding: 4px 10px;
+    background: rgba(0, 230, 118, 0.12);
+    border: 1px solid rgba(0, 230, 118, 0.4);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .full-scores-modal__personal-label {
+    font-size: 9.5px;
+    color: #a7f3d0;
+  }
+  .full-scores-modal__personal-rank {
+    font-size: 11px;
+    color: #ffd34d;
+    font-weight: 800;
+  }
+  .full-scores-modal__personal-pts {
+    font-size: 13.5px;
+    color: #ffd34d;
+    font-weight: 800;
   }
   .full-scores-modal__table-header {
-    padding: 3px 14px;
-    font-size: 9.5px;
+    display: none !important; /* Oculto en vista de 2 columnas para alineación perfecta */
   }
   .full-scores-modal__body {
-    max-height: 160px;
-    padding: 4px 10px;
+    max-height: calc(96vh - 100px);
+    min-height: 150px;
+    padding: 5px 12px 8px;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+    overscroll-behavior: contain;
+  }
+  .full-scores-modal__list {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 4px 10px !important;
   }
   .full-scores-row {
-    padding: 3.5px 6px;
+    padding: 3.5px 8px;
     font-size: 11px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    transition: transform .1s ease, background .15s ease;
+  }
+  .full-scores-row:active {
+    transform: scale(0.99);
+    background: rgba(255, 255, 255, 0.08);
+  }
+  .full-scores-row.is-empty {
+    grid-column: 1 / -1 !important;
+  }
+  .full-scores-row.is-rank-1 {
+    background: rgba(255, 211, 77, 0.16);
+    border-color: rgba(255, 211, 77, 0.45);
+    color: #ffd34d;
+  }
+  .full-scores-row.is-rank-2 {
+    background: rgba(217, 222, 232, 0.12);
+    border-color: rgba(217, 222, 232, 0.3);
+    color: #d9dee8;
+  }
+  .full-scores-row.is-rank-3 {
+    background: rgba(224, 160, 112, 0.12);
+    border-color: rgba(224, 160, 112, 0.3);
+    color: #e0a070;
+  }
+  .full-scores-row.is-top5 {
+    color: #00e676;
+    border-color: rgba(0, 230, 118, 0.25);
+  }
+  .full-scores-row.is-new {
+    background: rgba(0, 230, 118, 0.25);
+    border: 1.5px solid #00e676;
+    color: #ffffff;
+    box-shadow: 0 0 10px rgba(0, 230, 118, 0.3);
   }
   .full-scores-modal__footer {
-    padding: 6px 14px 8px;
+    display: none !important; /* Oculta botón inferior redundante en landscape para maximizar visualización */
+  }
+
+  /* Game Over: botones inferiores compactos en mobile horizontal */
+  .gameover-actions {
+    bottom: max(8px, env(safe-area-inset-bottom));
+    gap: 8px;
+  }
+  .gameover-actions .menu-btn {
+    padding: 6px 14px;
+    font-size: 11px;
+  }
+
+  /* Botón ranking completo en pantalla de inicio */
+  .scores__more-btn {
+    margin: 4px 0 1px;
+    padding: 5px 8px;
+    font-size: 10px;
   }
 }
