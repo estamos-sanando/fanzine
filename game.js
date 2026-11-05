@@ -852,12 +852,6 @@ function goFullscreen() {
         } catch (_) {}
       });
     }
-  } else {
-    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent || '');
-    if (isIOS) {
-      try { window.scrollTo(0, 1); } catch (_) {}
-      showToast('En iPhone: usá Compartir ↗ y "Agregar a pantalla de inicio" para pantalla completa real 📱', 5000);
-    }
   }
 
   tryLockOrientation();
