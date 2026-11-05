@@ -911,9 +911,13 @@ const IMG = {
 const missingAssets = [];
 const imageCache = new Map();
 
-function loadImage(src, timeoutMs = 4500) {
+function loadImage(src, timeoutMs) {
   if (!src) return Promise.resolve(null);
   if (imageCache.has(src)) return imageCache.get(src);
+
+  // Proteger estrictamente contra llamadas de Array.prototype.map(src => loadImage(src))
+  // donde el segundo argumento es el índice (0, 1, 2...) para que nunca sea 0ms
+  const validTimeout = (typeof timeoutMs === 'number' && timeoutMs >= 500) ? timeoutMs : 8000;
 
   const promise = new Promise((resolve) => {
     const img = new Image();
@@ -925,7 +929,7 @@ function loadImage(src, timeoutMs = 4500) {
         missingAssets.push(src);
         resolve(null);
       }
-    }, timeoutMs);
+    }, validTimeout);
 
     img.onload = async () => {
       if (!settled) {
@@ -981,8 +985,8 @@ function loadGameplayAssets() {
     loadImage(ASSETS.images.fondoEntrada).then(img => { IMG.fondoEntrada = img; }),
     loadImage(ASSETS.bus620sale.chica).then(img => { IMG.bus620sale.chica = img; }),
     loadImage(ASSETS.bus620sale.chico).then(img => { IMG.bus620sale.chico = img; }),
-    Promise.all(ASSETS.caminaPuerta.chica.map(loadImage)).then(arr => { IMG.caminaPuerta.chica = arr.filter(Boolean); }),
-    Promise.all(ASSETS.caminaPuerta.chico.map(loadImage)).then(arr => { IMG.caminaPuerta.chico = arr.filter(Boolean); }),
+    Promise.all(ASSETS.caminaPuerta.chica.map(src => loadImage(src))).then(arr => { IMG.caminaPuerta.chica = arr.filter(Boolean); }),
+    Promise.all(ASSETS.caminaPuerta.chico.map(src => loadImage(src))).then(arr => { IMG.caminaPuerta.chico = arr.filter(Boolean); }),
 
     // Obstáculos y coleccionables principales
     loadImage(ASSETS.images.book).then(img => { IMG.book = img; }),
@@ -992,17 +996,17 @@ function loadGameplayAssets() {
     loadImage(ASSETS.images.tortilla).then(img => { IMG.tortilla = img; }),
     loadImage(ASSETS.images.mate).then(img => { IMG.mate = img; }),
     loadImage(ASSETS.images.bonus).then(img => { IMG.bonus = img; }),
-    Promise.all(ASSETS.tero.map(loadImage)).then(arr => { IMG.tero = arr.filter(Boolean); }),
+    Promise.all(ASSETS.tero.map(src => loadImage(src))).then(arr => { IMG.tero = arr.filter(Boolean); }),
 
     // Sprites de correr y saltar (chica)
-    Promise.all(ASSETS.characters.chica.run.map(loadImage)).then(arr => { IMG.chars.chica.run = arr; }),
+    Promise.all(ASSETS.characters.chica.run.map(src => loadImage(src))).then(arr => { IMG.chars.chica.run = arr; }),
     loadImage(ASSETS.characters.chica.jumpTakeoff).then(img => { IMG.chars.chica.jumpTakeoff = img; }),
     loadImage(ASSETS.characters.chica.jumpRise).then(img => { IMG.chars.chica.jumpRise = img; }),
     loadImage(ASSETS.characters.chica.jumpApex).then(img => { IMG.chars.chica.jumpApex = img; }),
     loadImage(ASSETS.characters.chica.jumpFall).then(img => { IMG.chars.chica.jumpFall = img; }),
 
     // Sprites de correr y saltar (chico)
-    Promise.all(ASSETS.characters.chico.run.map(loadImage)).then(arr => { IMG.chars.chico.run = arr; }),
+    Promise.all(ASSETS.characters.chico.run.map(src => loadImage(src))).then(arr => { IMG.chars.chico.run = arr; }),
     loadImage(ASSETS.characters.chico.jumpTakeoff).then(img => { IMG.chars.chico.jumpTakeoff = img; }),
     loadImage(ASSETS.characters.chico.jumpRise).then(img => { IMG.chars.chico.jumpRise = img; }),
     loadImage(ASSETS.characters.chico.jumpApex).then(img => { IMG.chars.chico.jumpApex = img; }),
@@ -1018,17 +1022,17 @@ let tier3Promise = null;
 function loadBackgroundAssets() {
   if (tier3Promise) return tier3Promise;
   const jobs = [
-    Promise.all(ASSETS.avion.map(loadImage)).then(arr => { IMG.avion = arr.filter(Boolean); }),
-    Promise.all(ASSETS.avionNoTeRindas.map(loadImage)).then(arr => { IMG.avionNoTeRindas = arr.filter(Boolean); }),
-    Promise.all(ASSETS.maquina.map(loadImage)).then(arr => { IMG.maquina = arr.filter(Boolean); }),
-    Promise.all(ASSETS.coca.chica.map(loadImage)).then(arr => { IMG.coca.chica = arr.filter(Boolean); }),
-    Promise.all(ASSETS.coca.chico.map(loadImage)).then(arr => { IMG.coca.chico = arr.filter(Boolean); }),
-    Promise.all(ASSETS.dialogo.chica.map(loadImage)).then(arr => { IMG.dialogo.chica = arr.filter(Boolean); }),
-    Promise.all(ASSETS.dialogo.chico.map(loadImage)).then(arr => { IMG.dialogo.chico = arr.filter(Boolean); }),
+    Promise.all(ASSETS.avion.map(src => loadImage(src))).then(arr => { IMG.avion = arr.filter(Boolean); }),
+    Promise.all(ASSETS.avionNoTeRindas.map(src => loadImage(src))).then(arr => { IMG.avionNoTeRindas = arr.filter(Boolean); }),
+    Promise.all(ASSETS.maquina.map(src => loadImage(src))).then(arr => { IMG.maquina = arr.filter(Boolean); }),
+    Promise.all(ASSETS.coca.chica.map(src => loadImage(src))).then(arr => { IMG.coca.chica = arr.filter(Boolean); }),
+    Promise.all(ASSETS.coca.chico.map(src => loadImage(src))).then(arr => { IMG.coca.chico = arr.filter(Boolean); }),
+    Promise.all(ASSETS.dialogo.chica.map(src => loadImage(src))).then(arr => { IMG.dialogo.chica = arr.filter(Boolean); }),
+    Promise.all(ASSETS.dialogo.chico.map(src => loadImage(src))).then(arr => { IMG.dialogo.chico = arr.filter(Boolean); }),
     loadImage(ASSETS.characters.chica.golf).then(img => { IMG.chars.chica.golf = img; }),
     loadImage(ASSETS.characters.chico.golf).then(img => { IMG.chars.chico.golf = img; }),
-    Promise.all(ASSETS.festejo.chica.map(loadImage)).then(arr => { IMG.festejo.chica = arr.filter(Boolean); }),
-    Promise.all(ASSETS.festejo.chico.map(loadImage)).then(arr => { IMG.festejo.chico = arr.filter(Boolean); })
+    Promise.all(ASSETS.festejo.chica.map(src => loadImage(src))).then(arr => { IMG.festejo.chica = arr.filter(Boolean); }),
+    Promise.all(ASSETS.festejo.chico.map(src => loadImage(src))).then(arr => { IMG.festejo.chico = arr.filter(Boolean); })
   ];
 
   tier3Promise = Promise.all(jobs);
@@ -1036,11 +1040,16 @@ function loadBackgroundAssets() {
 }
 
 async function loadAssets() {
-  // Carga inmediata de activos críticos (desbloquea el juego en ~200-300ms)
+  // 1. Carga inmediata de activos críticos para el menú
   await loadCriticalAssets();
 
-  // Activa en segundo plano los niveles de juego y tutorial
-  loadGameplayAssets();
+  // 2. Carga esencial de jugabilidad (sprites de correr, saltar, obstáculos y colectivos)
+  await Promise.race([
+    loadGameplayAssets(),
+    new Promise(r => setTimeout(r, 2500))
+  ]);
+
+  // 3. Carga diferida en segundo plano para escenas secundarias (aviones, tutorial, festejo Top 5)
   if (typeof requestIdleCallback === 'function') {
     requestIdleCallback(() => loadBackgroundAssets(), { timeout: 1500 });
   } else {
