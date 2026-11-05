@@ -151,7 +151,8 @@ const ASSETS = {
     intro: 'ASSETS/Musica intro.mp3',       // intro: menú, bondi, tutorial y entrada hasta tocar la máquina expendedora
     game:  'ASSETS/Musicajuego.mp3',        // carrera principal cuando se activa el juego
     bonus: 'ASSETS/bonus1.mp3',            // música especial durante el bonus de carrito de golf (bonus1)
-    lose:  'ASSETS/Musicaperder (1).mp3'    // al chocar contra un obstáculo
+    lose:  'ASSETS/Musicaperder (1).mp3',   // al chocar contra un obstáculo
+    top5:  'ASSETS/musicatop5.mp3'          // música triunfal al entrar al Top 5
   }
 };
 
@@ -632,7 +633,7 @@ const Music = {
     } else if (restart) {
       try { el.currentTime = 0; } catch (_) { /* aún sin metadata */ }
     }
-    el.loop = name === 'intro' || name === 'game';
+    el.loop = name === 'intro' || name === 'game' || name === 'top5';
     el.onloadedmetadata = () => {
       if (Number.isFinite(el.duration) && el.duration > 0) {
         this.durations[name] = el.duration;
@@ -1529,8 +1530,10 @@ function confirmEntry() {
   transitionTo(STATES.GAME_OVER);
   world.deadAt = performance.now();             // evita reinicio accidental con el mismo toque
   if (sent.rank > 0 && sent.rank <= 5) {
+    Music.play('top5', false);                  // suena musicatop5 al entrar al Top 5 en vez de perder
     Sfx.play('bonus');                          // fanfarria triunfal al entrar al Top 5
   } else {
+    Music.play('lose', false);                  // si no entró al Top 5 suena la música de perder
     Sfx.play('pickup');
   }
 }
@@ -4430,7 +4433,12 @@ function die() {
   // Al perder (incluso tras superar los 20.000 pts), deja de cambiar de color de inmediato
   setExtremeMode(false);
   Sfx.play('hit');
-  Music.play('lose');                          // corta el tema principal y suena Musicaperder
+  const inTop5 = Scores.isInTop5(world.score);
+  if (inTop5) {
+    Music.play('top5');                        // al entrar al Top 5 suena musicatop5 en vez de la de perder
+  } else {
+    Music.play('lose');                        // corta el tema principal y suena Musicaperder
+  }
   const prevPersonal = personalRecord;
   const bestGlobal = Scores.best();
   world.newGlobalRecord = world.score > 0 && world.score > bestGlobal;
