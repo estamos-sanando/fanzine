@@ -12,7 +12,14 @@
   <meta name="format-detection" content="telephone=no">
   <link rel="icon" href="ASSETS/chicaquieta.png" type="image/png">
   <link rel="apple-touch-icon" href="ASSETS/chicaquieta.png">
-  <link rel="stylesheet" href="style.css?v=31">
+  <!-- Precarga de imágenes críticas para inicio instantáneo -->
+  <link rel="preload" as="image" href="ASSETS/logonoterindas.png">
+  <link rel="preload" as="image" href="ASSETS/fondoinicio.png">
+  <link rel="preload" as="image" href="ASSETS/fondoinfinito.png">
+  <link rel="preload" as="image" href="ASSETS/SUELO.png">
+  <link rel="preload" as="image" href="ASSETS/chicaquieta.png">
+  <link rel="preload" as="image" href="ASSETS/chicoquieto.png">
+  <link rel="stylesheet" href="style.css?v=32">
 </head>
 <body>
   <!-- Canvas del juego -->
@@ -178,7 +185,7 @@
     </div>
   </div>
 
-  <script src="game.js?v=62"></script>
+  <script src="game.js?v=63"></script>
   <script>
     // Registro del Service Worker (modo offline). Requiere HTTPS o localhost.
     if ('serviceWorker' in navigator) {

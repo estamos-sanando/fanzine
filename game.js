@@ -892,13 +892,33 @@ function toggleFullscreen() {
 /* =============================================================================
  * Carga de imágenes
  * ============================================================================= */
-const IMG = { chars: {} };
-const missingAssets = [];
+const IMG = {
+  chars: {
+    chica: {},
+    chico: {}
+  },
+  tero: [],
+  avion: [],
+  avionNoTeRindas: [],
+  maquina: [],
+  bus620sale: {},
+  coca: { chica: [], chico: [] },
+  dialogo: { chica: [], chico: [] },
+  caminaPuerta: { chica: [], chico: [] },
+  festejo: { chica: [], chico: [] }
+};
 
-function loadImage(src, timeoutMs = 4000) {
-  return new Promise((resolve) => {
+const missingAssets = [];
+const imageCache = new Map();
+
+function loadImage(src, timeoutMs = 4500) {
+  if (!src) return Promise.resolve(null);
+  if (imageCache.has(src)) return imageCache.get(src);
+
+  const promise = new Promise((resolve) => {
     const img = new Image();
     let settled = false;
+
     const timer = setTimeout(() => {
       if (!settled) {
         settled = true;
@@ -907,13 +927,18 @@ function loadImage(src, timeoutMs = 4000) {
       }
     }, timeoutMs);
 
-    img.onload = () => {
+    img.onload = async () => {
       if (!settled) {
         settled = true;
         clearTimeout(timer);
+        // Pre-decodificación asíncrona fuera del hilo de renderizado (GPU-ready, 0 stutter)
+        if (img.decode) {
+          try { await img.decode(); } catch (_) {}
+        }
         resolve(img);
       }
     };
+
     img.onerror = () => {
       if (!settled) {
         settled = true;
@@ -922,75 +947,104 @@ function loadImage(src, timeoutMs = 4000) {
         resolve(null);
       }
     };
+
     try { img.decoding = 'async'; } catch (_) {}
     img.src = src;
   });
+
+  imageCache.set(src, promise);
+  return promise;
+}
+
+// --- Carga progresiva en 3 niveles de prioridad ---
+// Nivel 1: Críticos para renderizar pantalla de inicio, menú y selector de personaje
+async function loadCriticalAssets() {
+  const criticalJobs = [
+    loadImage(ASSETS.images.logo).then(img => { IMG.logo = img; }),
+    loadImage(ASSETS.images.fondoInicio).then(img => { IMG.fondoInicio = img; }),
+    loadImage(ASSETS.images.fondoinfinito).then(img => { IMG.fondoinfinito = img; }),
+    loadImage(ASSETS.images.ground).then(img => { IMG.ground = img; buildGroundTile(); }),
+    loadImage(ASSETS.characters.chica.idle).then(img => { IMG.chars.chica.idle = img; }),
+    loadImage(ASSETS.characters.chico.idle).then(img => { IMG.chars.chico.idle = img; })
+  ];
+  await Promise.all(criticalJobs);
+}
+
+// Nivel 2: Esenciales para cinemática del colectivo 620, personajes corriendo/saltando y jugabilidad principal
+let tier2Promise = null;
+function loadGameplayAssets() {
+  if (tier2Promise) return tier2Promise;
+  const jobs = [
+    // Colectivo 620 y entrada UNLaM
+    loadImage(ASSETS.images.bus620closed).then(img => { IMG.bus620closed = img; }),
+    loadImage(ASSETS.images.bus620open).then(img => { IMG.bus620open = img; }),
+    loadImage(ASSETS.images.fondoEntrada).then(img => { IMG.fondoEntrada = img; }),
+    loadImage(ASSETS.bus620sale.chica).then(img => { IMG.bus620sale.chica = img; }),
+    loadImage(ASSETS.bus620sale.chico).then(img => { IMG.bus620sale.chico = img; }),
+    Promise.all(ASSETS.caminaPuerta.chica.map(loadImage)).then(arr => { IMG.caminaPuerta.chica = arr.filter(Boolean); }),
+    Promise.all(ASSETS.caminaPuerta.chico.map(loadImage)).then(arr => { IMG.caminaPuerta.chico = arr.filter(Boolean); }),
+
+    // Obstáculos y coleccionables principales
+    loadImage(ASSETS.images.book).then(img => { IMG.book = img; }),
+    loadImage(ASSETS.images.horse).then(img => { IMG.horse = img; }),
+    loadImage(ASSETS.images.virgen).then(img => { IMG.virgen = img; }),
+    loadImage(ASSETS.images.toast).then(img => { IMG.toast = img; }),
+    loadImage(ASSETS.images.tortilla).then(img => { IMG.tortilla = img; }),
+    loadImage(ASSETS.images.mate).then(img => { IMG.mate = img; }),
+    loadImage(ASSETS.images.bonus).then(img => { IMG.bonus = img; }),
+    Promise.all(ASSETS.tero.map(loadImage)).then(arr => { IMG.tero = arr.filter(Boolean); }),
+
+    // Sprites de correr y saltar (chica)
+    Promise.all(ASSETS.characters.chica.run.map(loadImage)).then(arr => { IMG.chars.chica.run = arr; }),
+    loadImage(ASSETS.characters.chica.jumpTakeoff).then(img => { IMG.chars.chica.jumpTakeoff = img; }),
+    loadImage(ASSETS.characters.chica.jumpRise).then(img => { IMG.chars.chica.jumpRise = img; }),
+    loadImage(ASSETS.characters.chica.jumpApex).then(img => { IMG.chars.chica.jumpApex = img; }),
+    loadImage(ASSETS.characters.chica.jumpFall).then(img => { IMG.chars.chica.jumpFall = img; }),
+
+    // Sprites de correr y saltar (chico)
+    Promise.all(ASSETS.characters.chico.run.map(loadImage)).then(arr => { IMG.chars.chico.run = arr; }),
+    loadImage(ASSETS.characters.chico.jumpTakeoff).then(img => { IMG.chars.chico.jumpTakeoff = img; }),
+    loadImage(ASSETS.characters.chico.jumpRise).then(img => { IMG.chars.chico.jumpRise = img; }),
+    loadImage(ASSETS.characters.chico.jumpApex).then(img => { IMG.chars.chico.jumpApex = img; }),
+    loadImage(ASSETS.characters.chico.jumpFall).then(img => { IMG.chars.chico.jumpFall = img; })
+  ];
+
+  tier2Promise = Promise.all(jobs);
+  return tier2Promise;
+}
+
+// Nivel 3: En segundo plano / diferido (tutorial, aviones, carrito de golf y festejo de graduación Top 5)
+let tier3Promise = null;
+function loadBackgroundAssets() {
+  if (tier3Promise) return tier3Promise;
+  const jobs = [
+    Promise.all(ASSETS.avion.map(loadImage)).then(arr => { IMG.avion = arr.filter(Boolean); }),
+    Promise.all(ASSETS.avionNoTeRindas.map(loadImage)).then(arr => { IMG.avionNoTeRindas = arr.filter(Boolean); }),
+    Promise.all(ASSETS.maquina.map(loadImage)).then(arr => { IMG.maquina = arr.filter(Boolean); }),
+    Promise.all(ASSETS.coca.chica.map(loadImage)).then(arr => { IMG.coca.chica = arr.filter(Boolean); }),
+    Promise.all(ASSETS.coca.chico.map(loadImage)).then(arr => { IMG.coca.chico = arr.filter(Boolean); }),
+    Promise.all(ASSETS.dialogo.chica.map(loadImage)).then(arr => { IMG.dialogo.chica = arr.filter(Boolean); }),
+    Promise.all(ASSETS.dialogo.chico.map(loadImage)).then(arr => { IMG.dialogo.chico = arr.filter(Boolean); }),
+    loadImage(ASSETS.characters.chica.golf).then(img => { IMG.chars.chica.golf = img; }),
+    loadImage(ASSETS.characters.chico.golf).then(img => { IMG.chars.chico.golf = img; }),
+    Promise.all(ASSETS.festejo.chica.map(loadImage)).then(arr => { IMG.festejo.chica = arr.filter(Boolean); }),
+    Promise.all(ASSETS.festejo.chico.map(loadImage)).then(arr => { IMG.festejo.chico = arr.filter(Boolean); })
+  ];
+
+  tier3Promise = Promise.all(jobs);
+  return tier3Promise;
 }
 
 async function loadAssets() {
-  const jobs = [];
-  for (const [key, src] of Object.entries(ASSETS.images)) {
-    jobs.push(loadImage(src).then((img) => { IMG[key] = img; }));
-  }
-  IMG.tero = [];
-  jobs.push(Promise.all(ASSETS.tero.map(loadImage)).then((arr) => { IMG.tero = arr.filter(Boolean); }));
+  // Carga inmediata de activos críticos (desbloquea el juego en ~200-300ms)
+  await loadCriticalAssets();
 
-  // Avión promocional de Instagram (tutorial)
-  IMG.avion = [];
-  jobs.push(Promise.all(ASSETS.avion.map(loadImage)).then((arr) => { IMG.avion = arr.filter(Boolean); }));
-
-  // Avión oficial durante el juego ("No te rindas")
-  IMG.avionNoTeRindas = [];
-  jobs.push(Promise.all(ASSETS.avionNoTeRindas.map(loadImage)).then((arr) => { IMG.avionNoTeRindas = arr.filter(Boolean); }));
-
-  // Máquina expendedora frames
-  IMG.maquina = [];
-  jobs.push(Promise.all(ASSETS.maquina.map(loadImage)).then((arr) => { IMG.maquina = arr.filter(Boolean); }));
-
-  // Bus 620 con personaje bajando
-  IMG.bus620sale = {};
-  for (const [id, src] of Object.entries(ASSETS.bus620sale)) {
-    jobs.push(loadImage(src).then((img) => { IMG.bus620sale[id] = img; }));
-  }
-
-  // Coca frames
-  IMG.coca = {};
-  for (const [id, arr] of Object.entries(ASSETS.coca)) {
-    jobs.push(Promise.all(arr.map(loadImage)).then((imgs) => { IMG.coca[id] = imgs.filter(Boolean); }));
-  }
-
-  // Diálogo frames
-  IMG.dialogo = {};
-  for (const [id, arr] of Object.entries(ASSETS.dialogo)) {
-    jobs.push(Promise.all(arr.map(loadImage)).then((imgs) => { IMG.dialogo[id] = imgs.filter(Boolean); }));
-  }
-
-  // Camina puerta frames
-  IMG.caminaPuerta = {};
-  for (const [id, arr] of Object.entries(ASSETS.caminaPuerta)) {
-    jobs.push(Promise.all(arr.map(loadImage)).then((imgs) => { IMG.caminaPuerta[id] = imgs.filter(Boolean); }));
-  }
-
-  // Festejo graduación frames (chica / chico)
-  IMG.festejo = {};
-  for (const [id, arr] of Object.entries(ASSETS.festejo)) {
-    jobs.push(Promise.all(arr.map(loadImage)).then((imgs) => { IMG.festejo[id] = imgs.filter(Boolean); }));
-  }
-
-  for (const [id, set] of Object.entries(ASSETS.characters)) {
-    const slot = (IMG.chars[id] = {});
-    for (const [pose, src] of Object.entries(set)) {
-      if (Array.isArray(src)) {
-        jobs.push(Promise.all(src.map(loadImage)).then((arr) => { slot[pose] = arr; }));
-      } else {
-        jobs.push(loadImage(src).then((img) => { slot[pose] = img; }));
-      }
-    }
-  }
-  await Promise.all(jobs);
-  if (missingAssets.length) {
-    console.error('[ASSETS] No se pudieron cargar:\n - ' + missingAssets.join('\n - ') +
-                  '\nRevisá el diccionario ASSETS al inicio de game.js (mayúsculas/minúsculas incluidas).');
+  // Activa en segundo plano los niveles de juego y tutorial
+  loadGameplayAssets();
+  if (typeof requestIdleCallback === 'function') {
+    requestIdleCallback(() => loadBackgroundAssets(), { timeout: 1500 });
+  } else {
+    setTimeout(loadBackgroundAssets, 150);
   }
 }
 
@@ -4740,7 +4794,7 @@ function renderOverlayScores() {
   }
 }
 
-function startGame() {
+async function startGame() {
   if (starting) return;
   if (state === STATES.LOADING) {
     if (dom.overlay) dom.overlay.classList.remove('is-loading');
@@ -4748,6 +4802,13 @@ function startGame() {
   }
   if (state !== STATES.CHARACTER_SELECT) return;
   starting = true;
+
+  // Si el usuario comenzó de inmediato, asegurar que los sprites de juego estén listos
+  if (tier2Promise) {
+    try {
+      await Promise.race([tier2Promise, new Promise(r => setTimeout(r, 1200))]);
+    } catch (_) {}
+  }
 
   // Audio y pantalla completa (requieren gesto del usuario)
   Sfx.unlock();
