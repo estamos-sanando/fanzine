@@ -121,7 +121,10 @@ const ASSETS = {
       jumpRise:    'ASSETS/chicasalto1.png',
       jumpApex:    'ASSETS/chicasalto2.png',
       jumpFall:    'ASSETS/chicasalto3.png',
-      golf:        'ASSETS/golfchica.png'
+      golf: [
+        'ASSETS/golfchica.png',
+        'ASSETS/golfchica1.png'
+      ]
     },
     chico: {
       idle:        'ASSETS/chicoquieto.png',
@@ -135,7 +138,10 @@ const ASSETS = {
       jumpRise:    'ASSETS/chicosalto1.png',
       jumpApex:    'ASSETS/chicosalto2.png',
       jumpFall:    'ASSETS/chicosalto3.png',
-      golf:        'ASSETS/golfchico.png'
+      golf: [
+        'ASSETS/golfchico.png',
+        'ASSETS/golfchico1.png'
+      ]
     }
   },
 
@@ -1029,8 +1035,12 @@ function loadBackgroundAssets() {
     Promise.all(ASSETS.coca.chico.map(src => loadImage(src))).then(arr => { IMG.coca.chico = arr.filter(Boolean); }),
     Promise.all(ASSETS.dialogo.chica.map(src => loadImage(src))).then(arr => { IMG.dialogo.chica = arr.filter(Boolean); }),
     Promise.all(ASSETS.dialogo.chico.map(src => loadImage(src))).then(arr => { IMG.dialogo.chico = arr.filter(Boolean); }),
-    loadImage(ASSETS.characters.chica.golf).then(img => { IMG.chars.chica.golf = img; }),
-    loadImage(ASSETS.characters.chico.golf).then(img => { IMG.chars.chico.golf = img; }),
+    (Array.isArray(ASSETS.characters.chica.golf)
+      ? Promise.all(ASSETS.characters.chica.golf.map(src => loadImage(src))).then(arr => { IMG.chars.chica.golf = arr.filter(Boolean); })
+      : loadImage(ASSETS.characters.chica.golf).then(img => { IMG.chars.chica.golf = img; })),
+    (Array.isArray(ASSETS.characters.chico.golf)
+      ? Promise.all(ASSETS.characters.chico.golf.map(src => loadImage(src))).then(arr => { IMG.chars.chico.golf = arr.filter(Boolean); })
+      : loadImage(ASSETS.characters.chico.golf).then(img => { IMG.chars.chico.golf = img; })),
     Promise.all(ASSETS.festejo.chica.map(src => loadImage(src))).then(arr => { IMG.festejo.chica = arr.filter(Boolean); }),
     Promise.all(ASSETS.festejo.chico.map(src => loadImage(src))).then(arr => { IMG.festejo.chico = arr.filter(Boolean); })
   ];
@@ -1513,6 +1523,7 @@ function resetRun() {
   world.teroAlt = 0;                            // rotación de alturas del tero (0=bajo, 1=medio, 2=alto)
   world.emergencyTeroCd = 0;                    // enfriamiento entre teros cazadores
   world.newRecord = false;
+  GolfDust.reset();
   world.golfTimer = 0;                          // segundos restantes del bonus de carrito de golf
   world.golfGraceTimer = 0;                     // margen breve tras finalizar el carrito
   world.bonusTakenCount = 0;                    // cuántas veces se agarró bonus.png en la partida (0, 1, 2)
@@ -3126,6 +3137,9 @@ stateHandlers[STATES.PLAYING] = {
       world.extremeFlash = Math.max(0, world.extremeFlash - dt * 2.5);
     }
 
+    // Efecto de polvo de ruedas del carrito de golf
+    GolfDust.update(dt);
+
     // --- Temporizador del bonus Carrito de Golf (5 segundos) y aparición de bonus.png ---
     const G = CONFIG.golf;
     if (world.golfTimer > 0) {
@@ -3364,6 +3378,129 @@ stateHandlers[STATES.PLAYING] = {
 };
 
 /* =============================================================================
+ * EFECTO DE POLVO DE RUEDAS DEL CARRITO DE GOLF
+ * Partículas de humo/polvo pixel art que se desprenden de las ruedas al rodar
+ * ============================================================================= */
+const GolfDust = {
+  particles: [],
+  spawnTimer: 0,
+
+  reset() {
+    this.particles = [];
+    this.spawnTimer = 0;
+  },
+
+  update(dt) {
+    if (world.golfTimer > 0 && hero.grounded && state === STATES.PLAYING) {
+      this.spawnTimer += dt;
+      const interval = 0.024; // cadencia ágil (~40 partículas por segundo)
+      while (this.spawnTimer >= interval) {
+        this.spawnTimer -= interval;
+        this.spawn();
+      }
+    } else {
+      this.spawnTimer = 0;
+    }
+
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const p = this.particles[i];
+      p.t += dt;
+      if (p.t >= p.maxLife) {
+        this.particles.splice(i, 1);
+        continue;
+      }
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vy += p.gravity * dt;
+      p.vx *= 0.95; // desaceleración aerodinámica
+      p.r += p.growth * dt;
+      p.rot += p.rotSpeed * dt;
+    }
+  },
+
+  spawn() {
+    const set = IMG.chars[character];
+    const currentImg = (set && Array.isArray(set.golf) && set.golf[0]) ? set.golf[0] : (set ? set.golf : null);
+    const h = U * CONFIG.golf.heightMul;
+    const w = currentImg ? h * (currentImg.naturalWidth / currentImg.naturalHeight) : U * 1.6;
+
+    // 75% del polvo sale de la rueda trasera que tracciona, 25% de la delantera
+    const isRear = Math.random() < 0.75;
+    const wheelX = isRear ? (heroX - w * 0.28) : (heroX + w * 0.28);
+    const wheelY = groundY - hero.h * U + (character === 'chica' ? U * 0.03 : U * 0.02);
+
+    const ox = (Math.random() - 0.5) * 8 - (isRear ? 4 : 0);
+    const oy = (Math.random() - 0.5) * 4;
+
+    // Desplazamiento hacia atrás y elevación suave
+    const baseSpeed = world.speed || 380;
+    const vx = -baseSpeed * (0.35 + Math.random() * 0.45);
+    const vy = -16 - Math.random() * 28;
+
+    const maxLife = 0.36 + Math.random() * 0.28;
+    const startR = 3.5 + Math.random() * 3.5;
+    const growth = 18 + Math.random() * 14;
+
+    const isSpark = Math.random() < 0.20;
+    const colorType = isSpark ? 'turbo' : (Math.random() < 0.45 ? 'light' : 'dust');
+
+    this.particles.push({
+      x: wheelX + ox,
+      y: wheelY + oy,
+      vx,
+      vy,
+      gravity: 12 + Math.random() * 18,
+      r: startR,
+      growth,
+      t: 0,
+      maxLife,
+      rot: Math.random() * Math.PI * 2,
+      rotSpeed: (Math.random() - 0.5) * 6,
+      colorType,
+      alphaMax: 0.58 + Math.random() * 0.22
+    });
+  },
+
+  draw(g) {
+    if (!this.particles.length) return;
+    g.save();
+    for (const p of this.particles) {
+      const progress = p.t / p.maxLife;
+      const alpha = (1 - progress) * p.alphaMax;
+      if (alpha <= 0.01) continue;
+
+      const r = p.r;
+      g.save();
+      g.translate(Math.round(p.x), Math.round(p.y));
+      g.rotate(p.rot);
+
+      if (p.colorType === 'turbo') {
+        // Chispa brillante esmeralda / dorada del bonus
+        g.fillStyle = `rgba(0, 230, 118, ${alpha * 0.8})`;
+        g.fillRect(-r * 0.35, -r * 0.35, r * 0.7, r * 0.7);
+        g.fillStyle = `rgba(255, 211, 77, ${alpha * 0.95})`;
+        g.fillRect(-r * 0.2, -r * 0.2, r * 0.4, r * 0.4);
+      } else {
+        // Nube de polvo suave con capas concéntricas estilo pixel art
+        g.fillStyle = p.colorType === 'light'
+          ? `rgba(238, 243, 250, ${alpha * 0.75})`
+          : `rgba(195, 206, 218, ${alpha * 0.70})`;
+        g.beginPath();
+        g.arc(0, 0, r, 0, Math.PI * 2);
+        g.fill();
+
+        g.fillStyle = `rgba(145, 160, 178, ${alpha * 0.32})`;
+        g.beginPath();
+        g.arc(0, 0, r * 1.35, 0, Math.PI * 2);
+        g.fill();
+      }
+      g.restore();
+    }
+    g.restore();
+  }
+};
+
+/* =============================================================================
  * EFECTOS DE CELEBRACIÓN DE GRADUACIÓN (CONFETI PIXEL ART Y HUMO VERDE)
  * ============================================================================= */
 const GameOverCelebration = {
@@ -3563,7 +3700,15 @@ function heroSprite() {
   const set = IMG.chars[character];
   if (!set) return null;
   if (state === STATES.LOADING || state === STATES.CHARACTER_SELECT) return set.idle;
-  if (world.golfTimer > 0 && set.golf) return set.golf;
+  if (world.golfTimer > 0 && set.golf) {
+    if (Array.isArray(set.golf) && set.golf.length) {
+      // Rotación ágil de ruedas alternando frames (golfchica/golfchica1 y golfchico/golfchico1)
+      const wheelFps = lerp(13, 19, world.p || 0);
+      const idx = Math.floor(world.time * wheelFps) % set.golf.length;
+      return set.golf[idx] || set.golf[0];
+    }
+    return set.golf;
+  }
   if (!hero.grounded) {
     // 1) despegue agachado (también al iniciar 2do y 3er salto)
     if (hero.sinceJump < 0.07 || (hero.jumps >= 2 && hero.sinceDouble < 0.08)) return set.jumpTakeoff;
@@ -3585,7 +3730,9 @@ function drawHero(customGroundY = groundY) {
   const img = heroSprite();
   if (!img) return;
 
-  const isGolf = world.golfTimer > 0 && set.golf && img === set.golf;
+  const isGolf = world.golfTimer > 0 && (
+    (Array.isArray(set.golf) && set.golf.includes(img)) || img === set.golf
+  );
   const shrink = 1 - Math.min(hero.h, 2) * 0.18;
 
   if (isGolf) {
@@ -3594,6 +3741,9 @@ function drawHero(customGroundY = groundY) {
     const rumble = (hero.grounded && state === STATES.PLAYING) ? Math.sin(world.time * 42) * U * 0.012 : 0;
     const padOffset = h * (character === 'chica' ? 0.045 : 0.028);
     const endingBlink = world.golfTimer < 1.0 && Math.floor(world.time * 12) % 2 === 1;
+
+    // Efecto de polvo debajo y detrás de las ruedas en movimiento
+    GolfDust.draw(ctx);
 
     // Sombra amplia bajo el carrito
     ctx.fillStyle = 'rgba(0,0,0,0.34)';
