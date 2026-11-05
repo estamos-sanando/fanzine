@@ -3549,6 +3549,28 @@ function drawIntroLogo(g, x, y, alpha = 1) {
   ctxTarget.restore();
 }
 
+function drawGameOverLogo(cx, centerY, targetH = 34, maxW = 220) {
+  const img = IMG.logo;
+  if (!img || !img.naturalWidth) {
+    drawText('¡NO TE RINDAS!', cx, centerY, targetH * 0.7, { color: '#ffd34d', stroke: '#000', weight: 900 });
+    return;
+  }
+  const aspect = img.naturalWidth / img.naturalHeight;
+  let h = targetH;
+  let w = h * aspect;
+  if (w > maxW) {
+    w = maxW;
+    h = w / aspect;
+  }
+  ctx.save();
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.65)';
+  ctx.shadowBlur = 10;
+  ctx.shadowOffsetY = 2;
+  ctx.drawImage(img, cx - w / 2, centerY - h / 2, w, h);
+  ctx.restore();
+}
+
+
 function getCampusRect() {
   const img = IMG.fondoEntrada;
   const nw = img ? img.naturalWidth : 1366;
@@ -4129,13 +4151,11 @@ function drawDeadPanel(blink) {
     ctx.stroke();
 
     const scaleRatio = panelH / 340;
-    let ty = cardY + 24 * scaleRatio;
-    const titleSize = clamp(26 * scaleRatio, 18, 28);
-    drawText('GAME OVER', cardX + cardW / 2, ty, titleSize, {
-      color: '#ff6b6b', stroke: '#000', weight: 900
-    });
+    const logoH = clamp(42 * scaleRatio, 28, 48);
+    let ty = cardY + 25 * scaleRatio;
+    drawGameOverLogo(cardX + cardW / 2, ty, logoH, cardW * 0.75);
 
-    ty += 20 * scaleRatio;
+    ty += 24 * scaleRatio;
     drawText('★ ¡ENTRASTE AL TOP 5! ★', cardX + cardW / 2, ty, clamp(13 * scaleRatio, 10, 13), {
       color: '#ffd34d', weight: 800, blink: true
     });
@@ -4274,9 +4294,11 @@ function drawDeadPanel(blink) {
     ctx.lineWidth = 2;
     ctx.stroke();
 
+    const logoH = clamp(cardH * 0.16, 22, 30);
     let ty = cardY + 18;
-    drawText('GAME OVER', cardX + totalW / 2, ty, 20, { color: '#ff6b6b', stroke: '#000', weight: 900 });
-    ty += 16;
+    drawGameOverLogo(cardX + totalW / 2, ty, logoH, totalW * 0.65);
+
+    ty += 18;
     drawText('★ ¡ENTRASTE AL TOP 5! ★', cardX + totalW / 2, ty, 10, { color: '#ffd34d', weight: 800 });
 
     ty += 20;
@@ -4325,12 +4347,11 @@ function drawDeadPanel(blink) {
     ctx.stroke();
 
     const scaleRatio = panelH / 340;
-    let ty = cardY + 28 * scaleRatio;
-    drawText('GAME OVER', cardX + cardW / 2, ty, clamp(28 * scaleRatio, 20, 28), {
-      color: '#ff6b6b', stroke: '#000', weight: 900
-    });
+    const logoH = clamp(46 * scaleRatio, 30, 52);
+    let ty = cardY + 30 * scaleRatio;
+    drawGameOverLogo(cardX + cardW / 2, ty, logoH, cardW * 0.75);
 
-    ty += 24 * scaleRatio;
+    ty += 27 * scaleRatio;
     const rankMsg = world.addedRank > 5
       ? 'PUNTAJE REGISTRADO • PUESTO #' + world.addedRank
       : (world.newPersonalRecord ? '★ ¡SUPERASTE TU RÉCORD! ★' : 'PARTIDA FINALIZADA');
