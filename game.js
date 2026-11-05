@@ -91,6 +91,22 @@ const ASSETS = {
     chico: ['ASSETS/chicocaminapuerta.png', 'ASSETS/chicocaminapuerta2.png']
   },
 
+  // Festejo graduación (4 frames cada personaje con birrete y diploma UNLaM)
+  festejo: {
+    chica: [
+      'ASSETS/chicafestejo1.png',
+      'ASSETS/chicafestejo2.png',
+      'ASSETS/chicafestejo3.png',
+      'ASSETS/chicafestejo4.png'
+    ],
+    chico: [
+      'ASSETS/chicofestejo1.png',
+      'ASSETS/chicofestejo2.png',
+      'ASSETS/chicofestejo3.png',
+      'ASSETS/chicofestejo4.png'
+    ]
+  },
+
   // Personajes disponibles (se elige en la pantalla de inicio)
   characters: {
     chica: {
@@ -865,6 +881,12 @@ async function loadAssets() {
     jobs.push(Promise.all(arr.map(loadImage)).then((imgs) => { IMG.caminaPuerta[id] = imgs.filter(Boolean); }));
   }
 
+  // Festejo graduación frames (chica / chico)
+  IMG.festejo = {};
+  for (const [id, arr] of Object.entries(ASSETS.festejo)) {
+    jobs.push(Promise.all(arr.map(loadImage)).then((imgs) => { IMG.festejo[id] = imgs.filter(Boolean); }));
+  }
+
   for (const [id, set] of Object.entries(ASSETS.characters)) {
     const slot = (IMG.chars[id] = {});
     for (const [pose, src] of Object.entries(set)) {
@@ -1506,7 +1528,11 @@ function confirmEntry() {
   entryUI.hits = [];
   transitionTo(STATES.GAME_OVER);
   world.deadAt = performance.now();             // evita reinicio accidental con el mismo toque
-  Sfx.play('pickup');
+  if (sent.rank > 0 && sent.rank <= 5) {
+    Sfx.play('bonus');                          // fanfarria triunfal al entrar al Top 5
+  } else {
+    Sfx.play('pickup');
+  }
 }
 
 function handleEntryPointer(clientX, clientY) {
@@ -3182,10 +3208,104 @@ stateHandlers[STATES.PLAYING] = {
   }
 };
 
+/* =============================================================================
+ * EFECTOS DE CELEBRACIÓN DE GRADUACIÓN (CONFETI PIXEL ART Y HUMO VERDE)
+ * ============================================================================= */
+const GameOverCelebration = {
+  confetti: [],
+  smokePuffs: [],
+  initialized: false,
+
+  init() {
+    const CONFETTI_COLORS = ['#ffffff', '#f8fafc', '#00e676', '#10b981', '#34d399', '#059669', '#ffd34d', '#e2e8f0'];
+    this.confetti = [];
+    for (let i = 0; i < 65; i++) {
+      this.confetti.push({
+        x: Math.random() * (W || 960),
+        y: Math.random() * (H || 540),
+        w: Math.round(5 + Math.random() * 5),
+        h: Math.round(3 + Math.random() * 4),
+        vx: (Math.random() - 0.5) * 35,
+        vy: 55 + Math.random() * 75,
+        rot: Math.random() * Math.PI * 2,
+        rotSpeed: (Math.random() - 0.5) * 4,
+        flip: Math.random() * Math.PI * 2,
+        flipSpeed: 2 + Math.random() * 3.5,
+        swayPhase: Math.random() * Math.PI * 2,
+        swayAmp: 18 + Math.random() * 20,
+        color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)]
+      });
+    }
+
+    this.smokePuffs = [];
+    for (let i = 0; i < 14; i++) {
+      this.smokePuffs.push({
+        ox: (Math.random() - 0.5) * 110,
+        oy: (Math.random() - 0.5) * 75 + 15,
+        r: 45 + Math.random() * 45,
+        alpha: 0.20 + Math.random() * 0.22,
+        pulseSpeed: 1.2 + Math.random() * 1.5,
+        phase: Math.random() * Math.PI * 2
+      });
+    }
+    this.initialized = true;
+  },
+
+  reset() {
+    if (!this.initialized) this.init();
+    for (const p of this.confetti) {
+      p.y = Math.random() * (H || 540) * 0.6 - (H || 540) * 0.4;
+      p.x = Math.random() * (W || 960);
+    }
+  },
+
+  update(dt) {
+    if (!this.initialized) this.init();
+    for (const p of this.confetti) {
+      p.y += p.vy * dt;
+      p.x += (p.vx + Math.sin(world.deadT * 2 + p.swayPhase) * p.swayAmp) * dt;
+      p.rot += p.rotSpeed * dt;
+      p.flip += p.flipSpeed * dt;
+      if (p.y > H + 15) {
+        p.y = -15;
+        p.x = Math.random() * W;
+      }
+      if (p.x < -20) p.x = W + 10;
+      if (p.x > W + 20) p.x = -10;
+    }
+  },
+
+  drawConfetti(ctx) {
+    for (const p of this.confetti) {
+      const px = Math.round(p.x);
+      const py = Math.round(p.y);
+      const flipScale = Math.cos(p.flip);
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.rotate(p.rot);
+      ctx.scale(1, Math.abs(flipScale) < 0.15 ? 0.15 : flipScale);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.4)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(-p.w / 2, -p.h / 2, p.w, p.h);
+      ctx.restore();
+    }
+  }
+};
+
 /* ---------- GAME_OVER ---------- */
 stateHandlers[STATES.GAME_OVER] = {
+  enter() {
+    if (world.addedRank > 0 && world.addedRank <= 5) {
+      GameOverCelebration.reset();
+    }
+  },
   update(dt) {
     world.deadT += dt;
+    if (world.addedRank > 0 && world.addedRank <= 5) {
+      GameOverCelebration.update(dt);
+    }
   },
   draw() {
     // Render subyacente
@@ -3833,14 +3953,30 @@ function drawEntryPanel(blink) {
   entryUI.hits = hits;
 }
 
-/* Game Over con ranking arcade (Top 5) */
+/* Game Over con ranking arcade y celebración de graduación (Top 5) */
 function drawDeadPanel(blink) {
-  ctx.fillStyle = 'rgba(6, 8, 16, 0.62)';
+  const inTop5 = (world.addedRank > 0 && world.addedRank <= 5) || world.newGlobalRecord;
+  const charId = character === 'chica' ? 'chica' : 'chico';
+  const festejos = (IMG.festejo && IMG.festejo[charId]) || [];
+
+  // 1. Telón oscuro translúcido
+  ctx.fillStyle = 'rgba(5, 8, 14, 0.78)';
   ctx.fillRect(0, 0, W, H);
 
-  const f = clamp(Math.min(W * 0.05, H * 0.042), 11, 28);
+  if (inTop5) {
+    // Atmósfera de humo verde graduación en el escenario
+    const sceneGrad = ctx.createRadialGradient(W * 0.32, H * 0.46, 20, W * 0.32, H * 0.46, Math.max(W, H) * 0.55);
+    sceneGrad.addColorStop(0, 'rgba(0, 230, 118, 0.22)');
+    sceneGrad.addColorStop(0.45, 'rgba(16, 185, 129, 0.09)');
+    sceneGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = sceneGrad;
+    ctx.fillRect(0, 0, W, H);
+
+    // Lluvia de confeti estilo pixel art
+    GameOverCelebration.drawConfetti(ctx);
+  }
+
   const cap = Math.min(CONFIG.maxScores, 5);
-  // Solo se visualizan los primeros 5 en la tabla
   const rows = Scores.list.slice(0, cap).map((e, i) => ({
     rank: i + 1,
     name: e.name,
@@ -3848,45 +3984,403 @@ function drawDeadPanel(blink) {
     isNew: world.addedRank === i + 1
   }));
 
-  const medal = [UNLAM.green, '#d9dee8', '#e0a070', '#ffffff', '#ffffff'];
-  const lines = [
-    { t: 'GAME OVER', s: 1.9, color: '#ff6b6b', gap: 0.3 },
-    { t: 'PUNTOS ' + pad(world.score), s: 1.15 },
-    { t: 'TU RÉCORD ' + pad(personalRecord), s: 0.95, color: UNLAM.light }
-  ];
-  if (world.addedRank > 0 && world.addedRank <= 5) {
-    lines.push({ t: '★ ¡ENTRASTE AL TOP 5! (#' + world.addedRank + ') ★', s: 0.95, color: '#ffd34d', blink: true });
-  } else if (world.newGlobalRecord) {
-    lines.push({ t: '★ ¡NUEVO RÉCORD GLOBAL! ★', s: 0.95, color: '#ffd34d', blink: true });
-  } else if (world.newPersonalRecord) {
-    const rankTxt = world.addedRank > 0 ? ' (PUESTO #' + world.addedRank + ')' : '';
-    lines.push({ t: '★ ¡SUPERASTE TU RÉCORD!' + rankTxt + ' ★', s: 0.95, color: UNLAM.light, blink: true });
-  } else if (world.addedRank > 5) {
-    lines.push({ t: 'PUNTAJE REGISTRADO · PUESTO #' + world.addedRank, s: 0.85, color: '#aab3c5' });
-  }
-  if (rows.length) {
-    lines.push({ t: '— TOP 5 GLOBAL —', s: 0.85, color: UNLAM.green, gap: 0.4 });
-    rows.forEach((r) => lines.push({
-      t: String(r.rank).padStart(2, ' ') + '. ' + r.name + '  ' + pad(r.score),
-      s: 0.95, color: medal[r.rank - 1] || '#fff', blink: r.isNew, alt: UNLAM.light
-    }));
-  }
-  const note = Scores.status === 'offline'
-    ? (Scores.pending.length ? 'Sin conexión · tu puntaje se enviará solo' : 'Sin conexión · ranking guardado')
-    : (Scores.syncing ? 'Enviando puntaje…' : '');
-  if (note) lines.push({ t: note, s: 0.6, color: '#aab3c5', gap: 0.2 });
-  lines.push({ t: 'Tocá para reiniciar', s: 0.9, gap: 0.6, blink: true, dim: true });
+  const isWide = W >= 560;
 
-  const hOf = (l) => f * l.s * 1.4 + (l.gap || 0) * f;
-  const total = lines.reduce((a, l) => a + hOf(l), 0);
-  let y = Math.max(safeTop + 8, (H - total) / 2);
-  for (const l of lines) {
-    const h = hOf(l);
-    let color = l.color || '#fff', alpha = 1;
-    if (l.blink && l.alt) color = blink ? l.alt : l.color;      // fila nueva: alterna verde/medalla
-    else if (l.blink) alpha = l.dim ? (blink ? 1 : 0.35) : (blink ? 1 : 0.5);
-    drawText(l.t, W / 2, y + (f * l.s * 1.4) / 2 + (l.gap || 0) * f, f * l.s, { color, alpha });
-    y += h;
+  if (inTop5 && isWide) {
+    // COMPOSICIÓN DE DOS COLUMNAS: Cuadro de Graduación + Card Arcade de Score
+    const totalW = clamp(W * 0.88, 520, 780);
+    const cuadroW = clamp(totalW * 0.34, 180, 250);
+    const gap = clamp(W * 0.025, 14, 24);
+    const cardW = totalW - cuadroW - gap;
+
+    // Espacio vertical: reservar 70px al fondo para botones del menú y ranking
+    const availH = H - safeTop - 70;
+    const panelH = clamp(availH * 0.95, 250, 350);
+    const startX = Math.round((W - totalW) / 2);
+    const startY = Math.max(safeTop + 8, Math.round((H - 60 - panelH) / 2));
+
+    // === CUADRO DE GRADUACIÓN (IZQUIERDA) ===
+    const cx = startX;
+    const cy = startY;
+
+    ctx.save();
+    ctx.shadowColor = 'rgba(0, 230, 118, 0.45)';
+    ctx.shadowBlur = 16;
+    rrect(cx, cy, cuadroW, panelH, 14);
+    const frameGrad = ctx.createLinearGradient(cx, cy, cx + cuadroW, cy + panelH);
+    frameGrad.addColorStop(0, '#ffd34d');
+    frameGrad.addColorStop(0.5, '#00e676');
+    frameGrad.addColorStop(1, '#ffd34d');
+    ctx.fillStyle = frameGrad;
+    ctx.fill();
+    ctx.restore();
+
+    const inset = 5;
+    const innerX = cx + inset;
+    const innerY = cy + inset;
+    const innerW = cuadroW - inset * 2;
+    const innerH = panelH - inset * 2;
+
+    ctx.save();
+    rrect(innerX, innerY, innerW, innerH, 10);
+    ctx.clip();
+
+    // Fondo oscuro de estudio fotográfico
+    const bgGrad = ctx.createLinearGradient(innerX, innerY, innerX, innerY + innerH);
+    bgGrad.addColorStop(0, '#050c08');
+    bgGrad.addColorStop(0.5, '#091810');
+    bgGrad.addColorStop(1, '#030805');
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(innerX, innerY, innerW, innerH);
+
+    // Luz verde central brillante (destello de estudio)
+    const charCenterX = innerX + innerW / 2;
+    const charCenterY = innerY + innerH * 0.52;
+    const smokeCenterGrad = ctx.createRadialGradient(
+      charCenterX, charCenterY, 15,
+      charCenterX, charCenterY, innerW * 0.72
+    );
+    smokeCenterGrad.addColorStop(0, 'rgba(0, 230, 118, 0.65)');
+    smokeCenterGrad.addColorStop(0.35, 'rgba(16, 185, 129, 0.45)');
+    smokeCenterGrad.addColorStop(0.7, 'rgba(5, 150, 105, 0.20)');
+    smokeCenterGrad.addColorStop(1, 'rgba(4, 120, 87, 0)');
+    ctx.fillStyle = smokeCenterGrad;
+    ctx.fillRect(innerX, innerY, innerW, innerH);
+
+    // Humo verde volumétrico (volutas suaves que respiran)
+    for (const s of GameOverCelebration.smokePuffs) {
+      const pulse = Math.sin(world.deadT * s.pulseSpeed + s.phase) * 0.15;
+      const r = s.r * (1 + pulse);
+      const sx = charCenterX + s.ox + Math.sin(world.deadT * 0.9 + s.phase) * 14;
+      const sy = charCenterY + s.oy + Math.cos(world.deadT * 0.7 + s.phase) * 10;
+      const puffGrad = ctx.createRadialGradient(sx, sy, r * 0.15, sx, sy, r);
+      puffGrad.addColorStop(0, 'rgba(52, 211, 153, ' + (s.alpha * 0.85) + ')');
+      puffGrad.addColorStop(0.45, 'rgba(16, 185, 129, ' + (s.alpha * 0.5) + ')');
+      puffGrad.addColorStop(0.8, 'rgba(4, 120, 87, ' + (s.alpha * 0.2) + ')');
+      puffGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = puffGrad;
+      ctx.beginPath();
+      ctx.arc(sx, sy, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Sprite festejando con diploma UNLaM y birrete
+    if (festejos.length) {
+      const frameIdx = Math.floor(world.deadT * 4.8) % festejos.length;
+      const img = festejos[frameIdx];
+      if (img && img.naturalWidth) {
+        const spriteH = innerH * 0.68;
+        const spriteW = (img.naturalWidth / img.naturalHeight) * spriteH;
+        const spX = charCenterX - spriteW / 2;
+        const spY = innerY + innerH - spriteH - 26;
+
+        // Sombra de pie del personaje
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+        ctx.beginPath();
+        ctx.ellipse(charCenterX, spY + spriteH + 4, spriteW * 0.35, 8, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(img, spX, spY, spriteW, spriteH);
+        ctx.imageSmoothingEnabled = true;
+      }
+    }
+
+    // Tira superior: "UNLaM • TOP 5"
+    rrect(innerX + 10, innerY + 8, innerW - 20, 22, 6);
+    ctx.fillStyle = 'rgba(6, 40, 24, 0.85)';
+    ctx.fill();
+    ctx.strokeStyle = '#ffd34d';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    drawText('🎓 UNLaM • TOP 5 🎓', charCenterX, innerY + 19, clamp(innerW * 0.065, 10, 12), { color: '#ffd34d', weight: 800 });
+
+    // Placa dorada inferior con el puesto
+    const medalIcons = ['🥇', '🥈', '🥉', '★', '★'];
+    const rankIdx = (world.addedRank > 0 && world.addedRank <= 5) ? world.addedRank - 1 : 0;
+    const rankIcon = medalIcons[rankIdx] || '★';
+    const displayRank = world.addedRank > 0 ? world.addedRank : 1;
+    const plaqueH = clamp(innerH * 0.11, 26, 32);
+    const plaqueY = innerY + innerH - plaqueH - 6;
+    rrect(innerX + 10, plaqueY, innerW - 20, plaqueH, 8);
+    const plaqueGrad = ctx.createLinearGradient(0, plaqueY, 0, plaqueY + plaqueH);
+    plaqueGrad.addColorStop(0, '#ffe066');
+    plaqueGrad.addColorStop(1, '#f59e0b');
+    ctx.fillStyle = plaqueGrad;
+    ctx.fill();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    drawText(rankIcon + ' PUESTO #' + displayRank + ' ' + rankIcon, charCenterX, plaqueY + plaqueH / 2, clamp(plaqueH * 0.48, 12, 14), {
+      color: '#1a1002', stroke: 'rgba(255,255,255,0.4)', weight: 900
+    });
+    ctx.restore();
+
+    // === CARD SCOREBOARD (DERECHA) ===
+    const cardX = startX + cuadroW + gap;
+    const cardY = startY;
+
+    rrect(cardX, cardY, cardW, panelH, 14);
+    ctx.fillStyle = 'rgba(10, 18, 22, 0.90)';
+    ctx.fill();
+    ctx.strokeStyle = '#00e676';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    const scaleRatio = panelH / 340;
+    let ty = cardY + 24 * scaleRatio;
+    const titleSize = clamp(26 * scaleRatio, 18, 28);
+    drawText('GAME OVER', cardX + cardW / 2, ty, titleSize, {
+      color: '#ff6b6b', stroke: '#000', weight: 900
+    });
+
+    ty += 20 * scaleRatio;
+    drawText('★ ¡ENTRASTE AL TOP 5! ★', cardX + cardW / 2, ty, clamp(13 * scaleRatio, 10, 13), {
+      color: '#ffd34d', weight: 800, blink: true
+    });
+
+    ty += 26 * scaleRatio;
+    const statW = (cardW - 32) / 2;
+    const statH = clamp(32 * scaleRatio, 24, 34);
+
+    rrect(cardX + 12, ty - statH / 2, statW, statH, 6);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.06)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    drawText('PUNTOS', cardX + 12 + statW / 2, ty - statH * 0.22, clamp(9 * scaleRatio, 8, 10), { color: '#94a3b8', weight: 700 });
+    drawText(pad(world.score), cardX + 12 + statW / 2, ty + statH * 0.22, clamp(13 * scaleRatio, 11, 14), { color: '#ffffff', weight: 800 });
+
+    rrect(cardX + 16 + statW, ty - statH / 2, statW, statH, 6);
+    ctx.fillStyle = 'rgba(0, 230, 118, 0.08)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0, 230, 118, 0.35)';
+    ctx.stroke();
+    drawText('TU RÉCORD', cardX + 16 + statW + statW / 2, ty - statH * 0.22, clamp(9 * scaleRatio, 8, 10), { color: '#00e676', weight: 700 });
+    drawText(pad(personalRecord), cardX + 16 + statW + statW / 2, ty + statH * 0.22, clamp(13 * scaleRatio, 11, 14), { color: '#ffd34d', weight: 800 });
+
+    ty += 26 * scaleRatio;
+    drawText('— TOP 5 GLOBAL —', cardX + cardW / 2, ty, clamp(12 * scaleRatio, 9, 12), { color: '#00e676', weight: 800 });
+
+    ty += 15 * scaleRatio;
+    const medalColors = ['#ffd700', '#d9dee8', '#e0a070', '#ffffff', '#ffffff'];
+    const rowH = clamp(20 * scaleRatio, 16, 22);
+
+    rows.forEach((r, idx) => {
+      const isPlayerRow = r.isNew;
+      const ry = ty + idx * rowH;
+
+      if (isPlayerRow) {
+        rrect(cardX + 12, ry - rowH / 2 + 1, cardW - 24, rowH - 1, 4);
+        ctx.fillStyle = blink ? 'rgba(0, 230, 118, 0.28)' : 'rgba(255, 211, 77, 0.28)';
+        ctx.fill();
+        ctx.strokeStyle = blink ? '#00e676' : '#ffd34d';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+
+      const colRank = String(r.rank).padStart(2, ' ') + '.';
+      const colName = r.name;
+      const colPts = pad(r.score);
+      const rowColor = isPlayerRow ? (blink ? '#00e676' : '#ffd34d') : (medalColors[idx] || '#ffffff');
+      const rowFSize = clamp(11 * scaleRatio, 9, 12);
+
+      drawText(colRank, cardX + 22, ry, rowFSize, { align: 'left', color: rowColor, weight: 800 });
+      drawText(colName, cardX + 70 * scaleRatio, ry, rowFSize, { align: 'left', color: rowColor, weight: 800 });
+      drawText(colPts, cardX + cardW - 22, ry, rowFSize, { align: 'right', color: rowColor, weight: 800 });
+    });
+
+    const restartY = cardY + panelH - 14 * scaleRatio;
+    drawText('Tocá para reiniciar', cardX + cardW / 2, restartY, clamp(10 * scaleRatio, 9, 11), {
+      color: '#ffffff', alpha: blink ? 0.95 : 0.45, weight: 700
+    });
+
+  } else if (inTop5 && !isWide) {
+    // PANTALLAS ANGOSTAS (< 560px): Cuadro arriba, Card abajo
+    const totalW = clamp(W * 0.92, 280, 480);
+    const availH = H - safeTop - 70;
+    const panelH = clamp(availH, 320, 480);
+    const startX = Math.round((W - totalW) / 2);
+    const startY = Math.max(safeTop + 6, Math.round((H - 60 - panelH) / 2));
+
+    const cuadroH = clamp(panelH * 0.38, 120, 160);
+    const cuadroW = clamp(cuadroH * 0.85, 110, 150);
+    const cardH = panelH - cuadroH - 10;
+
+    // Cuadro centrado arriba
+    const cx = Math.round((W - cuadroW) / 2);
+    const cy = startY;
+
+    ctx.save();
+    ctx.shadowColor = 'rgba(0, 230, 118, 0.45)';
+    ctx.shadowBlur = 12;
+    rrect(cx, cy, cuadroW, cuadroH, 12);
+    const frameGrad = ctx.createLinearGradient(cx, cy, cx + cuadroW, cy + cuadroH);
+    frameGrad.addColorStop(0, '#ffd34d');
+    frameGrad.addColorStop(0.5, '#00e676');
+    frameGrad.addColorStop(1, '#ffd34d');
+    ctx.fillStyle = frameGrad;
+    ctx.fill();
+    ctx.restore();
+
+    const inset = 4;
+    const innerX = cx + inset, innerY = cy + inset, innerW = cuadroW - inset * 2, innerH = cuadroH - inset * 2;
+    ctx.save();
+    rrect(innerX, innerY, innerW, innerH, 8);
+    ctx.clip();
+
+    ctx.fillStyle = '#050c08';
+    ctx.fillRect(innerX, innerY, innerW, innerH);
+
+    const charCenterX = innerX + innerW / 2;
+    const charCenterY = innerY + innerH * 0.52;
+    const smokeCenterGrad = ctx.createRadialGradient(charCenterX, charCenterY, 10, charCenterX, charCenterY, innerW * 0.7);
+    smokeCenterGrad.addColorStop(0, 'rgba(0, 230, 118, 0.65)');
+    smokeCenterGrad.addColorStop(0.5, 'rgba(16, 185, 129, 0.35)');
+    smokeCenterGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = smokeCenterGrad;
+    ctx.fillRect(innerX, innerY, innerW, innerH);
+
+    if (festejos.length) {
+      const frameIdx = Math.floor(world.deadT * 4.8) % festejos.length;
+      const img = festejos[frameIdx];
+      if (img && img.naturalWidth) {
+        const spriteH = innerH * 0.72;
+        const spriteW = (img.naturalWidth / img.naturalHeight) * spriteH;
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(img, charCenterX - spriteW / 2, innerY + innerH - spriteH - 18, spriteW, spriteH);
+        ctx.imageSmoothingEnabled = true;
+      }
+    }
+
+    const medalIcons = ['🥇', '🥈', '🥉', '★', '★'];
+    const rankIdx = (world.addedRank > 0 && world.addedRank <= 5) ? world.addedRank - 1 : 0;
+    const rankIcon = medalIcons[rankIdx] || '★';
+    const displayRank = world.addedRank > 0 ? world.addedRank : 1;
+    rrect(innerX + 6, innerY + innerH - 22, innerW - 12, 18, 6);
+    ctx.fillStyle = '#f59e0b';
+    ctx.fill();
+    drawText(rankIcon + ' PUESTO #' + displayRank, charCenterX, innerY + innerH - 13, 10, { color: '#000', weight: 900 });
+    ctx.restore();
+
+    // Card abajo
+    const cardX = startX, cardY = cy + cuadroH + 10;
+    rrect(cardX, cardY, totalW, cardH, 12);
+    ctx.fillStyle = 'rgba(10, 18, 22, 0.92)';
+    ctx.fill();
+    ctx.strokeStyle = '#00e676';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    let ty = cardY + 18;
+    drawText('GAME OVER', cardX + totalW / 2, ty, 20, { color: '#ff6b6b', stroke: '#000', weight: 900 });
+    ty += 16;
+    drawText('★ ¡ENTRASTE AL TOP 5! ★', cardX + totalW / 2, ty, 10, { color: '#ffd34d', weight: 800 });
+
+    ty += 20;
+    const statW = (totalW - 28) / 2;
+    rrect(cardX + 10, ty - 12, statW, 24, 4);
+    ctx.fillStyle = 'rgba(255,255,255,0.06)'; ctx.fill();
+    drawText('PUNTOS: ' + pad(world.score), cardX + 10 + statW / 2, ty, 10, { color: '#fff' });
+
+    rrect(cardX + 18 + statW, ty - 12, statW, 24, 4);
+    ctx.fillStyle = 'rgba(0,230,118,0.08)'; ctx.fill();
+    drawText('RÉCORD: ' + pad(personalRecord), cardX + 18 + statW + statW / 2, ty, 10, { color: '#ffd34d' });
+
+    ty += 20;
+    drawText('— TOP 5 GLOBAL —', cardX + totalW / 2, ty, 10, { color: '#00e676', weight: 800 });
+
+    ty += 14;
+    const medalColors = ['#ffd700', '#d9dee8', '#e0a070', '#ffffff', '#ffffff'];
+    rows.forEach((r, idx) => {
+      const isPlayerRow = r.isNew;
+      const ry = ty + idx * 16;
+      if (isPlayerRow) {
+        rrect(cardX + 10, ry - 7, totalW - 20, 15, 3);
+        ctx.fillStyle = 'rgba(0, 230, 118, 0.3)'; ctx.fill();
+      }
+      const colColor = isPlayerRow ? '#ffd34d' : (medalColors[idx] || '#fff');
+      drawText(r.rank + '.', cardX + 20, ry, 9, { align: 'left', color: colColor, weight: 800 });
+      drawText(r.name, cardX + 60, ry, 9, { align: 'left', color: colColor, weight: 800 });
+      drawText(pad(r.score), cardX + totalW - 20, ry, 9, { align: 'right', color: colColor, weight: 800 });
+    });
+
+    drawText('Tocá para reiniciar', cardX + totalW / 2, cardY + cardH - 12, 9, { color: '#fff', alpha: blink ? 0.9 : 0.4 });
+
+  } else {
+    // PARTIDA FINALIZADA (Sin entrar al Top 5): Card arcade centrado y estético
+    const cardW = clamp(W * 0.85, 280, 440);
+    const availH = H - safeTop - 70;
+    const panelH = clamp(availH * 0.95, 260, 360);
+    const cardX = (W - cardW) / 2;
+    const cardY = Math.max(safeTop + 8, Math.round((H - 60 - panelH) / 2));
+
+    rrect(cardX, cardY, cardW, panelH, 14);
+    ctx.fillStyle = 'rgba(10, 16, 22, 0.92)';
+    ctx.fill();
+    ctx.strokeStyle = '#00e676';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    const scaleRatio = panelH / 340;
+    let ty = cardY + 28 * scaleRatio;
+    drawText('GAME OVER', cardX + cardW / 2, ty, clamp(28 * scaleRatio, 20, 28), {
+      color: '#ff6b6b', stroke: '#000', weight: 900
+    });
+
+    ty += 24 * scaleRatio;
+    const rankMsg = world.addedRank > 5
+      ? 'PUNTAJE REGISTRADO • PUESTO #' + world.addedRank
+      : (world.newPersonalRecord ? '★ ¡SUPERASTE TU RÉCORD! ★' : 'PARTIDA FINALIZADA');
+    drawText(rankMsg, cardX + cardW / 2, ty, clamp(12 * scaleRatio, 10, 12), {
+      color: '#94a3b8', weight: 800
+    });
+
+    ty += 28 * scaleRatio;
+    const statW = (cardW - 36) / 2;
+    const statH = clamp(34 * scaleRatio, 26, 34);
+
+    rrect(cardX + 14, ty - statH / 2, statW, statH, 6);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.06)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.stroke();
+    drawText('PUNTOS', cardX + 14 + statW / 2, ty - statH * 0.22, clamp(9 * scaleRatio, 8, 10), { color: '#94a3b8', weight: 700 });
+    drawText(pad(world.score), cardX + 14 + statW / 2, ty + statH * 0.22, clamp(14 * scaleRatio, 11, 14), { color: '#ffffff', weight: 800 });
+
+    rrect(cardX + 18 + statW, ty - statH / 2, statW, statH, 6);
+    ctx.fillStyle = 'rgba(0, 230, 118, 0.08)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0, 230, 118, 0.35)';
+    ctx.stroke();
+    drawText('TU RÉCORD', cardX + 18 + statW + statW / 2, ty - statH * 0.22, clamp(9 * scaleRatio, 8, 10), { color: '#00e676', weight: 700 });
+    drawText(pad(personalRecord), cardX + 18 + statW + statW / 2, ty + statH * 0.22, clamp(14 * scaleRatio, 11, 14), { color: '#ffd34d', weight: 800 });
+
+    ty += 30 * scaleRatio;
+    drawText('— TOP 5 GLOBAL —', cardX + cardW / 2, ty, clamp(12 * scaleRatio, 10, 12), { color: '#00e676', weight: 800 });
+
+    ty += 18 * scaleRatio;
+    const medalColors = ['#ffd700', '#d9dee8', '#e0a070', '#ffffff', '#ffffff'];
+    const rowH = clamp(24 * scaleRatio, 18, 24);
+
+    rows.forEach((r, idx) => {
+      const ry = ty + idx * rowH;
+      const colRank = String(r.rank).padStart(2, ' ') + '.';
+      const colName = r.name;
+      const colPts = pad(r.score);
+      const rowColor = medalColors[idx] || '#ffffff';
+      const rowFSize = clamp(12 * scaleRatio, 10, 12);
+      drawText(colRank, cardX + 30, ry, rowFSize, { align: 'left', color: rowColor, weight: 800 });
+      drawText(colName, cardX + 90 * scaleRatio, ry, rowFSize, { align: 'left', color: rowColor, weight: 800 });
+      drawText(colPts, cardX + cardW - 30, ry, rowFSize, { align: 'right', color: rowColor, weight: 800 });
+    });
+
+    const restartY = cardY + panelH - 16 * scaleRatio;
+    drawText('Tocá para reiniciar', cardX + cardW / 2, restartY, clamp(11 * scaleRatio, 9, 11), {
+      color: '#ffffff', alpha: blink ? 0.95 : 0.45, weight: 700
+    });
   }
 }
 
