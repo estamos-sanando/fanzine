@@ -4131,6 +4131,120 @@ function drawEntryPanel(blink) {
 }
 
 /* Game Over con ranking arcade y celebración de graduación (Top 5) */
+/* =============================================================================
+ * RENDERIZADO DEL SCOREBOARD ARCADE (GAME OVER)
+ * Distribución vertical balanceada, cajas de puntajes amplias y filas proporcionadas
+ * ============================================================================= */
+function drawScoreboardCard(cardX, cardY, cardW, cardH, blink, inTop5, rows) {
+  // 1. Fondo del contenedor arcade con marco de neón
+  rrect(cardX, cardY, cardW, cardH, 14);
+  ctx.fillStyle = 'rgba(8, 14, 20, 0.94)';
+  ctx.fill();
+  ctx.strokeStyle = inTop5 ? '#00e676' : 'rgba(0, 230, 118, 0.85)';
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+
+  // Sutil resplandor interior superior
+  const topGlow = ctx.createLinearGradient(cardX, cardY, cardX, cardY + Math.min(65, cardH * 0.22));
+  topGlow.addColorStop(0, inTop5 ? 'rgba(0, 230, 118, 0.16)' : 'rgba(41, 159, 128, 0.10)');
+  topGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  ctx.fillStyle = topGlow;
+  ctx.fill();
+
+  // 2. Logo oficial "¡NO TE RINDAS!"
+  const logoH = clamp(cardH * 0.125, 28, 44);
+  const logoY = cardY + clamp(cardH * 0.095, 26, 36);
+  drawGameOverLogo(cardX + cardW / 2, logoY, logoH, cardW * 0.74);
+
+  // 3. Subtítulo / Estado de la partida
+  const subY = cardY + clamp(cardH * 0.20, 52, 74);
+  if (inTop5) {
+    drawText('★ ¡ENTRASTE AL TOP 5! ★', cardX + cardW / 2, subY, clamp(cardH * 0.040, 11, 13), {
+      color: '#ffd34d', weight: 800, blink: true
+    });
+  } else {
+    const rankMsg = world.addedRank > 5
+      ? 'PUNTAJE REGISTRADO • PUESTO #' + world.addedRank
+      : (world.newPersonalRecord ? '★ ¡SUPERASTE TU RÉCORD! ★' : 'PARTIDA FINALIZADA');
+    const subColor = world.newPersonalRecord ? '#00e676' : '#94a3b8';
+    drawText(rankMsg, cardX + cardW / 2, subY, clamp(cardH * 0.038, 10, 12), {
+      color: subColor, weight: 800
+    });
+  }
+
+  // 4. Cajas de PUNTOS y TU RÉCORD (amplias, legibles, estilo display arcade)
+  const statY = cardY + clamp(cardH * 0.325, 88, 122);
+  const statH = clamp(cardH * 0.125, 34, 46);
+  const statW = Math.floor((cardW - 32) / 2);
+
+  // Caja izquierda: PUNTOS
+  const leftX = cardX + 14;
+  rrect(leftX, statY - statH / 2, statW, statH, 8);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.20)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  drawText('PUNTOS', leftX + statW / 2, statY - statH * 0.22, clamp(statH * 0.26, 9, 11), { color: '#94a3b8', weight: 800 });
+  drawText(pad(world.score), leftX + statW / 2, statY + statH * 0.22, clamp(statH * 0.40, 15, 18), { color: '#ffffff', weight: 900 });
+
+  // Caja derecha: TU RÉCORD
+  const rightX = cardX + cardW - 14 - statW;
+  rrect(rightX, statY - statH / 2, statW, statH, 8);
+  ctx.fillStyle = 'rgba(0, 230, 118, 0.08)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(0, 230, 118, 0.45)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  drawText('TU RÉCORD', rightX + statW / 2, statY - statH * 0.22, clamp(statH * 0.26, 9, 11), { color: '#00e676', weight: 800 });
+  drawText(pad(personalRecord), rightX + statW / 2, statY + statH * 0.22, clamp(statH * 0.40, 15, 18), { color: '#ffd34d', weight: 900 });
+
+  // 5. Encabezado del Top 5
+  const top5Y = cardY + clamp(cardH * 0.46, 126, 168);
+  drawText('— TOP 5 GLOBAL —', cardX + cardW / 2, top5Y, clamp(cardH * 0.038, 10, 12), { color: '#00e676', weight: 800 });
+
+  // 6. Filas del Top 5 distribuidas homogéneamente en el espacio vertical
+  const rowStartY = cardY + clamp(cardH * 0.535, 148, 196);
+  const footerY = cardY + cardH - clamp(cardH * 0.048, 15, 20);
+  const availableRowsH = (footerY - clamp(cardH * 0.04, 12, 16)) - rowStartY;
+  const rowSpacing = availableRowsH / 5;
+  const rowH = clamp(rowSpacing * 0.88, 18, 28);
+  const medalColors = ['#ffd700', '#d9dee8', '#e0a070', '#ffffff', '#ffffff'];
+
+  rows.forEach((r, idx) => {
+    const isPlayerRow = r.isNew;
+    const ry = rowStartY + idx * rowSpacing + rowSpacing / 2;
+
+    if (isPlayerRow) {
+      rrect(cardX + 10, ry - rowH / 2, cardW - 20, rowH, 5);
+      ctx.fillStyle = blink ? 'rgba(0, 230, 118, 0.26)' : 'rgba(255, 211, 77, 0.26)';
+      ctx.fill();
+      ctx.strokeStyle = blink ? '#00e676' : '#ffd34d';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    } else if (idx % 2 === 1) {
+      rrect(cardX + 12, ry - rowH / 2, cardW - 24, rowH, 4);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
+      ctx.fill();
+    }
+
+    const rowColor = isPlayerRow ? (blink ? '#00e676' : '#ffd34d') : (medalColors[idx] || '#ffffff');
+    const rowFSize = clamp(rowH * 0.50, 10, 13);
+    const colRank = String(r.rank).padStart(2, ' ') + '.';
+    const colName = r.name;
+    const colPts = pad(r.score);
+
+    drawText(colRank, cardX + 22, ry, rowFSize, { align: 'left', color: rowColor, weight: 800 });
+    drawText(colName, cardX + Math.min(85, cardW * 0.24), ry, rowFSize, { align: 'left', color: rowColor, weight: 800 });
+    drawText(colPts, cardX + cardW - 22, ry, rowFSize, { align: 'right', color: rowColor, weight: 800 });
+  });
+
+  // 7. Footer: "Tocá para reiniciar"
+  drawText('Tocá para reiniciar', cardX + cardW / 2, footerY, clamp(cardH * 0.034, 10, 12), {
+    color: '#ffffff', alpha: blink ? 0.95 : 0.45, weight: 700
+  });
+}
+
 function drawDeadPanel(blink) {
   const inTop5 = (world.addedRank > 0 && world.addedRank <= 5) || world.newGlobalRecord;
   const charId = character === 'chica' ? 'chica' : 'chico';
@@ -4165,16 +4279,15 @@ function drawDeadPanel(blink) {
 
   if (inTop5 && isWide) {
     // COMPOSICIÓN DE DOS COLUMNAS: Cuadro de Graduación + Card Arcade de Score
-    const totalW = clamp(W * 0.88, 520, 780);
-    const cuadroW = clamp(totalW * 0.34, 180, 250);
-    const gap = clamp(W * 0.025, 14, 24);
+    const totalW = clamp(W * 0.88, 540, 820);
+    const cuadroW = clamp(totalW * 0.34, 180, 260);
+    const gap = clamp(W * 0.025, 14, 22);
     const cardW = totalW - cuadroW - gap;
 
-    // Espacio vertical: reservar 70px al fondo para botones del menú y ranking
-    const availH = H - safeTop - 70;
-    const panelH = clamp(availH * 0.95, 250, 350);
+    const availH = H - safeTop - 50;
+    const panelH = clamp(availH * 0.95, 270, 360);
     const startX = Math.round((W - totalW) / 2);
-    const startY = Math.max(safeTop + 8, Math.round((H - 60 - panelH) / 2));
+    const startY = Math.max(safeTop + 8, Math.round((H - 40 - panelH) / 2));
 
     // === CUADRO DE GRADUACIÓN (IZQUIERDA) ===
     const cx = startX;
@@ -4297,90 +4410,17 @@ function drawDeadPanel(blink) {
     // === CARD SCOREBOARD (DERECHA) ===
     const cardX = startX + cuadroW + gap;
     const cardY = startY;
-
-    rrect(cardX, cardY, cardW, panelH, 14);
-    ctx.fillStyle = 'rgba(10, 18, 22, 0.90)';
-    ctx.fill();
-    ctx.strokeStyle = '#00e676';
-    ctx.lineWidth = 2.5;
-    ctx.stroke();
-
-    const scaleRatio = panelH / 340;
-    const logoH = clamp(42 * scaleRatio, 28, 48);
-    let ty = cardY + 25 * scaleRatio;
-    drawGameOverLogo(cardX + cardW / 2, ty, logoH, cardW * 0.75);
-
-    ty += 24 * scaleRatio;
-    drawText('★ ¡ENTRASTE AL TOP 5! ★', cardX + cardW / 2, ty, clamp(13 * scaleRatio, 10, 13), {
-      color: '#ffd34d', weight: 800, blink: true
-    });
-
-    ty += 26 * scaleRatio;
-    const statW = (cardW - 32) / 2;
-    const statH = clamp(32 * scaleRatio, 24, 34);
-
-    rrect(cardX + 12, ty - statH / 2, statW, statH, 6);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.06)';
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    drawText('PUNTOS', cardX + 12 + statW / 2, ty - statH * 0.22, clamp(9 * scaleRatio, 8, 10), { color: '#94a3b8', weight: 700 });
-    drawText(pad(world.score), cardX + 12 + statW / 2, ty + statH * 0.22, clamp(13 * scaleRatio, 11, 14), { color: '#ffffff', weight: 800 });
-
-    rrect(cardX + 16 + statW, ty - statH / 2, statW, statH, 6);
-    ctx.fillStyle = 'rgba(0, 230, 118, 0.08)';
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(0, 230, 118, 0.35)';
-    ctx.stroke();
-    drawText('TU RÉCORD', cardX + 16 + statW + statW / 2, ty - statH * 0.22, clamp(9 * scaleRatio, 8, 10), { color: '#00e676', weight: 700 });
-    drawText(pad(personalRecord), cardX + 16 + statW + statW / 2, ty + statH * 0.22, clamp(13 * scaleRatio, 11, 14), { color: '#ffd34d', weight: 800 });
-
-    ty += 26 * scaleRatio;
-    drawText('— TOP 5 GLOBAL —', cardX + cardW / 2, ty, clamp(12 * scaleRatio, 9, 12), { color: '#00e676', weight: 800 });
-
-    ty += 15 * scaleRatio;
-    const medalColors = ['#ffd700', '#d9dee8', '#e0a070', '#ffffff', '#ffffff'];
-    const rowH = clamp(20 * scaleRatio, 16, 22);
-
-    rows.forEach((r, idx) => {
-      const isPlayerRow = r.isNew;
-      const ry = ty + idx * rowH;
-
-      if (isPlayerRow) {
-        rrect(cardX + 12, ry - rowH / 2 + 1, cardW - 24, rowH - 1, 4);
-        ctx.fillStyle = blink ? 'rgba(0, 230, 118, 0.28)' : 'rgba(255, 211, 77, 0.28)';
-        ctx.fill();
-        ctx.strokeStyle = blink ? '#00e676' : '#ffd34d';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-      }
-
-      const colRank = String(r.rank).padStart(2, ' ') + '.';
-      const colName = r.name;
-      const colPts = pad(r.score);
-      const rowColor = isPlayerRow ? (blink ? '#00e676' : '#ffd34d') : (medalColors[idx] || '#ffffff');
-      const rowFSize = clamp(11 * scaleRatio, 9, 12);
-
-      drawText(colRank, cardX + 22, ry, rowFSize, { align: 'left', color: rowColor, weight: 800 });
-      drawText(colName, cardX + 70 * scaleRatio, ry, rowFSize, { align: 'left', color: rowColor, weight: 800 });
-      drawText(colPts, cardX + cardW - 22, ry, rowFSize, { align: 'right', color: rowColor, weight: 800 });
-    });
-
-    const restartY = cardY + panelH - 14 * scaleRatio;
-    drawText('Tocá para reiniciar', cardX + cardW / 2, restartY, clamp(10 * scaleRatio, 9, 11), {
-      color: '#ffffff', alpha: blink ? 0.95 : 0.45, weight: 700
-    });
+    drawScoreboardCard(cardX, cardY, cardW, panelH, blink, true, rows);
 
   } else if (inTop5 && !isWide) {
     // PANTALLAS ANGOSTAS (< 560px): Cuadro arriba, Card abajo
     const totalW = clamp(W * 0.92, 280, 480);
-    const availH = H - safeTop - 70;
-    const panelH = clamp(availH, 320, 480);
+    const availH = H - safeTop - 50;
+    const panelH = clamp(availH, 320, 500);
     const startX = Math.round((W - totalW) / 2);
-    const startY = Math.max(safeTop + 6, Math.round((H - 60 - panelH) / 2));
+    const startY = Math.max(safeTop + 6, Math.round((H - 40 - panelH) / 2));
 
-    const cuadroH = clamp(panelH * 0.38, 120, 160);
+    const cuadroH = clamp(panelH * 0.36, 120, 160);
     const cuadroW = clamp(cuadroH * 0.85, 110, 150);
     const cardH = panelH - cuadroH - 10;
 
@@ -4442,121 +4482,17 @@ function drawDeadPanel(blink) {
 
     // Card abajo
     const cardX = startX, cardY = cy + cuadroH + 10;
-    rrect(cardX, cardY, totalW, cardH, 12);
-    ctx.fillStyle = 'rgba(10, 18, 22, 0.92)';
-    ctx.fill();
-    ctx.strokeStyle = '#00e676';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    const logoH = clamp(cardH * 0.16, 22, 30);
-    let ty = cardY + 18;
-    drawGameOverLogo(cardX + totalW / 2, ty, logoH, totalW * 0.65);
-
-    ty += 18;
-    drawText('★ ¡ENTRASTE AL TOP 5! ★', cardX + totalW / 2, ty, 10, { color: '#ffd34d', weight: 800 });
-
-    ty += 20;
-    const statW = (totalW - 28) / 2;
-    rrect(cardX + 10, ty - 12, statW, 24, 4);
-    ctx.fillStyle = 'rgba(255,255,255,0.06)'; ctx.fill();
-    drawText('PUNTOS: ' + pad(world.score), cardX + 10 + statW / 2, ty, 10, { color: '#fff' });
-
-    rrect(cardX + 18 + statW, ty - 12, statW, 24, 4);
-    ctx.fillStyle = 'rgba(0,230,118,0.08)'; ctx.fill();
-    drawText('RÉCORD: ' + pad(personalRecord), cardX + 18 + statW + statW / 2, ty, 10, { color: '#ffd34d' });
-
-    ty += 20;
-    drawText('— TOP 5 GLOBAL —', cardX + totalW / 2, ty, 10, { color: '#00e676', weight: 800 });
-
-    ty += 14;
-    const medalColors = ['#ffd700', '#d9dee8', '#e0a070', '#ffffff', '#ffffff'];
-    rows.forEach((r, idx) => {
-      const isPlayerRow = r.isNew;
-      const ry = ty + idx * 16;
-      if (isPlayerRow) {
-        rrect(cardX + 10, ry - 7, totalW - 20, 15, 3);
-        ctx.fillStyle = 'rgba(0, 230, 118, 0.3)'; ctx.fill();
-      }
-      const colColor = isPlayerRow ? '#ffd34d' : (medalColors[idx] || '#fff');
-      drawText(r.rank + '.', cardX + 20, ry, 9, { align: 'left', color: colColor, weight: 800 });
-      drawText(r.name, cardX + 60, ry, 9, { align: 'left', color: colColor, weight: 800 });
-      drawText(pad(r.score), cardX + totalW - 20, ry, 9, { align: 'right', color: colColor, weight: 800 });
-    });
-
-    drawText('Tocá para reiniciar', cardX + totalW / 2, cardY + cardH - 12, 9, { color: '#fff', alpha: blink ? 0.9 : 0.4 });
+    drawScoreboardCard(cardX, cardY, totalW, cardH, blink, true, rows);
 
   } else {
     // PARTIDA FINALIZADA (Sin entrar al Top 5): Card arcade centrado y estético
-    const cardW = clamp(W * 0.85, 280, 440);
-    const availH = H - safeTop - 70;
-    const panelH = clamp(availH * 0.95, 260, 360);
+    const cardW = clamp(W * 0.82, 300, 460);
+    const availH = H - safeTop - 50;
+    const panelH = clamp(availH * 0.95, 270, 370);
     const cardX = (W - cardW) / 2;
-    const cardY = Math.max(safeTop + 8, Math.round((H - 60 - panelH) / 2));
+    const cardY = Math.max(safeTop + 8, Math.round((H - 40 - panelH) / 2));
 
-    rrect(cardX, cardY, cardW, panelH, 14);
-    ctx.fillStyle = 'rgba(10, 16, 22, 0.92)';
-    ctx.fill();
-    ctx.strokeStyle = '#00e676';
-    ctx.lineWidth = 2.5;
-    ctx.stroke();
-
-    const scaleRatio = panelH / 340;
-    const logoH = clamp(46 * scaleRatio, 30, 52);
-    let ty = cardY + 30 * scaleRatio;
-    drawGameOverLogo(cardX + cardW / 2, ty, logoH, cardW * 0.75);
-
-    ty += 27 * scaleRatio;
-    const rankMsg = world.addedRank > 5
-      ? 'PUNTAJE REGISTRADO • PUESTO #' + world.addedRank
-      : (world.newPersonalRecord ? '★ ¡SUPERASTE TU RÉCORD! ★' : 'PARTIDA FINALIZADA');
-    drawText(rankMsg, cardX + cardW / 2, ty, clamp(12 * scaleRatio, 10, 12), {
-      color: '#94a3b8', weight: 800
-    });
-
-    ty += 28 * scaleRatio;
-    const statW = (cardW - 36) / 2;
-    const statH = clamp(34 * scaleRatio, 26, 34);
-
-    rrect(cardX + 14, ty - statH / 2, statW, statH, 6);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.06)';
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-    ctx.stroke();
-    drawText('PUNTOS', cardX + 14 + statW / 2, ty - statH * 0.22, clamp(9 * scaleRatio, 8, 10), { color: '#94a3b8', weight: 700 });
-    drawText(pad(world.score), cardX + 14 + statW / 2, ty + statH * 0.22, clamp(14 * scaleRatio, 11, 14), { color: '#ffffff', weight: 800 });
-
-    rrect(cardX + 18 + statW, ty - statH / 2, statW, statH, 6);
-    ctx.fillStyle = 'rgba(0, 230, 118, 0.08)';
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(0, 230, 118, 0.35)';
-    ctx.stroke();
-    drawText('TU RÉCORD', cardX + 18 + statW + statW / 2, ty - statH * 0.22, clamp(9 * scaleRatio, 8, 10), { color: '#00e676', weight: 700 });
-    drawText(pad(personalRecord), cardX + 18 + statW + statW / 2, ty + statH * 0.22, clamp(14 * scaleRatio, 11, 14), { color: '#ffd34d', weight: 800 });
-
-    ty += 30 * scaleRatio;
-    drawText('— TOP 5 GLOBAL —', cardX + cardW / 2, ty, clamp(12 * scaleRatio, 10, 12), { color: '#00e676', weight: 800 });
-
-    ty += 18 * scaleRatio;
-    const medalColors = ['#ffd700', '#d9dee8', '#e0a070', '#ffffff', '#ffffff'];
-    const rowH = clamp(24 * scaleRatio, 18, 24);
-
-    rows.forEach((r, idx) => {
-      const ry = ty + idx * rowH;
-      const colRank = String(r.rank).padStart(2, ' ') + '.';
-      const colName = r.name;
-      const colPts = pad(r.score);
-      const rowColor = medalColors[idx] || '#ffffff';
-      const rowFSize = clamp(12 * scaleRatio, 10, 12);
-      drawText(colRank, cardX + 30, ry, rowFSize, { align: 'left', color: rowColor, weight: 800 });
-      drawText(colName, cardX + 90 * scaleRatio, ry, rowFSize, { align: 'left', color: rowColor, weight: 800 });
-      drawText(colPts, cardX + cardW - 30, ry, rowFSize, { align: 'right', color: rowColor, weight: 800 });
-    });
-
-    const restartY = cardY + panelH - 16 * scaleRatio;
-    drawText('Tocá para reiniciar', cardX + cardW / 2, restartY, clamp(11 * scaleRatio, 9, 11), {
-      color: '#ffffff', alpha: blink ? 0.95 : 0.45, weight: 700
-    });
+    drawScoreboardCard(cardX, cardY, cardW, panelH, blink, false, rows);
   }
 }
 
