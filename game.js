@@ -173,12 +173,13 @@ const CONFIG = {
   godMode: /[?&]god\b/.test(location.search),   // ?god activa modo invencible para testing visual
   skipCinematic: /[?&]skip\b/.test(location.search), // ?skip salta las cinemáticas
   extremeTest: /[?&]extreme\b/.test(location.search), // ?extreme arranca en modo extremo (20.000 pts) para testing visual
-  storageScores:   'fanzine_runner_global_v6',  // copia local del ranking global (para mostrar sin conexión)
-  storagePending:  'fanzine_runner_pending_v2', // puntajes que todavía no se pudieron enviar al servidor
+  storageScores:   'fanzine_runner_global_v7',  // copia local del ranking global limpia y reiniciada
+  storagePending:  'fanzine_runner_pending_v3', // puntajes que todavía no se pudieron enviar al servidor
   storageInitials: 'fanzine_runner_initials',   // últimas iniciales usadas
-  storagePersonalRecord: 'fanzine_runner_personal_record_v3', // récord personal en este dispositivo
+  storagePersonalRecord: 'fanzine_runner_personal_record_v4', // récord personal en este dispositivo
   apiScores: '/api/scores',                     // endpoint local/Vercel (api/scores.js)
-  cloudScores: 'https://api.restful-api.dev/objects/ff808181a09d98f701a18d9ecd606591', // cloud backend global compartido
+  cloudScores: 'https://extendsclass.com/api/json-storage/bin/efefedd', // almacenamiento global principal persistente
+  cloudBackupScores: 'https://api.restful-api.dev/objects/ff808181a09d98f701a18d9ecd606591', // respaldo secundario
   apiTimeout: 6000,                             // ms antes de alternar al cloud (tolerante a cold-starts)
   maxScores: 5,                                 // Cantidad visualizada en Top 5
   maxScoresStored: 500,                         // Cantidad total conservada en el ranking global
@@ -1319,30 +1320,69 @@ const Scores = {
     const tCloud = setTimeout(() => ctlCloud.abort(), CONFIG.apiTimeout);
     try {
       if (method === 'GET') {
-        const res = await fetch(CONFIG.cloudScores, { cache: 'no-store', signal: ctlCloud.signal });
-        if (!res.ok) throw new Error('Cloud HTTP ' + res.status);
-        const d = await res.json();
-        const scores = (d && d.data && Array.isArray(d.data.scores)) ? d.data.scores : [];
-        return { scores };
+        let scores = null;
+        try {
+          const res = await fetch(CONFIG.cloudScores, { cache: 'no-store', signal: ctlCloud.signal });
+          if (res.ok) {
+            const d = await res.json();
+            if (d && Array.isArray(d.scores)) scores = d.scores;
+            else if (d && d.data && Array.isArray(d.data.scores)) scores = d.data.scores;
+          }
+        } catch (_) {}
+        if (!scores && CONFIG.cloudBackupScores) {
+          try {
+            const resB = await fetch(CONFIG.cloudBackupScores, { cache: 'no-store', signal: ctlCloud.signal });
+            if (resB.ok) {
+              const dB = await resB.json();
+              if (dB && dB.data && Array.isArray(dB.data.scores)) scores = dB.data.scores;
+              else if (dB && Array.isArray(dB.scores)) scores = dB.scores;
+            }
+          } catch (_) {}
+        }
+        return { scores: scores || [] };
       } else if (method === 'POST') {
         let current = [];
         try {
           const curRes = await fetch(CONFIG.cloudScores, { cache: 'no-store', signal: ctlCloud.signal });
           if (curRes.ok) {
             const curData = await curRes.json();
-            if (curData && curData.data && Array.isArray(curData.data.scores)) current = curData.data.scores;
+            if (curData && Array.isArray(curData.scores)) current = curData.scores;
+            else if (curData && curData.data && Array.isArray(curData.data.scores)) current = curData.data.scores;
           }
         } catch (_) {}
+        if (!current.length && CONFIG.cloudBackupScores) {
+          try {
+            const curResB = await fetch(CONFIG.cloudBackupScores, { cache: 'no-store', signal: ctlCloud.signal });
+            if (curResB.ok) {
+              const curDataB = await curResB.json();
+              if (curDataB && curDataB.data && Array.isArray(curDataB.data.scores)) current = curDataB.data.scores;
+              else if (curDataB && Array.isArray(curDataB.scores)) current = curDataB.scores;
+            }
+          } catch (_) {}
+        }
         const merged = this.sanitize([...current, body]);
         let rank = 1;
         while (rank <= merged.length && merged[rank - 1].score > body.score) rank++;
 
-        await fetch(CONFIG.cloudScores, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: 'fanzine_scores', data: { scores: merged } }),
-          signal: ctlCloud.signal
-        });
+        const saveTasks = [
+          fetch(CONFIG.cloudScores, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ scores: merged }),
+            signal: ctlCloud.signal
+          })
+        ];
+        if (CONFIG.cloudBackupScores) {
+          saveTasks.push(
+            fetch(CONFIG.cloudBackupScores, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ name: 'fanzine_scores', data: { scores: merged } }),
+              signal: ctlCloud.signal
+            })
+          );
+        }
+        await Promise.allSettled(saveTasks);
         return { rank, scores: merged };
       }
     } finally {

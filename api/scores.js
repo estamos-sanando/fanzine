@@ -4,7 +4,8 @@ const fs = require('fs');
 const path = require('path');
 
 const MAX_SCORES = 500;
-const CLOUD_URL = 'https://api.restful-api.dev/objects/ff808181a09d98f701a18d9ecd606591';
+const PRIMARY_CLOUD_URL = 'https://extendsclass.com/api/json-storage/bin/efefedd';
+const BACKUP_CLOUD_URL = 'https://api.restful-api.dev/objects/ff808181a09d98f701a18d9ecd606591';
 const LOCAL_FILE = path.join(__dirname, '..', 'data', 'scores.json');
 const TMP_FILE = '/tmp/fanzine_scores.json';
 
@@ -82,35 +83,67 @@ async function saveToKV(scores) {
 
 // 2. Cloud REST persistence (compartido globalmente y resistente a reinicios de lambdas)
 async function getFromCloud() {
+  // 1. Probar almacenamiento persistente principal
   try {
     const ctl = new AbortController();
     const t = setTimeout(() => ctl.abort(), 6000);
-    const res = await fetch(CLOUD_URL, { signal: ctl.signal, cache: 'no-store' });
+    const res = await fetch(PRIMARY_CLOUD_URL, { signal: ctl.signal, cache: 'no-store' });
     clearTimeout(t);
-    if (!res.ok) return null;
-    const d = await res.json();
-    if (d && d.data && Array.isArray(d.data.scores)) {
-      return d.data.scores;
+    if (res.ok) {
+      const d = await res.json();
+      if (d && Array.isArray(d.scores)) return d.scores;
+      if (d && d.data && Array.isArray(d.data.scores)) return d.data.scores;
     }
   } catch (_) {}
+
+  // 2. Respaldo secundario
+  try {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 6000);
+    const res = await fetch(BACKUP_CLOUD_URL, { signal: ctl.signal, cache: 'no-store' });
+    clearTimeout(t);
+    if (res.ok) {
+      const d = await res.json();
+      if (d && d.data && Array.isArray(d.data.scores)) return d.data.scores;
+      if (d && Array.isArray(d.scores)) return d.scores;
+    }
+  } catch (_) {}
+
   return null;
 }
 
 async function saveToCloud(scores) {
+  const tasks = [];
   try {
-    const ctl = new AbortController();
-    const t = setTimeout(() => ctl.abort(), 6000);
-    await fetch(CLOUD_URL, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'fanzine_scores', data: { scores } }),
-      signal: ctl.signal,
-      cache: 'no-store'
-    });
-    clearTimeout(t);
-    return true;
+    const ctl1 = new AbortController();
+    const t1 = setTimeout(() => ctl1.abort(), 6000);
+    tasks.push(
+      fetch(PRIMARY_CLOUD_URL, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scores }),
+        signal: ctl1.signal,
+        cache: 'no-store'
+      }).finally(() => clearTimeout(t1))
+    );
   } catch (_) {}
-  return false;
+
+  try {
+    const ctl2 = new AbortController();
+    const t2 = setTimeout(() => ctl2.abort(), 6000);
+    tasks.push(
+      fetch(BACKUP_CLOUD_URL, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'fanzine_scores', data: { scores } }),
+        signal: ctl2.signal,
+        cache: 'no-store'
+      }).finally(() => clearTimeout(t2))
+    );
+  } catch (_) {}
+
+  const results = await Promise.allSettled(tasks);
+  return results.some(r => r.status === 'fulfilled' && r.value && r.value.ok);
 }
 
 // 3. Persistencia en disco local /tmp
