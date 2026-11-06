@@ -10,7 +10,19 @@ const LOCAL_FILE = path.join(__dirname, '..', 'data', 'scores.json');
 const TMP_FILE = '/tmp/fanzine_scores.json';
 
 const INITIAL_SCORES = [
+  { name: 'ANT', score: 10388 },
+  { name: 'ANT', score: 10024 },
+  { name: 'ANT', score: 9839 },
+  { name: 'ANT', score: 9620 },
+  { name: 'ANW', score: 8335 },
+  { name: 'ANT', score: 3764 },
+  { name: 'ANT', score: 3637 },
+  { name: 'APX', score: 3145 },
+  { name: 'ANT', score: 2642 },
+  { name: 'ANT', score: 2610 },
+  { name: 'AOW', score: 2538 },
   { name: 'UNL', score: 1200 },
+  { name: 'AMS', score: 977 },
   { name: 'FAN', score: 950 },
   { name: 'MAT', score: 780 },
   { name: 'RUN', score: 620 },
@@ -40,9 +52,23 @@ function sanitize(arr) {
     }
     const score = Number(e && e.score);
     if (Number.isFinite(score) && score > 0) {
-      valid.push({ name: cleanName(e.name), score: Math.floor(score) });
+      const name = cleanName(e.name);
+      // Evitar que el puntaje de prueba 'TES 9999' quede registrado
+      if (name === 'TES' && score === 9999) continue;
+      valid.push({ name, score: Math.floor(score) });
     }
   }
+
+  // Asegurar siempre un mínimo de 5 filas usando los iniciales si hiciera falta
+  if (valid.length < 5) {
+    for (const init of INITIAL_SCORES) {
+      if (!valid.some(s => s.name === init.name && s.score === init.score)) {
+        valid.push(init);
+        if (valid.length >= 5) break;
+      }
+    }
+  }
+
   valid.sort((a, b) => b.score - a.score);
   return valid.length ? valid.slice(0, MAX_SCORES) : [...INITIAL_SCORES];
 }

@@ -173,10 +173,10 @@ const CONFIG = {
   godMode: /[?&]god\b/.test(location.search),   // ?god activa modo invencible para testing visual
   skipCinematic: /[?&]skip\b/.test(location.search), // ?skip salta las cinemáticas
   extremeTest: /[?&]extreme\b/.test(location.search), // ?extreme arranca en modo extremo (20.000 pts) para testing visual
-  storageScores:   'fanzine_runner_global_v7',  // copia local del ranking global limpia y reiniciada
-  storagePending:  'fanzine_runner_pending_v3', // puntajes que todavía no se pudieron enviar al servidor
+  storageScores:   'fanzine_runner_global_v8',  // copia local del ranking global limpia y reiniciada
+  storagePending:  'fanzine_runner_pending_v4', // puntajes que todavía no se pudieron enviar al servidor
   storageInitials: 'fanzine_runner_initials',   // últimas iniciales usadas
-  storagePersonalRecord: 'fanzine_runner_personal_record_v4', // récord personal en este dispositivo
+  storagePersonalRecord: 'fanzine_runner_personal_record_v5', // récord personal en este dispositivo
   apiScores: '/api/scores',                     // endpoint local/Vercel (api/scores.js)
   cloudScores: 'https://extendsclass.com/api/json-storage/bin/efefedd', // almacenamiento global principal persistente
   cloudBackupScores: 'https://api.restful-api.dev/objects/ff808181a09d98f701a18d9ecd606591', // respaldo secundario
@@ -1211,7 +1211,19 @@ const cleanName = (s) =>
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
 const INITIAL_SCORES = [
+  { name: 'ANT', score: 10388 },
+  { name: 'ANT', score: 10024 },
+  { name: 'ANT', score: 9839 },
+  { name: 'ANT', score: 9620 },
+  { name: 'ANW', score: 8335 },
+  { name: 'ANT', score: 3764 },
+  { name: 'ANT', score: 3637 },
+  { name: 'APX', score: 3145 },
+  { name: 'ANT', score: 2642 },
+  { name: 'ANT', score: 2610 },
+  { name: 'AOW', score: 2538 },
   { name: 'UNL', score: 1200 },
+  { name: 'AMS', score: 977 },
   { name: 'FAN', score: 950 },
   { name: 'MAT', score: 780 },
   { name: 'RUN', score: 620 },
@@ -1259,7 +1271,18 @@ const Scores = {
       }
       const score = Number(e && e.score);
       if (Number.isFinite(score) && score > 0) {
-        valid.push({ name: cleanName(e.name), score: Math.floor(score) });
+        const name = cleanName(e.name);
+        if (name === 'TES' && score === 9999) continue;
+        valid.push({ name, score: Math.floor(score) });
+      }
+    }
+    // Asegurar siempre un mínimo de 5 filas usando los iniciales si hiciera falta
+    if (valid.length < 5) {
+      for (const init of INITIAL_SCORES) {
+        if (!valid.some(s => s.name === init.name && s.score === init.score)) {
+          valid.push(init);
+          if (valid.length >= 5) break;
+        }
       }
     }
     valid.sort((a, b) => b.score - a.score);
@@ -1462,7 +1485,7 @@ const Scores = {
 };
 Scores.load();
 
-let personalRecord = parseInt(storageGet(CONFIG.storagePersonalRecord, '0'), 10) || 0;
+let personalRecord = parseInt(storageGet(CONFIG.storagePersonalRecord, storageGet('fanzine_runner_personal_record_v4', '0')), 10) || 0;
 if (personalRecord >= 20000) {
   personalRecord = 0;
   storageSet(CONFIG.storagePersonalRecord, 0);
@@ -1473,13 +1496,11 @@ function updatePersonalRecord(newScore = 0) {
     personalRecord = Math.floor(newScore);
     storageSet(CONFIG.storagePersonalRecord, personalRecord);
   } else if (personalRecord === 0) {
-    const currentInitials = cleanName(storageGet(CONFIG.storageInitials, ''));
-    if (currentInitials && currentInitials !== 'AAA') {
-      const myEntries = Scores.list.filter((e) => e.name === currentInitials);
-      if (myEntries.length) {
-        personalRecord = Math.max(...myEntries.map((e) => e.score));
-        storageSet(CONFIG.storagePersonalRecord, personalRecord);
-      }
+    const currentInitials = cleanName(storageGet(CONFIG.storageInitials, 'ANT'));
+    const myEntries = Scores.list.filter((e) => e.name === currentInitials);
+    if (myEntries.length) {
+      personalRecord = Math.max(...myEntries.map((e) => e.score));
+      storageSet(CONFIG.storagePersonalRecord, personalRecord);
     }
   }
   if (dom.scoresPersonal) {
@@ -4921,14 +4942,45 @@ function renderOverlayScores() {
   updatePersonalRecord();
   dom.scoresList.textContent = '';
   const top = Scores.list.slice(0, CONFIG.maxScores);
+  // Asegurar siempre que se muestren exactamente 5 filas usando INITIAL_SCORES como respaldo
+  while (top.length < CONFIG.maxScores) {
+    const candidate = INITIAL_SCORES.find(s => !top.some(t => t.name === s.name && t.score === s.score));
+    if (candidate) top.push(candidate);
+    else break;
+  }
+
+  const badges = ['👑', '🥈', '🥉', '', ''];
   top.forEach((e, i) => {
+    const rank = i + 1;
     const li = document.createElement('li');
-    [(i + 1) + '.', e.name, pad(e.score)].forEach((txt, j) => {
-      const s = document.createElement('span');
-      s.className = ['rank', 'name', 'pts'][j];
-      s.textContent = txt;
-      li.appendChild(s);
-    });
+    li.className = 'scores__row scores__row--rank-' + rank;
+
+    const rankSpan = document.createElement('span');
+    rankSpan.className = 'col-rank';
+    rankSpan.textContent = rank + '.';
+
+    const badgeSpan = document.createElement('span');
+    badgeSpan.className = 'col-badge';
+    badgeSpan.textContent = badges[i] || '';
+
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'col-name';
+    nameSpan.textContent = e.name;
+
+    const dotsSpan = document.createElement('span');
+    dotsSpan.className = 'col-dots';
+    dotsSpan.setAttribute('aria-hidden', 'true');
+
+    const ptsSpan = document.createElement('span');
+    ptsSpan.className = 'col-pts';
+    ptsSpan.textContent = pad(e.score);
+
+    li.appendChild(rankSpan);
+    if (badges[i]) li.appendChild(badgeSpan);
+    li.appendChild(nameSpan);
+    li.appendChild(dotsSpan);
+    li.appendChild(ptsSpan);
+
     dom.scoresList.appendChild(li);
   });
   if (!top.length) {
