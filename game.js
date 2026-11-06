@@ -179,7 +179,7 @@ const CONFIG = {
   storagePersonalRecord: 'fanzine_runner_personal_record_v3', // récord personal en este dispositivo
   apiScores: '/api/scores',                     // endpoint local/Vercel (api/scores.js)
   cloudScores: 'https://api.restful-api.dev/objects/ff808181a09d98f701a18d9ecd606591', // cloud backend global compartido
-  apiTimeout: 3000,                             // ms antes de alternar al cloud
+  apiTimeout: 6000,                             // ms antes de alternar al cloud (tolerante a cold-starts)
   maxScores: 5,                                 // Cantidad visualizada en Top 5
   maxScoresStored: 500,                         // Cantidad total conservada en el ranking global
   initialsLength: 3,
@@ -1243,10 +1243,25 @@ const Scores = {
   },
   sanitize(raw) {
     if (!Array.isArray(raw) || !raw.length) return [...INITIAL_SCORES];
-    const valid = raw
-      .filter((e) => e && Number.isFinite(Number(e.score)) && Number(e.score) > 0)
-      .map((e) => ({ name: cleanName(e.name), score: Math.floor(Number(e.score)) }))
-      .sort((a, b) => b.score - a.score);
+    const valid = [];
+    for (let e of raw) {
+      if (!e) continue;
+      if (typeof e === 'string') {
+        try {
+          e = JSON.parse(e);
+        } catch (_) {
+          const m = e.match(/name[=:]\s*([A-Za-z]+).*?score[=:]\s*(\d+)/i) || e.match(/score[=:]\s*(\d+).*?name[=:]\s*([A-Za-z]+)/i);
+          if (m) {
+            e = { name: m[1] || m[2], score: Number(m[2] || m[1]) };
+          }
+        }
+      }
+      const score = Number(e && e.score);
+      if (Number.isFinite(score) && score > 0) {
+        valid.push({ name: cleanName(e.name), score: Math.floor(score) });
+      }
+    }
+    valid.sort((a, b) => b.score - a.score);
     return valid.length ? valid.slice(0, CONFIG.maxScoresStored || 500) : [...INITIAL_SCORES];
   },
   // Muestra también los puntajes propios que aún no confirmó el servidor
@@ -4718,6 +4733,7 @@ function showMenu() {
   setExtremeMode(false);
   resetRun();
   Music.play('intro');
+  Scores.refresh();
   transitionTo(STATES.CHARACTER_SELECT);
 }
 
@@ -5102,6 +5118,14 @@ function setupOverlay() {
     if (id === world.submitId && rank > 0) world.addedRank = rank;
   };
   window.addEventListener('online', () => Scores.refresh());   // reenvía lo pendiente al volver la conexión
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) Scores.refresh();                    // sincroniza al volver a la pestaña o desbloquear celular
+  });
+  setInterval(() => {
+    if (!document.hidden && (state === STATES.CHARACTER_SELECT || state === STATES.GAME_OVER)) {
+      Scores.refresh();                                        // sondeo periódico en reposo para ver puntajes de otros
+    }
+  }, 20000);
 }
 
 async function main() {

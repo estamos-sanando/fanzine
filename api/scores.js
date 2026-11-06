@@ -24,10 +24,25 @@ function cleanName(n) {
 
 function sanitize(arr) {
   if (!Array.isArray(arr) || !arr.length) return [...INITIAL_SCORES];
-  const valid = arr
-    .filter(e => e && Number.isFinite(Number(e.score)) && Number(e.score) > 0)
-    .map(e => ({ name: cleanName(e.name), score: Math.floor(Number(e.score)) }))
-    .sort((a, b) => b.score - a.score);
+  const valid = [];
+  for (let e of arr) {
+    if (!e) continue;
+    if (typeof e === 'string') {
+      try {
+        e = JSON.parse(e);
+      } catch (_) {
+        const m = e.match(/name[=:]\s*([A-Za-z]+).*?score[=:]\s*(\d+)/i) || e.match(/score[=:]\s*(\d+).*?name[=:]\s*([A-Za-z]+)/i);
+        if (m) {
+          e = { name: m[1] || m[2], score: Number(m[2] || m[1]) };
+        }
+      }
+    }
+    const score = Number(e && e.score);
+    if (Number.isFinite(score) && score > 0) {
+      valid.push({ name: cleanName(e.name), score: Math.floor(score) });
+    }
+  }
+  valid.sort((a, b) => b.score - a.score);
   return valid.length ? valid.slice(0, MAX_SCORES) : [...INITIAL_SCORES];
 }
 
@@ -69,8 +84,8 @@ async function saveToKV(scores) {
 async function getFromCloud() {
   try {
     const ctl = new AbortController();
-    const t = setTimeout(() => ctl.abort(), 4000);
-    const res = await fetch(CLOUD_URL, { signal: ctl.signal });
+    const t = setTimeout(() => ctl.abort(), 6000);
+    const res = await fetch(CLOUD_URL, { signal: ctl.signal, cache: 'no-store' });
     clearTimeout(t);
     if (!res.ok) return null;
     const d = await res.json();
@@ -84,12 +99,13 @@ async function getFromCloud() {
 async function saveToCloud(scores) {
   try {
     const ctl = new AbortController();
-    const t = setTimeout(() => ctl.abort(), 4000);
+    const t = setTimeout(() => ctl.abort(), 6000);
     await fetch(CLOUD_URL, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'fanzine_scores', data: { scores } }),
-      signal: ctl.signal
+      signal: ctl.signal,
+      cache: 'no-store'
     });
     clearTimeout(t);
     return true;
@@ -133,10 +149,13 @@ async function loadScores() {
 }
 
 module.exports = async function handler(req, res) {
-  // CORS
+  // CORS y desactivación de caché en el Edge / CDN / Navegador
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
 
   if (req.method === 'OPTIONS') {
     return res.status(204).end();
