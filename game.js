@@ -2184,7 +2184,7 @@ stateHandlers[STATES.CHARACTER_SELECT] = {
     dom.overlay.classList.remove('is-loading');
     renderOverlayScores();
     if (dom.startBtn) {
-      dom.startBtn.textContent = '▶ COMENZAR';
+      dom.startBtn.innerHTML = '<span class="start__btn-icon" aria-hidden="true">▶</span> COMENZAR';
       dom.startBtn.focus({ preventScroll: true });
     }
   },
@@ -4853,7 +4853,7 @@ function selectCharacter(id) {
   dom.pickers.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.char === id)));
   if (dom.startBtn) {
     dom.startBtn.disabled = false;
-    dom.startBtn.textContent = '▶ COMENZAR';
+    dom.startBtn.innerHTML = '<span class="start__btn-icon" aria-hidden="true">▶</span> COMENZAR';
   }
 }
 
@@ -5250,7 +5250,7 @@ async function main() {
   if (dom.overlay) dom.overlay.classList.remove('is-loading');
   if (dom.startBtn) {
     dom.startBtn.disabled = false;
-    dom.startBtn.textContent = '▶ COMENZAR';
+    dom.startBtn.innerHTML = '<span class="start__btn-icon" aria-hidden="true">▶</span> COMENZAR';
   }
 
   transitionTo(STATES.CHARACTER_SELECT);
