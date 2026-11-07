@@ -19,7 +19,7 @@
   <link rel="preload" as="image" href="ASSETS/SUELO.png">
   <link rel="preload" as="image" href="ASSETS/chicaquieta.png">
   <link rel="preload" as="image" href="ASSETS/chicoquieto.png">
-  <link rel="stylesheet" href="style.css?v=37">
+  <link rel="stylesheet" href="style.css?v=38">
 </head>
 <body>
   <!-- Canvas del juego -->
@@ -51,9 +51,14 @@
   <aside id="full-scores-modal" class="full-scores-modal" aria-hidden="true" role="dialog" aria-label="Ranking global completo">
     <div class="full-scores-modal__backdrop"></div>
     <div class="full-scores-modal__content">
+      <span class="scores__bolt scores__bolt--tl" aria-hidden="true"></span>
+      <span class="scores__bolt scores__bolt--tr" aria-hidden="true"></span>
+      <span class="scores__bolt scores__bolt--bl" aria-hidden="true"></span>
+      <span class="scores__bolt scores__bolt--br" aria-hidden="true"></span>
+
       <header class="full-scores-modal__header">
         <div class="full-scores-modal__title-wrap">
-          <h2 class="full-scores-modal__title">★ RANKING GLOBAL ★</h2>
+          <h2 class="full-scores-modal__title">⭐ RANKING GLOBAL ⭐</h2>
           <span id="full-scores-count" class="full-scores-modal__subtitle">Cargando puntajes…</span>
         </div>
         <button id="full-scores-close" class="full-scores-modal__close" type="button" aria-label="Cerrar ranking">✕</button>
@@ -194,7 +199,7 @@
     </div>
   </div>
 
-  <script src="game.js?v=72"></script>
+  <script src="game.js?v=73"></script>
   <script>
     // Registro del Service Worker (modo offline). Requiere HTTPS o localhost.
     if ('serviceWorker' in navigator) {
