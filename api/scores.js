@@ -4,8 +4,8 @@ const fs = require('fs');
 const path = require('path');
 
 const MAX_SCORES = 500;
-const PRIMARY_CLOUD_URL = 'https://extendsclass.com/api/json-storage/bin/efefedd';
-const BACKUP_CLOUD_URL = 'https://api.restful-api.dev/objects/ff808181a09d98f701a18d9ecd606591';
+const PRIMARY_CLOUD_URL = 'https://extendsclass.com/api/json-storage/bin/acbfcbc';
+const BACKUP_CLOUD_URL = 'https://api.restful-api.dev/objects/ff808181a09d98f701a1bcfc75bf687b';
 const LOCAL_FILE = path.join(__dirname, '..', 'data', 'scores.json');
 const TMP_FILE = '/tmp/fanzine_scores.json';
 
@@ -73,7 +73,7 @@ async function getFromKV() {
   const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
   if (!url || !token) return null;
   try {
-    const res = await fetch(`${url}/get/fanzine_global_scores`, {
+    const res = await fetch(`${url}/get/fanzine_global_scores_v3`, {
       headers: { Authorization: `Bearer ${token}` }
     });
     if (!res.ok) return null;
@@ -90,7 +90,7 @@ async function saveToKV(scores) {
   const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
   if (!url || !token) return false;
   try {
-    await fetch(`${url}/set/fanzine_global_scores`, {
+    await fetch(`${url}/set/fanzine_global_scores_v3`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
       body: JSON.stringify(scores)
@@ -215,6 +215,28 @@ module.exports = async function handler(req, res) {
     return res.status(204).end();
   }
 
+  const query = req.query || {};
+  let body = req.body;
+  if (typeof body === 'string') {
+    try { body = JSON.parse(body); } catch (_) { body = {}; }
+  }
+  body = body || {};
+
+  const isReset = (query.reset === 'true' || query.reset === '1') ||
+                  (req.method === 'DELETE') ||
+                  (body.reset === true || body.action === 'reset');
+
+  if (isReset) {
+    const fresh = [...INITIAL_SCORES];
+    memScores = fresh;
+    saveToFile(fresh);
+    await Promise.allSettled([
+      saveToCloud(fresh),
+      saveToKV(fresh)
+    ]);
+    return res.status(200).json({ reset: true, scores: fresh });
+  }
+
   let current = await loadScores();
 
   if (req.method === 'GET') {
@@ -222,11 +244,6 @@ module.exports = async function handler(req, res) {
   }
 
   if (req.method === 'POST') {
-    let body = req.body;
-    if (typeof body === 'string') {
-      try { body = JSON.parse(body); } catch (_) { body = {}; }
-    }
-    body = body || {};
 
     const name = cleanName(body.name);
     const score = Math.floor(Number(body.score));

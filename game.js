@@ -173,13 +173,13 @@ const CONFIG = {
   godMode: /[?&]god\b/.test(location.search),   // ?god activa modo invencible para testing visual
   skipCinematic: /[?&]skip\b/.test(location.search), // ?skip salta las cinemáticas
   extremeTest: /[?&]extreme\b/.test(location.search), // ?extreme arranca en modo extremo (20.000 pts) para testing visual
-  storageScores:   'fanzine_runner_global_v10', // copia local del ranking global limpia y reiniciada
-  storagePending:  'fanzine_runner_pending_v5',  // puntajes que todavía no se pudieron enviar al servidor
+  storageScores:   'fanzine_runner_global_v11', // copia local del ranking global limpia y reiniciada
+  storagePending:  'fanzine_runner_pending_v6',  // puntajes que todavía no se pudieron enviar al servidor
   storageInitials: 'fanzine_runner_initials',    // últimas iniciales usadas
-  storagePersonalRecord: 'fanzine_runner_personal_record_v6', // récord personal en este dispositivo
+  storagePersonalRecord: 'fanzine_runner_personal_record_v7', // récord personal en este dispositivo
   apiScores: '/api/scores',                     // endpoint local/Vercel (api/scores.js)
-  cloudScores: 'https://extendsclass.com/api/json-storage/bin/efefedd', // almacenamiento global principal persistente
-  cloudBackupScores: 'https://api.restful-api.dev/objects/ff808181a09d98f701a18d9ecd606591', // respaldo secundario
+  cloudScores: 'https://extendsclass.com/api/json-storage/bin/acbfcbc', // almacenamiento global principal persistente
+  cloudBackupScores: 'https://api.restful-api.dev/objects/ff808181a09d98f701a1bcfc75bf687b', // respaldo secundario
   apiTimeout: 6000,                             // ms antes de alternar al cloud (tolerante a cold-starts)
   maxScores: 5,                                 // Cantidad visualizada en Top 5
   maxScoresStored: 500,                         // Cantidad total conservada en el ranking global
@@ -323,6 +323,9 @@ function storageGet(key, fallback) {
 }
 function storageSet(key, value) {
   try { localStorage.setItem(key, String(value)); } catch (_) { /* modo privado */ }
+}
+function storageRemove(key) {
+  try { localStorage.removeItem(key); } catch (_) {}
 }
 
 let toastTimer = 0;
@@ -1229,6 +1232,22 @@ const Scores = {
   onRank: null,           // callback(id, rank): el servidor confirmó un puntaje enviado
 
   load() {
+    // Limpiar claves legacy para garantizar que ningún puntaje de prueba antiguo pueda revivir
+    [
+      'fanzine_runner_global_v1', 'fanzine_runner_global_v2', 'fanzine_runner_global_v3',
+      'fanzine_runner_global_v4', 'fanzine_runner_global_v5', 'fanzine_runner_global_v6',
+      'fanzine_runner_global_v7', 'fanzine_runner_global_v8', 'fanzine_runner_global_v9',
+      'fanzine_runner_global_v10',
+      'fanzine_runner_personal_record', 'fanzine_runner_personal_record_v1',
+      'fanzine_runner_personal_record_v2', 'fanzine_runner_personal_record_v3',
+      'fanzine_runner_personal_record_v4', 'fanzine_runner_personal_record_v5',
+      'fanzine_runner_personal_record_v6',
+      'fanzine_runner_pending', 'fanzine_runner_pending_v1', 'fanzine_runner_pending_v2',
+      'fanzine_runner_pending_v3', 'fanzine_runner_pending_v4', 'fanzine_runner_pending_v5'
+    ].forEach((k) => {
+      try { storageRemove(k); } catch (_) {}
+    });
+
     try {
       const stored = JSON.parse(storageGet(CONFIG.storageScores, 'null'));
       this.remote = stored ? this.sanitize(stored) : [...INITIAL_SCORES];
@@ -1409,8 +1428,7 @@ const Scores = {
     try {
       const data = await this.request('GET');
       if (data && Array.isArray(data.scores) && data.scores.length > 0) {
-        const combined = [...data.scores, ...this.remote];
-        this.remote = this.sanitize(combined);
+        this.remote = this.sanitize(data.scores);
         this.rebuild();
         this.save();
       }
@@ -1454,8 +1472,7 @@ const Scores = {
           this.version++;
           this.savePending();
           if (data && Array.isArray(data.scores)) {
-            const combined = [...data.scores, ...this.remote];
-            this.remote = this.sanitize(combined);
+            this.remote = this.sanitize(data.scores);
             this.rebuild();
             this.save();
           }
@@ -1492,23 +1509,6 @@ function updatePersonalRecord(newScore = 0) {
   if (newScore > personalRecord) {
     personalRecord = Math.floor(newScore);
     storageSet(CONFIG.storagePersonalRecord, personalRecord);
-  } else if (personalRecord === 0) {
-    const currentInitials = cleanName(storageGet(CONFIG.storageInitials, initials || 'ANT'));
-    const myEntries = Scores.list.filter((e) => e.name === currentInitials);
-    if (myEntries.length) {
-      personalRecord = Math.max(...myEntries.map((e) => e.score));
-      storageSet(CONFIG.storagePersonalRecord, personalRecord);
-    }
-  }
-  // AUTO-SYNC: Si el jugador tiene un récord personal mayor a 0, verificar que esté en el ranking global
-  if (personalRecord > 0) {
-    const currentInitials = cleanName(storageGet(CONFIG.storageInitials, initials || 'ANT'));
-    const existsInList = Scores.list.some((e) => e.score === personalRecord);
-    const existsInPending = Scores.pending.some((e) => e.score === personalRecord);
-    if (!existsInList && !existsInPending) {
-      // Registrar automáticamente para que NUNCA quede solo local
-      Scores.submit(currentInitials, personalRecord);
-    }
   }
   if (dom.scoresPersonal) {
     dom.scoresPersonal.textContent = pad(personalRecord);
