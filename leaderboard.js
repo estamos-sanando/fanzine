@@ -1,6 +1,7 @@
 /* =============================================================================
- * FANZINE RUNNER · Global Arcade Leaderboard SDK & Interactive Entry UI (v4)
- * - Persistencia global vía /api/scores (Supabase / Redis / Cloud G-Set)
+ * FANZINE RUNNER · Global Arcade Leaderboard SDK & Interactive Entry UI (v5)
+ * - Persistencia global vía /api/scores (Supabase RLS / Redis / Cloud G-Set)
+ * - Anti-Cheat: Tokens HMAC-SHA256 obligatorios por partida + enteros validados
  * - Sincronización en tiempo real multi-dispositivo:
  *     1) Supabase Realtime WebSockets (postgres_changes) cuando está activo
  *     2) Live Delta Polling ligero (?since=<updatedAt>) cada 3.5s
@@ -13,6 +14,7 @@
   const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   const INITIALS_RE = /^[A-Z0-9]{3}$/;
   const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const MAX_PLAUSIBLE_SCORE = 100000;
 
   const STORAGE_KEYS = {
     cache: 'fanzine_lb_cache_v4',        // Solo caché de lectura para modo sin conexión
@@ -46,11 +48,11 @@
   }
 
   function safeStorageSet(key, val) {
-    try { global.localStorage.setItem(key, String(val)); } catch (_) {}
+    try { global.localStorage.setItem(key, String(val)); } catch (_) { }
   }
 
   function safeStorageRemove(key) {
-    try { global.localStorage.removeItem(key); } catch (_) {}
+    try { global.localStorage.removeItem(key); } catch (_) { }
   }
 
   function generateUUID() {
@@ -75,8 +77,12 @@
     );
   }
 
+  function escapeHtml(str) {
+    return String(str || '').replace(/[&<>"'`=/]/g, '');
+  }
+
   function sanitizeInitials(raw, padWithDefault = false) {
-    const cleaned = String(raw || '')
+    const cleaned = escapeHtml(String(raw || ''))
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
       .toUpperCase()
@@ -93,8 +99,9 @@
     if (!raw || typeof raw !== 'object') return null;
     const initials = sanitizeInitials(raw.initials || raw.name, false);
     if (!isValidInitials(initials)) return null;
-    const score = Math.floor(Number(raw.score));
-    if (!Number.isFinite(score) || score <= 0 || score > 250000) return null;
+    const numScore = typeof raw.score === 'number' ? raw.score : Number(raw.score);
+    const score = Math.floor(numScore);
+    if (!Number.isSafeInteger(score) || score <= 0 || score > MAX_PLAUSIBLE_SCORE) return null;
     if (initials === 'TES' && score === 9999) return null;
 
     const created_at = raw.created_at && !Number.isNaN(Date.parse(raw.created_at))
@@ -205,7 +212,11 @@
       try {
         const outbox = JSON.parse(safeStorageGet(STORAGE_KEYS.outbox, '[]'));
         this.pending = Array.isArray(outbox)
-          ? outbox.filter((x) => x && isValidInitials(x.initials) && Number(x.score) > 0)
+          ? outbox.filter((x) => {
+            if (!x || !isValidInitials(x.initials)) return false;
+            const s = Number(x.score);
+            return Number.isSafeInteger(s) && s > 0 && s <= MAX_PLAUSIBLE_SCORE && Boolean(x.sessionToken);
+          })
           : [];
         for (const p of this.pending) {
           this.ownIds.add(p.id);
@@ -242,13 +253,13 @@
 
     getPersonalRecord() {
       const val = parseInt(safeStorageGet(STORAGE_KEYS.personal, '0'), 10);
-      return Number.isFinite(val) && val > 0 && val <= 250000 ? val : 0;
+      return Number.isSafeInteger(val) && val > 0 && val <= MAX_PLAUSIBLE_SCORE ? val : 0;
     },
 
     updatePersonalRecord(score) {
       const current = this.getPersonalRecord();
       const n = Math.floor(Number(score) || 0);
-      if (n > current && n <= 250000) {
+      if (Number.isSafeInteger(n) && n > current && n <= MAX_PLAUSIBLE_SCORE) {
         safeStorageSet(STORAGE_KEYS.personal, n);
         return n;
       }
@@ -327,34 +338,47 @@
       return count + 1;
     },
 
-    // Solicita un token firmado HMAC al iniciar una nueva carrera
+    // Solicita un token firmado HMAC-SHA256 al iniciar una nueva carrera (con reintento automático en redes móviles inestables)
     async startSession() {
       const localStart = Date.now();
-      this.activeSession = { sessionToken: null, issuedAt: localStart, startedAt: localStart };
-      try {
-        const ctl = new AbortController();
-        const t = setTimeout(() => ctl.abort(), 4500);
-        const res = await fetch(this.apiEndpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'session' }),
-          cache: 'no-store',
-          signal: ctl.signal
-        });
-        clearTimeout(t);
-        if (res.ok) {
-          const data = await res.json();
-          if (data && data.sessionToken) {
-            this.activeSession = {
-              sessionToken: data.sessionToken,
-              issuedAt: data.issuedAt || localStart,
-              startedAt: localStart
-            };
+      const sessionRef = { sessionToken: null, issuedAt: localStart, startedAt: localStart };
+      this.activeSession = sessionRef;
+
+      const fetchToken = async () => {
+        const delays = [0, 900, 2000];
+        for (let i = 0; i < delays.length; i++) {
+          if (this.activeSession !== sessionRef) return sessionRef;
+          if (delays[i] > 0) {
+            await new Promise((r) => setTimeout(r, delays[i]));
+            if (this.activeSession !== sessionRef) return sessionRef;
           }
-          if (data && data.realtime) this._ensureRealtimeWebSocket(data.realtime);
+          try {
+            const ctl = new AbortController();
+            const t = setTimeout(() => ctl.abort(), 4500);
+            const res = await fetch(this.apiEndpoint, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'session' }),
+              cache: 'no-store',
+              signal: ctl.signal
+            });
+            clearTimeout(t);
+            if (res.ok) {
+              const data = await res.json();
+              if (data && data.sessionToken && this.activeSession === sessionRef) {
+                sessionRef.sessionToken = data.sessionToken;
+                sessionRef.issuedAt = data.issuedAt || localStart;
+              }
+              if (data && data.realtime) this._ensureRealtimeWebSocket(data.realtime);
+              if (sessionRef.sessionToken) break;
+            }
+          } catch (_) { }
         }
-      } catch (_) {}
-      return this.activeSession;
+        return sessionRef;
+      };
+
+      this._sessionPromise = fetchToken();
+      return this._sessionPromise;
     },
 
     async _apiFetch(method, payload, queryParams = '') {
@@ -371,7 +395,7 @@
         });
         clearTimeout(timer);
         let data = null;
-        try { data = await res.json(); } catch (_) {}
+        try { data = await res.json(); } catch (_) { }
         if (!res.ok) {
           const err = new Error((data && data.error) || `HTTP ${res.status}`);
           err.status = res.status;
@@ -424,7 +448,7 @@
             scores: this.remote,
             updatedAt: this.updatedAt
           });
-        } catch (_) {}
+        } catch (_) { }
       }
     },
 
@@ -461,12 +485,21 @@
     async submitAsync(initials, score) {
       const clean = sanitizeInitials(initials, false);
       const num = Math.floor(Number(score));
-      if (!isValidInitials(clean) || !Number.isFinite(num) || num <= 0) {
+      if (!isValidInitials(clean) || !Number.isSafeInteger(num) || num <= 0 || num > MAX_PLAUSIBLE_SCORE) {
         throw new Error('Ingresá exactamente 3 caracteres válidos (A-Z, 0-9).');
       }
 
       this.setSavedInitials(clean);
       this.updatePersonalRecord(num);
+
+      if (this.activeSession && !this.activeSession.sessionToken && this._sessionPromise) {
+        try {
+          await Promise.race([
+            this._sessionPromise,
+            new Promise((r) => setTimeout(r, 2500))
+          ]);
+        } catch (_) { }
+      }
 
       const nowIso = new Date().toISOString();
       const durationMs = this.activeSession
@@ -485,6 +518,7 @@
 
       // Consumir sesión activa en cliente
       this.activeSession = null;
+      this._sessionPromise = null;
 
       this.ownIds.add(item.id);
       this.knownIds.add(item.id);
@@ -510,7 +544,7 @@
     submit(initials, score) {
       const clean = sanitizeInitials(initials, true);
       const num = Math.floor(Number(score));
-      if (!Number.isFinite(num) || num <= 0) return { id: null, rank: 0 };
+      if (!Number.isSafeInteger(num) || num <= 0 || num > MAX_PLAUSIBLE_SCORE) return { id: null, rank: 0 };
       const id = generateUUID();
       const nowIso = new Date().toISOString();
       const item = {
@@ -523,6 +557,7 @@
         durationMs: this.activeSession ? Math.max(0, Date.now() - this.activeSession.startedAt) : undefined
       };
       this.activeSession = null;
+      this._sessionPromise = null;
       this.ownIds.add(id);
       this.knownIds.add(id);
       this.liveHighlights.set(id, Date.now() + this.liveHighlightDurationMs);
@@ -596,7 +631,7 @@
             this._ingestServerScores(msg.scores, msg.updatedAt, false);
           }
         };
-      } catch (_) {}
+      } catch (_) { }
     },
 
     _startLivePolling() {
@@ -681,7 +716,7 @@
                 }
               }
             }
-          } catch (_) {}
+          } catch (_) { }
         };
 
         const handleDisconnect = () => {
@@ -698,14 +733,14 @@
 
         ws.onerror = handleDisconnect;
         ws.onclose = handleDisconnect;
-      } catch (_) {}
+      } catch (_) { }
     },
 
     _teardownWebSocket() {
       if (this._wsHeartbeat) { clearInterval(this._wsHeartbeat); this._wsHeartbeat = null; }
       if (this._wsReconnectTimer) { clearTimeout(this._wsReconnectTimer); this._wsReconnectTimer = null; }
       if (this._ws) {
-        try { this._ws.onclose = null; this._ws.onerror = null; this._ws.close(); } catch (_) {}
+        try { this._ws.onclose = null; this._ws.onerror = null; this._ws.close(); } catch (_) { }
         this._ws = null;
       }
       this.wsConnected = false;
@@ -800,7 +835,7 @@
           if (this.submitting) return;
           this._els.hiddenInput.value = this.slots.join('');
           this._els.hiddenInput.focus();
-          try { this._els.hiddenInput.setSelectionRange(0, 3); } catch (_) {}
+          try { this._els.hiddenInput.setSelectionRange(0, 3); } catch (_) { }
         });
 
         this._els.hiddenInput.addEventListener('input', () => {
@@ -1003,3 +1038,4 @@
     formatRelativeTime
   };
 })(window);
+

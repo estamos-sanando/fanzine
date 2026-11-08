@@ -1,40 +1,56 @@
 -- =============================================================================
--- FANZINE RUNNER · "¡NO TE RINDAS!" — Global Arcade Leaderboard Schema
+-- FANZINE RUNNER · "¡NO TE RINDAS!" — Esquema endurecido de Producción (RLS)
 -- Compatible con Supabase (PostgreSQL 15+) + Supabase Realtime
 -- Ejecutá este script completo en el SQL Editor de tu proyecto Supabase.
 -- =============================================================================
 
--- Extensión para generación de UUIDs v4 criptográficos
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
--- Tabla principal del Leaderboard Global
+-- 1. Tabla principal con restricciones estrictas de dominio e integridad
 CREATE TABLE IF NOT EXISTS public.leaderboard_scores (
   id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  initials    VARCHAR(3) NOT NULL,
+  initials   VARCHAR(3) NOT NULL,
   score      INTEGER NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc', now()),
 
-  -- Reglas de integridad a nivel de motor de base de datos
   CONSTRAINT chk_leaderboard_initials_format
     CHECK (initials ~ '^[A-Z0-9]{3}$'),
   CONSTRAINT chk_leaderboard_score_bounds
-    CHECK (score > 0 AND score <= 250000)
+    CHECK (score > 0 AND score <= 100000)
 );
 
--- Índice compuesto para lecturas O(log N) del Top N y desempate cronológico
+-- Ajustar límite máximo si la tabla ya existía de una migración previa
+ALTER TABLE public.leaderboard_scores
+  DROP CONSTRAINT IF EXISTS chk_leaderboard_score_bounds;
+ALTER TABLE public.leaderboard_scores
+  ADD CONSTRAINT chk_leaderboard_score_bounds
+  CHECK (score > 0 AND score <= 100000);
+
 CREATE INDEX IF NOT EXISTS idx_leaderboard_scores_top
   ON public.leaderboard_scores (score DESC, created_at ASC);
 
--- Índice por fecha para auditoría / limpieza administrativa
 CREATE INDEX IF NOT EXISTS idx_leaderboard_scores_created_at
   ON public.leaderboard_scores (created_at DESC);
 
 -- =============================================================================
--- Row Level Security (RLS)
+-- 2. Privilegios SQL de Mínimo Privilegio (Bloquea UPDATE / DELETE / TRUNCATE)
+-- =============================================================================
+REVOKE ALL ON public.leaderboard_scores FROM PUBLIC, anon, authenticated;
+GRANT SELECT, INSERT ON public.leaderboard_scores TO anon, authenticated;
+
+-- NOTA ZERO-TRUST (Altamente recomendado cuando SUPABASE_SERVICE_ROLE_KEY está
+-- configurada en Vercel): descomentá la siguiente línea para que los clientes
+-- anónimos ni siquiera puedan insertar directo por PostgREST y toda escritura
+-- deba pasar obligatoriamente por el anti-cheat HMAC de /api/scores:
+-- REVOKE INSERT ON public.leaderboard_scores FROM anon, authenticated;
+
+-- =============================================================================
+-- 3. Row Level Security (RLS) Forzado y Políticas Restrictivas
 -- =============================================================================
 ALTER TABLE public.leaderboard_scores ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.leaderboard_scores FORCE ROW LEVEL SECURITY;
 
--- 1. Lectura pública permitida (necesaria para leaderboard global y Realtime)
+-- Lectura pública (SELECT) para consulta del ranking y suscripción Realtime
 DROP POLICY IF EXISTS "leaderboard_public_select" ON public.leaderboard_scores;
 CREATE POLICY "leaderboard_public_select"
   ON public.leaderboard_scores
@@ -42,8 +58,8 @@ CREATE POLICY "leaderboard_public_select"
   TO anon, authenticated
   USING (true);
 
--- 2. Inserción restringida: recomendada vía /api/scores con SUPABASE_SERVICE_ROLE_KEY.
---    Si solo se configura SUPABASE_ANON_KEY, esta política valida formato y rango.
+-- Inserción validada (INSERT): exige 3 alfanuméricos en mayúscula, rango válido
+-- y ventana temporal reciente para impedir falsificación de timestamps históricos
 DROP POLICY IF EXISTS "leaderboard_validated_insert" ON public.leaderboard_scores;
 CREATE POLICY "leaderboard_validated_insert"
   ON public.leaderboard_scores
@@ -52,11 +68,32 @@ CREATE POLICY "leaderboard_validated_insert"
   WITH CHECK (
     initials ~ '^[A-Z0-9]{3}$'
     AND score > 0
-    AND score <= 250000
+    AND score <= 100000
+    AND created_at >= (timezone('utc', now()) - interval '10 minutes')
+    AND created_at <= (timezone('utc', now()) + interval '1 minute')
   );
 
+-- Bloqueo explícito total de UPDATE desde clientes
+DROP POLICY IF EXISTS "leaderboard_deny_update" ON public.leaderboard_scores;
+CREATE POLICY "leaderboard_deny_update"
+  ON public.leaderboard_scores
+  AS RESTRICTIVE
+  FOR UPDATE
+  TO anon, authenticated
+  USING (false)
+  WITH CHECK (false);
+
+-- Bloqueo explícito total de DELETE desde clientes
+DROP POLICY IF EXISTS "leaderboard_deny_delete" ON public.leaderboard_scores;
+CREATE POLICY "leaderboard_deny_delete"
+  ON public.leaderboard_scores
+  AS RESTRICTIVE
+  FOR DELETE
+  TO anon, authenticated
+  USING (false);
+
 -- =============================================================================
--- Tiempo Real (Supabase Realtime WebSockets)
+-- 4. Publicación en Tiempo Real (Supabase Realtime WebSockets)
 -- =============================================================================
 DO $$
 BEGIN

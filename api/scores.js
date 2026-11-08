@@ -1,52 +1,112 @@
 // =============================================================================
 // Vercel Serverless Function & Node Dev Server: /api/scores
-// Arquitectura Global Arcade Leaderboard v4 (Tiempo Real + Multi-Adapter + Anti-Cheat)
-// Soporta:
-//   1. Supabase PostgreSQL + Realtime (SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY / ANON_KEY)
-//   2. Upstash Redis / Vercel KV Atómico (UPSTASH_REDIS_REST_URL / KV_REST_API_URL)
-//   3. Almacenamiento Cloud G-Set Redundante v4 (Zero-Config inmediato en Vercel)
+// Arquitectura Global Arcade Leaderboard v5 — Hardened Production Security
+// - Cero secretos o URLs sensibles embebidas en código fuente
+// - CORS restringido por lista blanca de dominios (ALLOWED_ORIGINS) + Security Headers
+// - Anti-Cheat estricto: Tokens HMAC-SHA256 obligatorios vinculados a cliente,
+//   validación de enteros puros, techo físico de puntos/segundo y anti-replay
+// - Rate Limiting multicapa resistente a falsificación de X-Forwarded-For
 // =============================================================================
+
+'use strict';
 
 const crypto = require('crypto');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 const MAX_STORED_SCORES = 100;
 const DEFAULT_LIMIT = 50;
-const MAX_PLAUSIBLE_SCORE = 250000;
-const MIN_SESSION_MS_HIGH_SCORE = 1500;
-const SESSION_MAX_AGE_MS = 4 * 60 * 60 * 1000; // 4 horas
-const CLOUD_CACHE_TTL_MS = 2000;              // Coalescing de lecturas (evita rate-limits)
+const MAX_PLAUSIBLE_SCORE = 100000;
+const MIN_RUN_DURATION_MS = 1200;             // Mínimo físico para sumar puntos y morir (~1.2s)
+const MAX_SCORE_PER_SECOND = 380;             // Techo físico teórico con bonus + mates + velocidad máx.
+const SCORE_BASE_TOLERANCE = 1200;            // Margen inicial por primer pickup/bonus temprano
+const SESSION_MAX_AGE_MS = 2 * 60 * 60 * 1000;// Expiración máxima de token de partida: 2 horas
+const MAX_BODY_BYTES = 4096;                  // Protección DoS contra payloads gigantes (4 KB máx.)
+const CLOUD_CACHE_TTL_MS = 2000;              // Coalescing de lecturas remotas
 
 const INITIALS_REGEX = /^[A-Z0-9]{3}$/;
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-const DEFAULT_CLOUD_URL = process.env.CLOUD_STORAGE_URL || 'https://extendsclass.com/api/json-storage/bin/bdadddb';
-const LOCAL_FILE = path.join(__dirname, '..', 'data', 'scores.json');
 const IS_VERCEL = Boolean(process.env.VERCEL || process.env.VERCEL_ENV);
-
-// Secreto HMAC para tokens de sesión de partida
-const SCORE_SECRET = process.env.SCORE_SECRET || 'fanzine-unlam-arcade-hmac-v4-2026';
+const IS_PROD = IS_VERCEL || process.env.NODE_ENV === 'production';
+const LOCAL_FILE = IS_VERCEL
+  ? path.join(os.tmpdir(), 'fanzine_scores_v5.json')
+  : path.join(__dirname, '..', 'data', 'scores.json');
 
 // =============================================================================
-// Estado en memoria por instancia (caché coalescente, CRDT G-Set y anti-replay)
+// Gestión Segura de Secretos (Cero claves hardcodeadas en repositorio)
+// =============================================================================
+let cachedHmacKey = null;
+
+function getHmacSecretKey() {
+  if (process.env.SCORE_SECRET && process.env.SCORE_SECRET.trim().length >= 16) {
+    return Buffer.from(process.env.SCORE_SECRET.trim(), 'utf8');
+  }
+  if (cachedHmacKey) return cachedHmacKey;
+
+  // Si existen credenciales privadas de backend, derivar subclave con separación de dominio
+  const backendPrivate =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.UPSTASH_REDIS_REST_TOKEN ||
+    process.env.KV_REST_API_TOKEN ||
+    process.env.ADMIN_RESET_KEY;
+
+  if (backendPrivate && backendPrivate.trim().length >= 16) {
+    cachedHmacKey = crypto
+      .createHmac('sha256', backendPrivate.trim())
+      .update('fanzine-runner-session-hmac-v5')
+      .digest();
+    return cachedHmacKey;
+  }
+
+  // Fallback efímero fuera del árbol Git (desarrollo local / instancia temporal)
+  const tmpKeyFile = path.join(os.tmpdir(), '.fanzine_hmac_v5.key');
+  try {
+    if (fs.existsSync(tmpKeyFile)) {
+      const raw = fs.readFileSync(tmpKeyFile);
+      if (raw && raw.length >= 32) {
+        cachedHmacKey = raw;
+        return cachedHmacKey;
+      }
+    }
+    const generated = crypto.randomBytes(32);
+    fs.writeFileSync(tmpKeyFile, generated, { mode: 0o600 });
+    cachedHmacKey = generated;
+    return cachedHmacKey;
+  } catch (_) {
+    cachedHmacKey = crypto.randomBytes(32);
+    return cachedHmacKey;
+  }
+}
+
+function safeCompareStrings(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || !a.length || !b.length) return false;
+  const bufA = Buffer.from(a, 'utf8');
+  const bufB = Buffer.from(b, 'utf8');
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
+// =============================================================================
+// Estado en Memoria (Caché Coalescente, CRDT G-Set, Rate-Limit y Anti-Replay)
 // =============================================================================
 let memState = {
   epoch: 1,
   updatedAt: 0,
   lastFetchedAt: 0,
-  confirmedById: new Map(), // id -> ScoreEntry (unión monotónica dentro del mismo epoch)
+  confirmedById: new Map(),
   scores: []
 };
 let inflightRead = null;
 let writeChain = Promise.resolve();
 
-const ipBuckets = new Map();       // ip -> number[] timestamps
-const consumedSessions = new Map(); // sid -> entryId (idempotencia por UUID)
+const ipBuckets = new Map();        // key -> number[] timestamps
+const consumedSessions = new Map(); // sid -> { id, initials, score, at }
 
 // =============================================================================
-// Utilidades de Validación, Sanitización y Criptografía
+// Sanitización XSS, Validación Estricta de Tipos y Utilidades
 // =============================================================================
 function generateUUID() {
   if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
@@ -58,54 +118,76 @@ function generateUUID() {
 }
 
 function deterministicId(initials, score, createdAt) {
-  const hash = crypto.createHash('sha256').update(`${initials}:${score}:${createdAt || 'v4'}`).digest('hex');
+  const hash = crypto.createHash('sha256').update(`${initials}:${score}:${createdAt || 'v5'}`).digest('hex');
   return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
 }
 
+function escapeHtml(str) {
+  return String(str || '').replace(/[&<>"'`=/]/g, '');
+}
+
 function sanitizeInitials(raw) {
-  if (typeof raw !== 'string' && typeof raw !== 'number') return '';
-  const trimmed = String(raw)
+  if (typeof raw !== 'string') return '';
+  const trimmed = raw
     .trim()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toUpperCase();
-  // Rechazar cualquier carácter especial, etiqueta HTML/SQL o longitud distinta de 3
+  // Rechazar cualquier etiqueta HTML/XSS, SQLi, símbolo o longitud distinta de 3
   if (!INITIALS_REGEX.test(trimmed)) return '';
-  return trimmed;
+  return escapeHtml(trimmed);
 }
 
 function isValidInitials(str) {
   return typeof str === 'string' && INITIALS_REGEX.test(str);
 }
 
-function normalizeIsoDate(raw) {
-  if (raw) {
-    const d = new Date(raw);
-    if (!Number.isNaN(d.getTime())) return d.toISOString();
+function isValidIntegerScore(val) {
+  return (
+    typeof val === 'number' &&
+    Number.isSafeInteger(val) &&
+    val > 0 &&
+    val <= MAX_PLAUSIBLE_SCORE
+  );
+}
+
+function normalizeIsoDate(raw, enforceRecentWindow = false) {
+  const now = Date.now();
+  if (raw && typeof raw === 'string') {
+    const ts = Date.parse(raw);
+    if (!Number.isNaN(ts)) {
+      if (enforceRecentWindow) {
+        // Evitar manipulación de timestamps para ganar desempates cronológicos
+        const maxPast = now - 10 * 60 * 1000;
+        const maxFuture = now + 60 * 1000;
+        if (ts < maxPast || ts > maxFuture) return new Date(now).toISOString();
+      }
+      return new Date(ts).toISOString();
+    }
   }
-  return new Date().toISOString();
+  return new Date(now).toISOString();
 }
 
 function normalizeEntry(raw) {
   if (!raw || typeof raw !== 'object') return null;
-  const initials = sanitizeInitials(raw.initials || raw.name);
+  const initials = sanitizeInitials(String(raw.initials || raw.name || ''));
   if (!isValidInitials(initials)) return null;
 
-  const score = Math.floor(Number(raw.score));
-  if (!Number.isFinite(score) || score <= 0 || score > MAX_PLAUSIBLE_SCORE) return null;
+  const numScore = typeof raw.score === 'number' ? raw.score : Number(raw.score);
+  if (!Number.isSafeInteger(numScore) || numScore <= 0 || numScore > MAX_PLAUSIBLE_SCORE) {
+    return null;
+  }
+  if (initials === 'TES' && numScore === 9999) return null;
 
-  // Bloquear artefacto histórico de test
-  if (initials === 'TES' && score === 9999) return null;
-
-  const created_at = normalizeIsoDate(raw.created_at || raw.createdAt);
+  const created_at = normalizeIsoDate(raw.created_at || raw.createdAt, false);
   const rawId = typeof raw.id === 'string' ? raw.id.trim().toLowerCase() : '';
-  const id = UUID_REGEX.test(rawId) ? rawId : deterministicId(initials, score, created_at);
+  const id = UUID_REGEX.test(rawId) ? rawId : deterministicId(initials, numScore, created_at);
 
   return {
     id,
     initials,
-    name: initials, // alias retrocompatible con renderizadores canvas
-    score,
+    name: initials,
+    score: numScore,
     created_at
   };
 }
@@ -137,38 +219,135 @@ function computeUpdatedAt(scores, fallbackTs = 0) {
 }
 
 // =============================================================================
-// Tokens HMAC de Sesión de Partida y Rate Limiting
+// CORS Estricto para Dominio Propio y Cabeceras HTTP de Seguridad
 // =============================================================================
-function createSessionToken() {
-  const payloadObj = { sid: generateUUID(), iat: Date.now() };
+function normalizeOrigin(origin) {
+  if (!origin || typeof origin !== 'string') return '';
+  return origin.trim().toLowerCase().replace(/\/+$/, '');
+}
+
+function buildAllowedOrigins(req) {
+  const allowed = new Set();
+
+  // 1. Orígenes explícitamente autorizados en ALLOWED_ORIGINS
+  const rawEnv = process.env.ALLOWED_ORIGINS || '';
+  for (const part of rawEnv.split(',')) {
+    const norm = normalizeOrigin(part);
+    if (norm) allowed.add(norm);
+  }
+
+  // 2. Dominios propios automáticos del despliegue en Vercel / Host actual
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    allowed.add(normalizeOrigin(`https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`));
+  }
+  if (process.env.VERCEL_URL) {
+    allowed.add(normalizeOrigin(`https://${process.env.VERCEL_URL}`));
+  }
+  const hostHeader = req.headers && (req.headers['x-forwarded-host'] || req.headers.host);
+  if (typeof hostHeader === 'string' && hostHeader.trim()) {
+    const cleanHost = hostHeader.split(',')[0].trim().toLowerCase();
+    allowed.add(`https://${cleanHost}`);
+    if (!IS_PROD) allowed.add(`http://${cleanHost}`);
+  }
+
+  return allowed;
+}
+
+function isOriginPermitted(originHeader, req) {
+  if (!originHeader) return true; // Petición same-origin directa sin cabecera Origin
+  const norm = normalizeOrigin(originHeader);
+  if (!norm) return false;
+
+  const allowed = buildAllowedOrigins(req);
+  if (allowed.has(norm)) return true;
+
+  // En entorno local de desarrollo permitir localhost / 127.0.0.1 en cualquier puerto
+  if (!IS_PROD && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(norm)) {
+    return true;
+  }
+  return false;
+}
+
+function applySecurityHeaders(req, res) {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
+  res.setHeader('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'");
+  if (IS_PROD || (req.headers && req.headers['x-forwarded-proto'] === 'https')) {
+    res.setHeader('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
+  }
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Vary', 'Origin');
+}
+
+// =============================================================================
+// Extracción Segura de IP, Rate Limiting y Tokens HMAC Anti-Cheat
+// =============================================================================
+function getClientIp(req) {
+  const headers = req.headers || {};
+  // Priorizar cabeceras inyectadas por la plataforma Edge (no falsificables por el cliente)
+  const vercelIp = headers['x-vercel-forwarded-for'];
+  if (typeof vercelIp === 'string' && vercelIp.trim()) {
+    return vercelIp.split(',')[0].trim();
+  }
+  const realIp = headers['x-real-ip'];
+  if (typeof realIp === 'string' && realIp.trim()) {
+    return realIp.trim();
+  }
+  if (req.socket && req.socket.remoteAddress) {
+    return req.socket.remoteAddress;
+  }
+  const xff = headers['x-forwarded-for'];
+  if (typeof xff === 'string' && xff.trim()) {
+    const parts = xff.split(',').map((s) => s.trim()).filter(Boolean);
+    return parts[parts.length - 1] || 'unknown';
+  }
+  return 'local';
+}
+
+function computeClientUaFingerprint(req) {
+  const ua = String((req.headers && req.headers['user-agent']) || 'unknown-ua').slice(0, 256);
+  return crypto.createHmac('sha256', getHmacSecretKey()).update(`ua:${ua}`).digest('base64url').slice(0, 16);
+}
+
+function createSessionToken(req) {
+  const payloadObj = {
+    sid: generateUUID(),
+    iat: Date.now(),
+    uaf: computeClientUaFingerprint(req)
+  };
   const payloadB64 = Buffer.from(JSON.stringify(payloadObj), 'utf8').toString('base64url');
-  const sig = crypto.createHmac('sha256', SCORE_SECRET).update(payloadB64).digest('base64url');
+  const sig = crypto.createHmac('sha256', getHmacSecretKey()).update(payloadB64).digest('base64url');
   return {
     sessionToken: `${payloadB64}.${sig}`,
     issuedAt: payloadObj.iat
   };
 }
 
-function verifySessionToken(token) {
-  if (!token || typeof token !== 'string' || !token.includes('.')) {
-    return { valid: false, reason: 'missing' };
+function verifySessionToken(token, req) {
+  if (!token || typeof token !== 'string' || token.length > 512 || !token.includes('.')) {
+    return { valid: false, reason: 'missing_or_malformed' };
   }
   const parts = token.split('.');
   if (parts.length !== 2) return { valid: false, reason: 'malformed' };
 
   const [payloadB64, sig] = parts;
-  const expectedSig = crypto.createHmac('sha256', SCORE_SECRET).update(payloadB64).digest('base64url');
+  const expectedSig = crypto.createHmac('sha256', getHmacSecretKey()).update(payloadB64).digest('base64url');
 
-  const sigBuf = Buffer.from(sig);
-  const expBuf = Buffer.from(expectedSig);
-  if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+  if (!safeCompareStrings(sig, expectedSig)) {
     return { valid: false, reason: 'bad_signature' };
   }
 
   try {
     const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8'));
-    if (!payload || !payload.sid || !Number.isFinite(payload.iat)) {
+    if (!payload || !UUID_REGEX.test(String(payload.sid || '')) || !Number.isFinite(payload.iat)) {
       return { valid: false, reason: 'bad_payload' };
+    }
+    if (payload.uaf && payload.uaf !== computeClientUaFingerprint(req)) {
+      return { valid: false, reason: 'client_mismatch' };
     }
     return { valid: true, payload };
   } catch (_) {
@@ -176,34 +355,59 @@ function verifySessionToken(token) {
   }
 }
 
-function getClientIp(req) {
-  const xff = req.headers && (req.headers['x-forwarded-for'] || req.headers['x-real-ip']);
-  if (typeof xff === 'string' && xff.length) return xff.split(',')[0].trim();
-  return (req.socket && req.socket.remoteAddress) || 'local';
-}
-
-function checkRateLimit(key, maxReqs, windowMs) {
+function checkRateLimit(key, maxReqs, windowMs, minIntervalMs = 0) {
   const now = Date.now();
   const prev = ipBuckets.get(key) || [];
   const fresh = prev.filter((ts) => now - ts < windowMs);
+
+  if (minIntervalMs > 0 && fresh.length > 0) {
+    const sinceLast = now - fresh[fresh.length - 1];
+    if (sinceLast < minIntervalMs) {
+      ipBuckets.set(key, fresh);
+      return {
+        allowed: false,
+        remaining: Math.max(0, maxReqs - fresh.length),
+        retryAfterSec: Math.max(1, Math.ceil((minIntervalMs - sinceLast) / 1000))
+      };
+    }
+  }
+
   if (fresh.length >= maxReqs) {
     ipBuckets.set(key, fresh);
-    return false;
+    const oldest = fresh[0] || now;
+    return {
+      allowed: false,
+      remaining: 0,
+      retryAfterSec: Math.max(1, Math.ceil((windowMs - (now - oldest)) / 1000))
+    };
   }
+
   fresh.push(now);
   ipBuckets.set(key, fresh);
 
-  // Limpieza periódica de memoria
-  if (ipBuckets.size > 1000) {
+  if (ipBuckets.size > 1500) {
     for (const [k, arr] of ipBuckets.entries()) {
       if (!arr.length || now - arr[arr.length - 1] > windowMs) ipBuckets.delete(k);
     }
   }
-  return true;
+
+  return {
+    allowed: true,
+    remaining: Math.max(0, maxReqs - fresh.length),
+    retryAfterSec: 0
+  };
+}
+
+function applyRateLimitHeaders(res, limit, checkResult) {
+  res.setHeader('X-RateLimit-Limit', String(limit));
+  res.setHeader('X-RateLimit-Remaining', String(checkResult.remaining));
+  if (!checkResult.allowed && checkResult.retryAfterSec > 0) {
+    res.setHeader('Retry-After', String(checkResult.retryAfterSec));
+  }
 }
 
 // =============================================================================
-// ADAPTER 1: Supabase PostgreSQL + Realtime
+// ADAPTER 1: Supabase PostgreSQL + Realtime (RLS Activo)
 // =============================================================================
 function hasSupabaseConfig() {
   return Boolean(
@@ -213,6 +417,7 @@ function hasSupabaseConfig() {
 }
 
 function getPublicRealtimeConfig() {
+  // Exponer únicamente URL pública y clave anónima (restringida por RLS a SELECT)
   if (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY) {
     return {
       provider: 'supabase',
@@ -242,8 +447,7 @@ const SupabaseAdapter = {
     const url = `${this.baseUrl()}?select=id,initials,score,created_at&order=score.desc,created_at.asc&limit=${limit}`;
     const res = await fetch(url, { headers: this.headers(), cache: 'no-store' });
     if (!res.ok) {
-      const txt = await res.text().catch(() => '');
-      throw new Error(`Supabase SELECT HTTP ${res.status}: ${txt.slice(0, 140)}`);
+      throw new Error(`Supabase SELECT status ${res.status}`);
     }
     const rows = await res.json();
     const scores = sortAndTrimEntries(rows, limit);
@@ -252,7 +456,7 @@ const SupabaseAdapter = {
   async insert(entry) {
     const res = await fetch(`${this.baseUrl()}?on_conflict=id`, {
       method: 'POST',
-      headers: this.headers({ Prefer: 'resolution=merge-duplicates,return=representation' }),
+      headers: this.headers({ Prefer: 'resolution=ignore-duplicates,return=representation' }),
       body: JSON.stringify({
         id: entry.id,
         initials: entry.initials,
@@ -262,22 +466,23 @@ const SupabaseAdapter = {
       cache: 'no-store'
     });
     if (!res.ok) {
-      const txt = await res.text().catch(() => '');
-      throw new Error(`Supabase INSERT HTTP ${res.status}: ${txt.slice(0, 140)}`);
+      throw new Error(`Supabase INSERT status ${res.status}`);
     }
     const state = await this.list(MAX_STORED_SCORES);
     memState.updatedAt = Math.max(Date.now(), state.updatedAt);
     return { scores: state.scores, updatedAt: memState.updatedAt };
   },
   async reset() {
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      throw new Error('SUPABASE_SERVICE_ROLE_KEY requerida para reinicio administrativo con RLS.');
+    }
     const res = await fetch(`${this.baseUrl()}?score=gt.0`, {
       method: 'DELETE',
       headers: this.headers(),
       cache: 'no-store'
     });
     if (!res.ok) {
-      const txt = await res.text().catch(() => '');
-      throw new Error(`Supabase DELETE HTTP ${res.status}: ${txt.slice(0, 140)}`);
+      throw new Error(`Supabase DELETE status ${res.status}`);
     }
     memState.updatedAt = Date.now();
     return { scores: [], updatedAt: memState.updatedAt };
@@ -285,7 +490,7 @@ const SupabaseAdapter = {
 };
 
 // =============================================================================
-// ADAPTER 2: Upstash Redis / Vercel KV (Operaciones ZSET + HASH 100% Atómicas)
+// ADAPTER 2: Upstash Redis / Vercel KV (Operaciones ZSET + HASH Atómicas)
 // =============================================================================
 function hasRedisConfig() {
   const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
@@ -312,7 +517,7 @@ const RedisAdapter = {
       body: JSON.stringify(commands),
       cache: 'no-store'
     });
-    if (!res.ok) throw new Error(`Redis pipeline HTTP ${res.status}`);
+    if (!res.ok) throw new Error(`Redis pipeline status ${res.status}`);
     return res.json();
   },
   async list(limit = MAX_STORED_SCORES) {
@@ -333,7 +538,6 @@ const RedisAdapter = {
     return { scores, updatedAt: Math.max(updatedAt, computeUpdatedAt(scores, 1)) };
   },
   async insert(entry) {
-    // Desempate cronológico en ZSET: menor timestamp => mayor fracción decimal (0..0.99)
     const tsSec = Math.max(0, Date.parse(entry.created_at) / 1000);
     const tieBreaker = Math.max(0, Math.min(0.999999, 1 - (tsSec / 1e11)));
     const compositeScore = entry.score + tieBreaker;
@@ -357,8 +561,20 @@ const RedisAdapter = {
 };
 
 // =============================================================================
-// ADAPTER 3: Cloud G-Set Store v4 + Espejo Local (Zero-Config Producción)
+// ADAPTER 3: Cloud JSON Privado (por Variable de Entorno) + Almacenamiento Local
 // =============================================================================
+function getCloudStorageUrl() {
+  return (process.env.CLOUD_STORAGE_URL || '').trim();
+}
+
+function getCloudHeaders(extra = {}) {
+  const h = { ...extra };
+  if (process.env.CLOUD_STORAGE_SECURITY_KEY) {
+    h['Security-key'] = process.env.CLOUD_STORAGE_SECURITY_KEY.trim();
+  }
+  return h;
+}
+
 function readLocalFileEnvelope() {
   try {
     if (!fs.existsSync(LOCAL_FILE)) return null;
@@ -381,7 +597,6 @@ function readLocalFileEnvelope() {
 }
 
 function writeLocalFileEnvelope(envelope) {
-  if (IS_VERCEL) return; // El filesystem del código en Vercel es de solo lectura
   try {
     const dir = path.dirname(LOCAL_FILE);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -390,15 +605,21 @@ function writeLocalFileEnvelope(envelope) {
 }
 
 async function fetchCloudEnvelope(timeoutMs = 5500) {
+  const cloudUrl = getCloudStorageUrl();
+  if (!cloudUrl) {
+    const local = readLocalFileEnvelope();
+    return local || { schemaVersion: SCHEMA_VERSION, epoch: memState.epoch, updatedAt: memState.updatedAt || 1, scores: memState.scores };
+  }
+
   let lastErr = null;
   for (let attempt = 0; attempt < 2; attempt++) {
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), timeoutMs);
     try {
-      const sep = DEFAULT_CLOUD_URL.includes('?') ? '&' : '?';
-      const res = await fetch(`${DEFAULT_CLOUD_URL}${sep}_t=${Date.now()}`, {
+      const sep = cloudUrl.includes('?') ? '&' : '?';
+      const res = await fetch(`${cloudUrl}${sep}_t=${Date.now()}`, {
         method: 'GET',
-        headers: { Accept: 'application/json', 'Cache-Control': 'no-cache' },
+        headers: getCloudHeaders({ Accept: 'application/json', 'Cache-Control': 'no-cache' }),
         cache: 'no-store',
         signal: ctl.signal
       });
@@ -407,9 +628,8 @@ async function fetchCloudEnvelope(timeoutMs = 5500) {
       if (res.status === 404) {
         return { emptyBin: true, schemaVersion: SCHEMA_VERSION, epoch: 1, updatedAt: 1, scores: [] };
       }
-      if (!res.ok) {
-        throw new Error(`Cloud GET HTTP ${res.status}`);
-      }
+      if (!res.ok) throw new Error(`Cloud GET status ${res.status}`);
+
       const data = await res.json();
       const rawScores = Array.isArray(data && data.scores)
         ? data.scores
@@ -428,20 +648,23 @@ async function fetchCloudEnvelope(timeoutMs = 5500) {
 }
 
 async function putCloudEnvelope(envelope, timeoutMs = 6000) {
+  const cloudUrl = getCloudStorageUrl();
+  if (!cloudUrl) return true;
+
   let lastErr = null;
   for (let attempt = 0; attempt < 2; attempt++) {
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), timeoutMs);
     try {
-      const res = await fetch(DEFAULT_CLOUD_URL, {
+      const res = await fetch(cloudUrl, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getCloudHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(envelope),
         cache: 'no-store',
         signal: ctl.signal
       });
       clearTimeout(timer);
-      if (!res.ok) throw new Error(`Cloud PUT HTTP ${res.status}`);
+      if (!res.ok) throw new Error(`Cloud PUT status ${res.status}`);
       return true;
     } catch (err) {
       clearTimeout(timer);
@@ -454,7 +677,6 @@ async function putCloudEnvelope(envelope, timeoutMs = 6000) {
 
 function mergeWithMemState(remoteEnv) {
   if (remoteEnv.epoch > memState.epoch) {
-    // Un administrador reinició el ranking global: limpiar G-Set de esta instancia
     memState.epoch = remoteEnv.epoch;
     memState.confirmedById.clear();
   }
@@ -469,7 +691,7 @@ function mergeWithMemState(remoteEnv) {
 }
 
 const CloudGSetAdapter = {
-  name: 'cloud-gset',
+  name: getCloudStorageUrl() ? 'cloud-gset' : (IS_VERCEL ? 'ephemeral-unconfigured' : 'local-file'),
   async list(limit = MAX_STORED_SCORES, forceFresh = false) {
     const now = Date.now();
     if (!forceFresh && memState.lastFetchedAt > 0 && (now - memState.lastFetchedAt) < CLOUD_CACHE_TTL_MS) {
@@ -487,12 +709,8 @@ const CloudGSetAdapter = {
         writeLocalFileEnvelope({ schemaVersion: SCHEMA_VERSION, ...merged });
         return merged;
       } catch (err) {
-        // En desarrollo local sin internet, usar archivo local data/scores.json
-        if (!IS_VERCEL) {
-          const local = readLocalFileEnvelope();
-          if (local) return mergeWithMemState(local);
-        }
-        // Si ya tenemos caché caliente en memoria, servirlo en lecturas sin borrar nada
+        const local = readLocalFileEnvelope();
+        if (local) return mergeWithMemState(local);
         if (memState.lastFetchedAt > 0) {
           return { scores: memState.scores, updatedAt: memState.updatedAt, epoch: memState.epoch };
         }
@@ -507,20 +725,17 @@ const CloudGSetAdapter = {
   },
 
   insert(entry) {
-    // Serializar escrituras concurrentes en la misma instancia
     const op = writeChain.then(async () => {
       let base;
       try {
         base = await fetchCloudEnvelope();
-      } catch (err) {
-        if (!IS_VERCEL) {
-          base = readLocalFileEnvelope() || { schemaVersion: SCHEMA_VERSION, epoch: memState.epoch, updatedAt: Date.now(), scores: [] };
-        } else {
-          // REGLA DE ORO: JAMÁS sobrescribir la nube si la lectura previa falló.
+      } catch (_) {
+        if (getCloudStorageUrl() && IS_VERCEL) {
           const e = new Error('Almacenamiento global temporalmente ocupado, reintentando...');
           e.statusCode = 503;
           throw e;
         }
+        base = readLocalFileEnvelope() || { schemaVersion: SCHEMA_VERSION, epoch: memState.epoch, updatedAt: Date.now(), scores: [] };
       }
 
       if (base.epoch > memState.epoch) {
@@ -540,13 +755,15 @@ const CloudGSetAdapter = {
         scores: mergedScores
       };
 
-      try {
-        await putCloudEnvelope(nextEnvelope);
-      } catch (err) {
-        if (IS_VERCEL) {
-          const e = new Error('No se pudo confirmar la escritura en la nube, reintentando...');
-          e.statusCode = 503;
-          throw e;
+      if (getCloudStorageUrl()) {
+        try {
+          await putCloudEnvelope(nextEnvelope);
+        } catch (_) {
+          if (IS_VERCEL) {
+            const e = new Error('No se pudo confirmar la escritura en la nube, reintentando...');
+            e.statusCode = 503;
+            throw e;
+          }
         }
       }
 
@@ -557,7 +774,6 @@ const CloudGSetAdapter = {
       return { scores: mergedScores, updatedAt: nextEnvelope.updatedAt };
     });
 
-    // Evitar que un rechazo rompa la cola de promesas futuras
     writeChain = op.catch(() => {});
     return op;
   },
@@ -578,12 +794,9 @@ const CloudGSetAdapter = {
         scores: []
       };
 
-      try {
+      if (getCloudStorageUrl()) {
         await putCloudEnvelope(freshEnvelope);
-      } catch (err) {
-        if (IS_VERCEL) throw err;
       }
-
       writeLocalFileEnvelope(freshEnvelope);
       memState.epoch = nextEpoch;
       memState.confirmedById.clear();
@@ -605,21 +818,36 @@ function selectAdapter() {
 }
 
 // =============================================================================
-// HTTP Request Handler (Vercel Serverless & Local Dev Server)
+// HTTP Request Handler Principal
 // =============================================================================
 module.exports = async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-admin-key');
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
-  res.setHeader('Pragma', 'no-cache');
-  res.setHeader('Expires', '0');
+  applySecurityHeaders(req, res);
+
+  const origin = req.headers && req.headers.origin;
+  const originAllowed = isOriginPermitted(origin, req);
+
+  if (origin && originAllowed) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-admin-key');
+    res.setHeader('Access-Control-Max-Age', '600');
+  }
+
+  // Bloquear orígenes externos no autorizados
+  if (origin && !originAllowed) {
+    return res.status(403).json({ error: 'Origen no autorizado por política CORS.' });
+  }
 
   if (req.method === 'OPTIONS') {
     return res.status(204).end();
   }
 
-  // Parseo seguro de query y body
+  // Protección DoS por tamaño de cuerpo excesivo
+  const declaredLen = Number(req.headers && req.headers['content-length']);
+  if (Number.isFinite(declaredLen) && declaredLen > MAX_BODY_BYTES) {
+    return res.status(413).json({ error: 'El tamaño del payload excede el límite permitido (4 KB).' });
+  }
+
   let query = req.query;
   if (!query) {
     try {
@@ -632,24 +860,44 @@ module.exports = async function handler(req, res) {
 
   let body = req.body;
   if (typeof body === 'string') {
-    try { body = body.length ? JSON.parse(body) : {}; } catch (_) { body = null; }
+    if (Buffer.byteLength(body, 'utf8') > MAX_BODY_BYTES) {
+      return res.status(413).json({ error: 'El tamaño del payload excede el límite permitido (4 KB).' });
+    }
+    try {
+      body = body.length ? JSON.parse(body) : {};
+    } catch (_) {
+      return res.status(400).json({ error: 'JSON malformado en la solicitud.' });
+    }
+  } else if (body && typeof body === 'object') {
+    const serialized = JSON.stringify(body);
+    if (Buffer.byteLength(serialized, 'utf8') > MAX_BODY_BYTES) {
+      return res.status(413).json({ error: 'El tamaño del payload excede el límite permitido (4 KB).' });
+    }
   }
-  if (body === undefined) body = {};
+  if (body === undefined || body === null) body = {};
+
+  // Exigir Content-Type: application/json cuando se envía cabecera en POST (mitigación CSRF)
+  if (req.method === 'POST' && req.headers && req.headers['content-type']) {
+    const ct = String(req.headers['content-type']).toLowerCase();
+    if (!ct.startsWith('application/json')) {
+      return res.status(415).json({ error: 'Content-Type debe ser application/json.' });
+    }
+  }
 
   const adapter = selectAdapter();
   const clientIp = getClientIp(req);
 
   // ---------------------------------------------------------------------------
-  // 1. Emisión de Token de Sesión de Partida (Anti-Cheat)
+  // 1. Emisión de Token Temporal de Sesión de Juego (POST { action: 'session' })
   // ---------------------------------------------------------------------------
-  if (
-    (req.method === 'GET' && query.action === 'session') ||
-    (req.method === 'POST' && body && body.action === 'session')
-  ) {
-    if (!checkRateLimit(`sess:${clientIp}`, 40, 60_000)) {
-      return res.status(429).json({ error: 'Demasiadas sesiones solicitadas. Esperá unos segundos.' });
+  if (req.method === 'POST' && body && body.action === 'session') {
+    const rl = checkRateLimit(`sess:${clientIp}`, 20, 60_000);
+    applyRateLimitHeaders(res, 20, rl);
+    if (!rl.allowed) {
+      return res.status(429).json({ error: 'Demasiadas sesiones iniciadas. Esperá unos segundos.' });
     }
-    const session = createSessionToken();
+
+    const session = createSessionToken(req);
     return res.status(200).json({
       ...session,
       mode: adapter.name,
@@ -658,28 +906,25 @@ module.exports = async function handler(req, res) {
   }
 
   // ---------------------------------------------------------------------------
-  // 2. Reinicio Administrativo Protegido (DELETE o action=reset)
+  // 2. Reinicio Administrativo Protegido (Solo DELETE + x-admin-key)
   // ---------------------------------------------------------------------------
-  const wantsReset =
-    req.method === 'DELETE' ||
-    query.reset === 'true' ||
-    (body && (body.action === 'reset' || body.reset === true));
-
-  if (wantsReset) {
-    const configuredAdminKey = process.env.ADMIN_RESET_KEY;
-    const providedKey =
-      (req.headers && req.headers['x-admin-key']) ||
-      query.admin_key ||
-      (body && body.admin_key);
-
-    if (configuredAdminKey && providedKey !== configuredAdminKey) {
-      return res.status(403).json({ error: 'Clave de administrador inválida para reiniciar el ranking.' });
+  if (req.method === 'DELETE') {
+    const rl = checkRateLimit(`admin:${clientIp}`, 5, 15 * 60_000);
+    applyRateLimitHeaders(res, 5, rl);
+    if (!rl.allowed) {
+      return res.status(429).json({ error: 'Demasiados intentos administrativos. Bloqueado temporalmente.' });
     }
-    // Sin ADMIN_RESET_KEY configurada, exigir DELETE explícito o confirmación
-    if (!configuredAdminKey && req.method === 'GET' && query.confirm !== 'yes') {
+
+    const configuredAdminKey = (process.env.ADMIN_RESET_KEY || '').trim();
+    if (!configuredAdminKey || configuredAdminKey.length < 16) {
       return res.status(403).json({
-        error: 'Para reiniciar vía navegador usá ?reset=true&confirm=yes o configurá ADMIN_RESET_KEY.'
+        error: 'Reinicio administrativo deshabilitado: configurá ADMIN_RESET_KEY (mín. 16 caracteres) en variables de entorno.'
       });
+    }
+
+    const providedKey = String((req.headers && req.headers['x-admin-key']) || '').trim();
+    if (!safeCompareStrings(providedKey, configuredAdminKey)) {
+      return res.status(403).json({ error: 'Credencial administrativa inválida.' });
     }
 
     try {
@@ -690,16 +935,25 @@ module.exports = async function handler(req, res) {
         updatedAt: resetState.updatedAt,
         scores: []
       });
-    } catch (err) {
-      return res.status(503).json({ error: 'No se pudo completar el reinicio global.', detail: err.message });
+    } catch (_) {
+      return res.status(503).json({ error: 'No se pudo completar el reinicio en la base de datos.' });
     }
   }
 
   // ---------------------------------------------------------------------------
-  // 3. Lectura Global & Delta Sync en Tiempo Real (GET /api/scores)
+  // 3. Lectura Pública del Ranking + Delta Sync (GET /api/scores)
   // ---------------------------------------------------------------------------
   if (req.method === 'GET') {
-    const limit = Math.max(1, Math.min(MAX_STORED_SCORES, Number(query.limit) || DEFAULT_LIMIT));
+    const rl = checkRateLimit(`get:${clientIp}`, 90, 60_000);
+    applyRateLimitHeaders(res, 90, rl);
+    if (!rl.allowed) {
+      return res.status(429).json({ error: 'Límite de consultas alcanzado. Reintentando en breve.' });
+    }
+
+    const parsedLimit = Number(query.limit);
+    const limit = Number.isFinite(parsedLimit)
+      ? Math.max(1, Math.min(MAX_STORED_SCORES, Math.floor(parsedLimit)))
+      : DEFAULT_LIMIT;
     const since = Number(query.since) || 0;
 
     try {
@@ -719,82 +973,104 @@ module.exports = async function handler(req, res) {
         realtime: getPublicRealtimeConfig(),
         scores: state.scores
       });
-    } catch (err) {
+    } catch (_) {
       return res.status(503).json({
-        error: 'Servicio de ranking sincronizando, reintentando…',
-        mode: adapter.name
+        error: 'Servicio de ranking sincronizando, reintentando…'
       });
     }
   }
 
   // ---------------------------------------------------------------------------
-  // 4. Registro de Nuevo Puntaje (POST /api/scores)
+  // 4. Registro Validado de Puntaje con Anti-Cheat (POST /api/scores)
   // ---------------------------------------------------------------------------
   if (req.method === 'POST') {
-    if (!body || typeof body !== 'object') {
-      return res.status(400).json({ error: 'JSON inválido en el cuerpo de la solicitud.' });
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return res.status(400).json({ error: 'Payload inválido.' });
     }
 
-    if (!checkRateLimit(`post:${clientIp}`, 10, 60_000)) {
-      return res.status(429).json({ error: 'Demasiados envíos seguidos. Esperá un momento.' });
+    // Rate limit estricto: máx. 5 envíos/min por IP y cooldown de 2.5s contra ráfagas automatizadas
+    const rl = checkRateLimit(`post:${clientIp}`, 5, 60_000, 2500);
+    applyRateLimitHeaders(res, 5, rl);
+    if (!rl.allowed) {
+      return res.status(429).json({ error: 'Demasiados envíos seguidos. Esperá unos segundos.' });
     }
 
-    // Validación estricta de iniciales (3 caracteres alfanuméricos A-Z, 0-9)
+    // 4.1 Validación y sanitización estricta de iniciales (3 caracteres A-Z0-9, anti-XSS)
     const rawInitials = body.initials !== undefined ? body.initials : body.name;
     const initials = sanitizeInitials(rawInitials);
     if (!isValidInitials(initials)) {
       return res.status(400).json({
-        error: 'Las iniciales deben tener exactamente 3 caracteres alfanuméricos en mayúsculas (A-Z, 0-9).'
+        error: 'Las iniciales deben contener exactamente 3 caracteres alfanuméricos en mayúsculas (A-Z, 0-9).'
       });
     }
 
-    // Validación estricta de puntaje
-    const rawScore = Number(body.score);
-    const score = Math.floor(rawScore);
-    if (!Number.isFinite(rawScore) || score <= 0 || score > MAX_PLAUSIBLE_SCORE) {
+    // 4.2 Validación estricta de score: solo enteros seguros positivos, sin decimales ni negativos
+    if (!isValidIntegerScore(body.score)) {
       return res.status(400).json({
-        error: `Puntaje fuera de rango permitido (1 - ${MAX_PLAUSIBLE_SCORE}).`
+        error: `Puntaje inválido: debe ser un número entero entre 1 y ${MAX_PLAUSIBLE_SCORE}.`
       });
     }
+    const score = body.score;
 
     if (initials === 'TES' && score === 9999) {
       return res.status(400).json({ error: 'Puntaje de prueba bloqueado.' });
     }
 
-    // ID único UUID v4 (acepta UUID de cliente para idempotencia ante reintentos de red)
+    // 4.3 Validación de UUID v4 de envío
     const clientUuid = typeof body.id === 'string' && UUID_REGEX.test(body.id.trim())
       ? body.id.trim().toLowerCase()
       : generateUUID();
 
-    // Validación de Token de Sesión HMAC (si fue emitido) o plausibilidad temporal
-    if (body.sessionToken) {
-      const check = verifySessionToken(body.sessionToken);
+    // 4.4 Verificación obligatoria de Token de Sesión de Juego + Plausibilidad Física
+    const requireToken = process.env.REQUIRE_SESSION_TOKEN !== 'false';
+    if (requireToken || body.sessionToken) {
+      const check = verifySessionToken(body.sessionToken, req);
       if (!check.valid) {
-        return res.status(403).json({ error: 'Token de sesión de partida inválido.' });
+        return res.status(403).json({
+          error: 'Sesión de partida inválida o ausente. Iniciá una partida legítima desde el juego.'
+        });
       }
+
       const { sid, iat } = check.payload;
       const ageMs = Date.now() - iat;
 
-      if (!body.offlineRetry && ageMs > SESSION_MAX_AGE_MS) {
-        return res.status(403).json({ error: 'La sesión de partida expiró.' });
-      }
-      if (score > 3000 && ageMs >= 0 && ageMs < MIN_SESSION_MS_HIGH_SCORE) {
-        return res.status(400).json({ error: 'Duración de partida inválida para el puntaje enviado.' });
+      if (ageMs < MIN_RUN_DURATION_MS) {
+        return res.status(400).json({
+          error: 'Duración de partida insuficiente para registrar puntaje.'
+        });
       }
 
-      const prevEntryId = consumedSessions.get(sid);
-      if (prevEntryId && prevEntryId !== clientUuid) {
-        return res.status(409).json({ error: 'Este token de partida ya fue utilizado.' });
+      if (ageMs > SESSION_MAX_AGE_MS) {
+        return res.status(403).json({
+          error: 'El token de sesión de la partida expiró.'
+        });
       }
-      consumedSessions.set(sid, clientUuid);
-      if (consumedSessions.size > 2000) {
-        const firstKey = consumedSessions.keys().next().value;
-        consumedSessions.delete(firstKey);
+
+      // Techo físico dinámico según duración real firmada en el servidor
+      const effectiveDurationMs = Number.isFinite(body.durationMs) && body.durationMs > 0
+        ? Math.min(ageMs, body.durationMs + 4000)
+        : ageMs;
+      const maxPhysicalScore = Math.floor((effectiveDurationMs / 1000) * MAX_SCORE_PER_SECOND + SCORE_BASE_TOLERANCE);
+
+      if (score > maxPhysicalScore) {
+        return res.status(400).json({
+          error: 'Puntaje rechazado por validación anti-cheat (tasa de puntos imposible).'
+        });
       }
-    } else if (process.env.REQUIRE_SESSION_TOKEN === 'true') {
-      return res.status(403).json({ error: 'Se requiere token de sesión activo.' });
-    } else if (Number.isFinite(Number(body.durationMs)) && Number(body.durationMs) < 800 && score > 3000) {
-      return res.status(400).json({ error: 'Duración de partida inverosímil.' });
+
+      // Protección Anti-Replay de un solo uso (idempotente solo para el mismo envío exacto)
+      const prevUse = consumedSessions.get(sid);
+      if (prevUse) {
+        if (prevUse.id !== clientUuid || prevUse.score !== score || prevUse.initials !== initials) {
+          return res.status(409).json({ error: 'Este token de partida ya fue consumido.' });
+        }
+      } else {
+        consumedSessions.set(sid, { id: clientUuid, initials, score, at: Date.now() });
+        if (consumedSessions.size > 3000) {
+          const oldestKey = consumedSessions.keys().next().value;
+          consumedSessions.delete(oldestKey);
+        }
+      }
     }
 
     const entry = {
@@ -802,7 +1078,7 @@ module.exports = async function handler(req, res) {
       initials,
       name: initials,
       score,
-      created_at: normalizeIsoDate(body.created_at)
+      created_at: normalizeIsoDate(body.created_at, true)
     };
 
     try {
@@ -822,9 +1098,9 @@ module.exports = async function handler(req, res) {
         scores: updated.scores.slice(0, DEFAULT_LIMIT)
       });
     } catch (err) {
-      const code = err.statusCode || 503;
+      const code = err && err.statusCode ? err.statusCode : 503;
       return res.status(code).json({
-        error: err.message || 'Error temporal guardando en la base de datos global.'
+        error: 'Servicio de almacenamiento ocupado temporalmente, reintentá en unos segundos.'
       });
     }
   }

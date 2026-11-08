@@ -168,11 +168,13 @@ const ASSETS = {
  *    Todo se mide en "U" = altura del personaje en pantalla, así el juego
  *    escala igual en cualquier celular.
  * ============================================================================= */
+const IS_LOCAL_DEV = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+
 const CONFIG = {
-  debug: /[?&]debug\b/.test(location.search),   // ?debug muestra hitboxes
-  godMode: /[?&]god\b/.test(location.search),   // ?god activa modo invencible para testing visual
-  skipCinematic: /[?&]skip\b/.test(location.search), // ?skip salta las cinemáticas
-  extremeTest: /[?&]extreme\b/.test(location.search), // ?extreme arranca en modo extremo (20.000 pts) para testing visual
+  debug: IS_LOCAL_DEV && /[?&]debug\b/.test(location.search),   // ?debug muestra hitboxes (solo entorno local)
+  godMode: IS_LOCAL_DEV && /[?&]god\b/.test(location.search),   // ?god modo invencible (bloqueado en producción)
+  skipCinematic: IS_LOCAL_DEV && /[?&]skip\b/.test(location.search), // ?skip salta cinemáticas (solo entorno local)
+  extremeTest: IS_LOCAL_DEV && /[?&]extreme\b/.test(location.search), // ?extreme arranca en 20k pts (bloqueado en producción)
   storageInitials: 'fanzine_runner_initials',    // últimas iniciales usadas
   apiScores: '/api/scores',                     // endpoint backend global en tiempo real (api/scores.js)
   apiTimeout: 6500,                             // ms de espera máxima de red
@@ -1865,6 +1867,17 @@ stateHandlers[STATES.LOADING] = {
 };
 
 /* ---------- CHARACTER_SELECT (Estado 0: Menú de Selección) ---------- */
+function setStartButtonReady(btn) {
+  if (!btn) return;
+  btn.textContent = '';
+  const icon = document.createElement('span');
+  icon.className = 'start__btn-icon';
+  icon.setAttribute('aria-hidden', 'true');
+  icon.textContent = '▶';
+  btn.appendChild(icon);
+  btn.appendChild(document.createTextNode(' COMENZAR'));
+}
+
 stateHandlers[STATES.CHARACTER_SELECT] = {
   enter() {
     Music.play('intro', false);
@@ -1872,7 +1885,7 @@ stateHandlers[STATES.CHARACTER_SELECT] = {
     dom.overlay.classList.remove('is-loading');
     renderOverlayScores();
     if (dom.startBtn) {
-      dom.startBtn.innerHTML = '<span class="start__btn-icon" aria-hidden="true">▶</span> COMENZAR';
+      setStartButtonReady(dom.startBtn);
       dom.startBtn.focus({ preventScroll: true });
     }
   },
@@ -4573,7 +4586,7 @@ function selectCharacter(id) {
   dom.pickers.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.char === id)));
   if (dom.startBtn) {
     dom.startBtn.disabled = false;
-    dom.startBtn.innerHTML = '<span class="start__btn-icon" aria-hidden="true">▶</span> COMENZAR';
+    setStartButtonReady(dom.startBtn);
   }
 }
 
@@ -5020,7 +5033,7 @@ async function main() {
   if (dom.overlay) dom.overlay.classList.remove('is-loading');
   if (dom.startBtn) {
     dom.startBtn.disabled = false;
-    dom.startBtn.innerHTML = '<span class="start__btn-icon" aria-hidden="true">▶</span> COMENZAR';
+    setStartButtonReady(dom.startBtn);
   }
 
   transitionTo(STATES.CHARACTER_SELECT);
@@ -5040,3 +5053,12 @@ document.addEventListener('fullscreenchange', () => { updateFullscreenBtnState()
 document.addEventListener('webkitfullscreenchange', () => { updateFullscreenBtnState(); onResize(); });
 
 main();
+
+// Registro del Service Worker (modo offline) desde script externo para cumplir CSP estricta (script-src 'self')
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch((err) => {
+      console.warn('[SW] No se pudo registrar:', err);
+    });
+  });
+}
