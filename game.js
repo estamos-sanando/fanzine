@@ -173,16 +173,12 @@ const CONFIG = {
   godMode: /[?&]god\b/.test(location.search),   // ?god activa modo invencible para testing visual
   skipCinematic: /[?&]skip\b/.test(location.search), // ?skip salta las cinemáticas
   extremeTest: /[?&]extreme\b/.test(location.search), // ?extreme arranca en modo extremo (20.000 pts) para testing visual
-  storageScores:   'fanzine_runner_global_v12', // copia local del ranking global limpia y reiniciada
-  storagePending:  'fanzine_runner_pending_v7',  // puntajes que todavía no se pudieron enviar al servidor
   storageInitials: 'fanzine_runner_initials',    // últimas iniciales usadas
-  storagePersonalRecord: 'fanzine_runner_personal_record_v8', // récord personal en este dispositivo
-  apiScores: '/api/scores',                     // endpoint local/Vercel (api/scores.js)
-  cloudScores: 'https://extendsclass.com/api/json-storage/bin/acbfcbc', // almacenamiento global principal persistente
-  cloudBackupScores: 'https://api.restful-api.dev/objects/ff808181a09d98f701a1bcfc75bf687b', // respaldo secundario
-  apiTimeout: 6000,                             // ms antes de alternar al cloud (tolerante a cold-starts)
-  maxScores: 5,                                 // Cantidad visualizada en Top 5
-  maxScoresStored: 500,                         // Cantidad total conservada en el ranking global
+  apiScores: '/api/scores',                     // endpoint backend global en tiempo real (api/scores.js)
+  apiTimeout: 6500,                             // ms de espera máxima de red
+  maxScores: 5,                                 // Cantidad visualizada en tarjeta Canvas de Game Over
+  maxScoresOverlay: 10,                         // Top 10 en pizarra principal de inicio
+  maxScoresModal: 50,                           // Top 50 en pizarra global completa
   initialsLength: 3,
   storageChar: 'fanzine_runner_char',
   defaultCharacter: 'chica',
@@ -295,6 +291,11 @@ const dom = {
   scoresList:      $('hiscores'),
   scoresState:     $('hiscores-status'),
   scoresPersonal:  $('personal-record-pts'),
+  overlayLivePill: $('overlay-live-pill'),
+  modalLivePill:   $('modal-live-pill'),
+  liveScoreBanner: $('live-score-banner'),
+  arcadeEntryModal:$('arcade-entry-modal'),
+  restartBtn:      $('restart-btn'),
   menuBtn:         $('menu-btn'),
   gameOverActions: $('gameover-actions'),
   gameOverScoresBtn: $('gameover-scores-btn'),
@@ -1195,6 +1196,9 @@ window.selectedCharacterId = character;
 function transitionTo(newState) {
   const prev = state;
   state = newState;
+  if (prev === STATES.ENTRY && newState !== STATES.ENTRY && window.ArcadeEntryModal && window.ArcadeEntryModal.isOpen) {
+    window.ArcadeEntryModal.close();
+  }
   if (dom.skipTutorialBtn) {
     dom.skipTutorialBtn.classList.toggle('is-visible', newState === STATES.TUTORIAL);
   }
@@ -1205,323 +1209,23 @@ function transitionTo(newState) {
 
 
 /* =============================================================================
- * 5b) RANKING GLOBAL
+ * 5b) LEADERBOARD ARCADE GLOBAL EN TIEMPO REAL (v4)
+ * Delegado a window.Leaderboard y window.ArcadeEntryModal (leaderboard.js)
  * ============================================================================= */
-const NAME_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-const cleanName = (s) =>
-  String(s || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, CONFIG.initialsLength)
-    .padEnd(CONFIG.initialsLength, 'A');
-const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+const Scores = window.Leaderboard;
+Scores.init({
+  apiEndpoint: CONFIG.apiScores,
+  isActivelyPlaying: () => state === STATES.PLAYING || state === STATES.TUTORIAL
+});
 
-const INITIAL_SCORES = [
-  { name: 'UNL', score: 1200 },
-  { name: 'FAN', score: 950 },
-  { name: 'MAT', score: 780 },
-  { name: 'RUN', score: 620 },
-  { name: 'BOY', score: 500 }
-];
-
-const Scores = {
-  remote: [],             // último top global confirmado por el servidor/cloud [{ name, score }]
-  list: [],               // lo que se muestra: remote + puntajes propios pendientes, de mayor a menor
-  pending: [],            // [{ id, name, score }] puntajes que todavía no llegaron al servidor
-  status: 'loading',      // loading | ok | offline
-  version: 0,             // sube con cada envío confirmado (descarta GETs viejos)
-  syncing: false,
-  onChange: null,         // callback: cambió la lista o el estado
-  onRank: null,           // callback(id, rank): el servidor confirmó un puntaje enviado
-
-  load() {
-    // Limpiar claves legacy para garantizar que ningún puntaje de prueba antiguo pueda revivir
-    [
-      'fanzine_runner_global_v1', 'fanzine_runner_global_v2', 'fanzine_runner_global_v3',
-      'fanzine_runner_global_v4', 'fanzine_runner_global_v5', 'fanzine_runner_global_v6',
-      'fanzine_runner_global_v7', 'fanzine_runner_global_v8', 'fanzine_runner_global_v9',
-      'fanzine_runner_global_v10', 'fanzine_runner_global_v11',
-      'fanzine_runner_personal_record', 'fanzine_runner_personal_record_v1',
-      'fanzine_runner_personal_record_v2', 'fanzine_runner_personal_record_v3',
-      'fanzine_runner_personal_record_v4', 'fanzine_runner_personal_record_v5',
-      'fanzine_runner_personal_record_v6', 'fanzine_runner_personal_record_v7',
-      'fanzine_runner_pending', 'fanzine_runner_pending_v1', 'fanzine_runner_pending_v2',
-      'fanzine_runner_pending_v3', 'fanzine_runner_pending_v4', 'fanzine_runner_pending_v5',
-      'fanzine_runner_pending_v6'
-    ].forEach((k) => {
-      try { storageRemove(k); } catch (_) {}
-    });
-
-    try {
-      const stored = JSON.parse(storageGet(CONFIG.storageScores, 'null'));
-      this.remote = stored ? this.sanitize(stored) : [...INITIAL_SCORES];
-    } catch (_) {
-      this.remote = [...INITIAL_SCORES];
-    }
-    try {
-      const raw = JSON.parse(storageGet(CONFIG.storagePending, '[]'));
-      this.pending = (Array.isArray(raw) ? raw : []).filter((e) => e && e.id && Number.isFinite(e.score))
-        .map((e) => ({ id: String(e.id), name: cleanName(e.name), score: Math.floor(e.score) }));
-    } catch (_) { this.pending = []; }
-    this.rebuild();
-  },
-  sanitize(raw) {
-    if (!Array.isArray(raw) || !raw.length) return [...INITIAL_SCORES];
-    const valid = [];
-    const seen = new Set();
-    for (let e of raw) {
-      if (!e) continue;
-      if (typeof e === 'string') {
-        try {
-          e = JSON.parse(e);
-        } catch (_) {
-          const m = e.match(/name[=:]\s*([A-Za-z]+).*?score[=:]\s*(\d+)/i) || e.match(/score[=:]\s*(\d+).*?name[=:]\s*([A-Za-z]+)/i);
-          if (m) {
-            e = { name: m[1] || m[2], score: Number(m[2] || m[1]) };
-          }
-        }
-      }
-      const score = Number(e && e.score);
-      if (Number.isFinite(score) && score > 0) {
-        const name = cleanName(e.name);
-        if (name === 'TES' && score === 9999) continue;
-        const key = `${name}:${Math.floor(score)}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        valid.push({ name, score: Math.floor(score) });
-      }
-    }
-    // Asegurar siempre que no se pierdan los iniciales históricos
-    for (const init of INITIAL_SCORES) {
-      const key = `${init.name}:${init.score}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        valid.push(init);
-      }
-    }
-    valid.sort((a, b) => b.score - a.score);
-    return valid.slice(0, CONFIG.maxScoresStored || 500);
-  },
-  // Muestra también los puntajes propios que aún no confirmó el servidor
-  rebuild() {
-    const out = (this.remote && this.remote.length) ? this.remote.slice() : [...INITIAL_SCORES];
-    for (const p of this.pending) {
-      const alreadyInRemote = out.some((r) => r.name === p.name && r.score === p.score);
-      if (!alreadyInRemote) out.push({ name: p.name, score: p.score });
-    }
-    this.list = this.sanitize(out);
-  },
-  save() {
-    storageSet(CONFIG.storageScores, JSON.stringify(this.remote));
-  },
-  savePending() { storageSet(CONFIG.storagePending, JSON.stringify(this.pending)); },
-  changed() { if (this.onChange) this.onChange(); },
-
-  best() { return this.list.length ? this.list[0].score : 0; },
-  qualifies(score) {
-    // Califica para ingresar iniciales siempre que el puntaje sea mayor a 0
-    return Number.isFinite(score) && score > 0;
-  },
-  isInTop5(score) {
-    if (!Number.isFinite(score) || score <= 0) return false;
-    const cap = CONFIG.maxScores || 5;
-    if (this.list.length < cap) return true;
-    return score >= this.list[cap - 1].score;
-  },
-  rankFor(score) {                            // puesto (1..n) que ocuparía un nuevo puntaje
-    let i = 0;
-    while (i < this.list.length && this.list[i].score > score) i++;
-    return i + 1;
-  },
-  getRankOf(score, name) {                    // puesto (1..n) exacto de un récord (evita off-by-one)
-    if (!Number.isFinite(score) || score <= 0) return 0;
-    const clean = name ? cleanName(name) : '';
-    const exactIdx = this.list.findIndex(e => e.score === score && (!clean || e.name === clean));
-    if (exactIdx !== -1) return exactIdx + 1;
-    let count = 0;
-    while (count < this.list.length && this.list[count].score > score) count++;
-    return count + 1;
-  },
-
-  async request(method, body) {
-    // 1. Intentar endpoint local o Vercel (/api/scores)
-    try {
-      const ctl = new AbortController();
-      const timer = setTimeout(() => ctl.abort(), CONFIG.apiTimeout);
-      const res = await fetch(CONFIG.apiScores, {
-        method,
-        headers: body ? { 'Content-Type': 'application/json' } : undefined,
-        body: body ? JSON.stringify(body) : undefined,
-        cache: 'no-store',
-        signal: ctl.signal
-      });
-      clearTimeout(timer);
-      if (res.ok) {
-        return await res.json();
-      }
-    } catch (_) {}
-
-    // 2. Si /api/scores no está disponible (ej: GitHub Pages o sin backend Node), usar Cloud REST directo
-    const ctlCloud = new AbortController();
-    const tCloud = setTimeout(() => ctlCloud.abort(), CONFIG.apiTimeout);
-    try {
-      if (method === 'GET') {
-        let scores = null;
-        try {
-          const res = await fetch(CONFIG.cloudScores, { cache: 'no-store', signal: ctlCloud.signal });
-          if (res.ok) {
-            const d = await res.json();
-            if (d && Array.isArray(d.scores)) scores = d.scores;
-            else if (d && d.data && Array.isArray(d.data.scores)) scores = d.data.scores;
-          }
-        } catch (_) {}
-        if (!scores && CONFIG.cloudBackupScores) {
-          try {
-            const resB = await fetch(CONFIG.cloudBackupScores, { cache: 'no-store', signal: ctlCloud.signal });
-            if (resB.ok) {
-              const dB = await resB.json();
-              if (dB && dB.data && Array.isArray(dB.data.scores)) scores = dB.data.scores;
-              else if (dB && Array.isArray(dB.scores)) scores = dB.scores;
-            }
-          } catch (_) {}
-        }
-        return { scores: scores || [] };
-      } else if (method === 'POST') {
-        let current = [];
-        try {
-          const curRes = await fetch(CONFIG.cloudScores, { cache: 'no-store', signal: ctlCloud.signal });
-          if (curRes.ok) {
-            const curData = await curRes.json();
-            if (curData && Array.isArray(curData.scores)) current = curData.scores;
-            else if (curData && curData.data && Array.isArray(curData.data.scores)) current = curData.data.scores;
-          }
-        } catch (_) {}
-        if (!current.length && CONFIG.cloudBackupScores) {
-          try {
-            const curResB = await fetch(CONFIG.cloudBackupScores, { cache: 'no-store', signal: ctlCloud.signal });
-            if (curResB.ok) {
-              const curDataB = await curResB.json();
-              if (curDataB && curDataB.data && Array.isArray(curDataB.data.scores)) current = curDataB.data.scores;
-              else if (curDataB && Array.isArray(curDataB.scores)) current = curDataB.scores;
-            }
-          } catch (_) {}
-        }
-        const merged = this.sanitize([...current, body]);
-        let rank = 1;
-        while (rank <= merged.length && merged[rank - 1].score > body.score) rank++;
-
-        const cloudTasks = [];
-        if (CONFIG.cloudScores) {
-          cloudTasks.push(
-            fetch(CONFIG.cloudScores, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ scores: merged }),
-              signal: ctlCloud.signal
-            }).catch(() => {})
-          );
-        }
-        if (CONFIG.cloudBackupScores) {
-          cloudTasks.push(
-            fetch(CONFIG.cloudBackupScores, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ name: 'fanzine_scores', data: { scores: merged.slice(0, 20) } }),
-              signal: ctlCloud.signal
-            }).catch(() => {})
-          );
-        }
-        try { await Promise.allSettled(cloudTasks); } catch (_) {}
-        return { rank, scores: merged };
-      }
-    } finally {
-      clearTimeout(tCloud);
-    }
-  },
-
-  // Baja el ranking global sincronizado
-  async refresh() {
-    try {
-      const data = await this.request('GET');
-      if (data && Array.isArray(data.scores) && data.scores.length > 0) {
-        this.remote = this.sanitize(data.scores);
-        this.rebuild();
-        this.save();
-      }
-      this.status = 'ok';
-    } catch (_) {
-      this.status = 'offline';
-    }
-    this.changed();
-    if (this.status === 'ok') this.flush();
-  },
-
-  // Guarda al instante (se ve en el ranking) y envía en segundo plano
-  submit(name, score) {
-    const clean = cleanName(name);
-    const num = Math.floor(Number(score));
-    if (!Number.isFinite(num) || num <= 0) return { id: null, rank: 0 };
-
-    const item = { id: uid(), name: clean, score: num };
-    const rank = this.getRankOf(num, clean);
-    this.pending.push(item);
-    this.savePending();
-    // Guardar inmediatamente en remote para que NUNCA desaparezca
-    this.remote = this.sanitize([...this.remote, { name: item.name, score: item.score }]);
-    this.save();
-    this.rebuild();
-    this.changed();
-    this.flush();
-    return { id: item.id, rank };
-  },
-
-  async flush() {
-    if (this.syncing || !this.pending.length) return;
-    this.syncing = true;
-    this.changed();
-    try {
-      while (this.pending.length) {
-        const item = this.pending[0];
-        try {
-          const data = await this.request('POST', item);
-          this.pending.shift();                       // confirmado: ya no es "pendiente"
-          this.version++;
-          this.savePending();
-          if (data && Array.isArray(data.scores)) {
-            this.remote = this.sanitize(data.scores);
-            this.rebuild();
-            this.save();
-          }
-          this.status = 'ok';
-          if (this.onRank && data && data.rank) this.onRank(item.id, data.rank);
-          this.changed();
-        } catch (e) {
-          if (e && e.status === 400) {                // puntaje inválido: descartarlo
-            this.pending.shift();
-            this.savePending();
-            this.rebuild();
-            continue;
-          }
-          this.status = 'offline';                    // sin red / límite: reintenta luego
-          break;
-        }
-      }
-    } finally {
-      this.syncing = false;
-      this.changed();
-    }
-  }
-};
-Scores.load();
-
-let initials = cleanName(storageGet(CONFIG.storageInitials, 'ANT'));
-let personalRecord = parseInt(storageGet(CONFIG.storagePersonalRecord, '0'), 10) || 0;
-if (personalRecord >= 20000) {
-  personalRecord = 0;
-  storageSet(CONFIG.storagePersonalRecord, 0);
-}
+let initials = Scores.getSavedInitials();
+let personalRecord = Scores.getPersonalRecord();
 
 function updatePersonalRecord(newScore = 0) {
-  if (newScore > personalRecord) {
-    personalRecord = Math.floor(newScore);
-    storageSet(CONFIG.storagePersonalRecord, personalRecord);
+  if (newScore > 0) {
+    personalRecord = Scores.updatePersonalRecord(newScore);
+  } else {
+    personalRecord = Scores.getPersonalRecord();
   }
   if (dom.scoresPersonal) {
     dom.scoresPersonal.textContent = pad(personalRecord);
@@ -1530,8 +1234,36 @@ function updatePersonalRecord(newScore = 0) {
 
 updatePersonalRecord();
 
+let liveBannerTimer = 0;
+function showLiveScoreBanner(entry) {
+  if (!dom.liveScoreBanner || !entry) return;
+  const rankTxt = entry.rank > 0 ? ` (#${String(entry.rank).padStart(2, '0')})` : '';
+  dom.liveScoreBanner.textContent = `⚡ EN VIVO · ${entry.initials} marcó ${pad(entry.score)} pts${rankTxt}`;
+  dom.liveScoreBanner.classList.add('is-visible');
+  if (state !== STATES.PLAYING) {
+    Sfx.tone(880, 1320, 0.09, 'triangle', 0.045);
+  }
+  clearTimeout(liveBannerTimer);
+  liveBannerTimer = setTimeout(() => {
+    if (dom.liveScoreBanner) dom.liveScoreBanner.classList.remove('is-visible');
+  }, 4800);
+}
+
+function updateLivePills() {
+  const st = Scores.status || 'loading';
+  const labelOverlay = st === 'live' ? '● WS LIVE' : (st === 'ok' ? '● EN VIVO' : (st === 'offline' ? '● SIN RED' : '● SYNC'));
+  const labelModal = st === 'live' ? '● TIEMPO REAL WS' : (st === 'ok' ? '● EN VIVO' : (st === 'offline' ? '● SIN RED' : '● CONECTANDO'));
+  if (dom.overlayLivePill) {
+    dom.overlayLivePill.dataset.state = st;
+    dom.overlayLivePill.textContent = labelOverlay;
+  }
+  if (dom.modalLivePill) {
+    dom.modalLivePill.dataset.state = st;
+    dom.modalLivePill.textContent = labelModal;
+  }
+}
+
 let hiScore = Scores.best();
-// Estado de la pantalla de ingreso de iniciales
 const entryUI = { letters: initials.split(''), slot: 0, rank: 1, hits: [] };
 
 const P = CONFIG.physics;
@@ -1743,13 +1475,11 @@ function tryJump() {
 }
 
 function onPress() {
+  if (window.ArcadeEntryModal && window.ArcadeEntryModal.isOpen) return;
   if (dom.fullScoresModal && dom.fullScoresModal.classList.contains('is-open')) return;
   switch (state) {
     case STATES.PLAYING:
       tryJump();
-      break;
-    case STATES.GAME_OVER:
-      if (performance.now() - world.deadAt > CONFIG.deadInputLock) beginRunFromMenu();
       break;
     case STATES.PAUSED:
       if (performance.now() - world.pausedAt > 200) { state = STATES.PLAYING; }
@@ -1765,84 +1495,12 @@ function onPress() {
   }
 }
 
-/* ---------- Ingreso de iniciales (arcade) ---------- */
-const ENTRY_READY_AT = 0.55;                    // s: el panel aparece tras el golpe
+/* ---------- Ingreso de iniciales (Modal Arcade Interactivo) ---------- */
+const ENTRY_READY_AT = 0.32;                    // s: pausa breve tras impacto antes de abrir el gabinete arcade
 
-function entryBlip() { Sfx.tone(700, 700, 0.04, 'square', 0.05); }
-
-function cycleLetter(i, dir) {
-  const idx = NAME_CHARS.indexOf(entryUI.letters[i]);
-  entryUI.letters[i] = NAME_CHARS[(idx + dir + NAME_CHARS.length) % NAME_CHARS.length];
-  entryUI.slot = i;
-  entryBlip();
-}
-
-function confirmEntry() {
-  initials = entryUI.letters.join('');
-  storageSet(CONFIG.storageInitials, initials);
-  const sent = Scores.submit(initials, world.score);   // se ve ya mismo; el servidor lo confirma en segundo plano
-  world.submitId = sent.id;
-  world.addedRank = sent.rank;
-  entryUI.hits = [];
-  transitionTo(STATES.GAME_OVER);
-  world.deadAt = performance.now();             // evita reinicio accidental con el mismo toque
-  if (sent.rank > 0 && sent.rank <= 5) {
-    Music.play('top5', false);                  // suena musicatop5 al entrar al Top 5 en vez de perder
-    Sfx.play('bonus');                          // fanfarria triunfal al entrar al Top 5
-  } else {
-    Music.play('lose', false);                  // si no entró al Top 5 suena la música de perder
-    Sfx.play('pickup');
-  }
-}
-
-function handleEntryPointer(clientX, clientY) {
-  if (world.deadT < ENTRY_READY_AT) return;
-  const rect = dom.canvas.getBoundingClientRect();
-  const scaleX = W / (rect.width || W);
-  const scaleY = H / (rect.height || H);
-  const x = (clientX - rect.left) * scaleX;
-  const y = (clientY - rect.top) * scaleY;
-  for (const h of entryUI.hits) {
-    if (x < h.x || x > h.x + h.w || y < h.y || y > h.y + h.h) continue;
-    if (h.type === 'up') cycleLetter(h.i, 1);
-    else if (h.type === 'down') cycleLetter(h.i, -1);
-    else if (h.type === 'slot') { entryUI.slot = h.i; entryBlip(); }
-    else if (h.type === 'ok') confirmEntry();
-    return;
-  }
-}
-
-function handleEntryKey(e) {
-  if (world.deadT < ENTRY_READY_AT) return;
-  const last = CONFIG.initialsLength - 1;
-  if (/^[a-zA-Z]$/.test(e.key)) {
-    e.preventDefault();
-    entryUI.letters[entryUI.slot] = e.key.toUpperCase();
-    entryUI.slot = Math.min(entryUI.slot + 1, last);
-    entryBlip();
-  } else if (e.key === 'Backspace') {
-    e.preventDefault();
-    entryUI.slot = Math.max(entryUI.slot - 1, 0);
-  } else if (e.key === 'ArrowLeft') {
-    e.preventDefault(); entryUI.slot = Math.max(entryUI.slot - 1, 0);
-  } else if (e.key === 'ArrowRight') {
-    e.preventDefault(); entryUI.slot = Math.min(entryUI.slot + 1, last);
-  } else if (e.key === 'ArrowUp') {
-    e.preventDefault(); cycleLetter(entryUI.slot, 1);
-  } else if (e.key === 'ArrowDown') {
-    e.preventDefault(); cycleLetter(entryUI.slot, -1);
-  } else if (e.key === 'Enter') {
-    e.preventDefault();
-    if (!e.repeat) confirmEntry();
-  } else if (e.key === ' ' || e.code === 'Space') {
-    e.preventDefault();
-    if (entryUI.slot < last) {
-      entryUI.slot++;
-      entryBlip();
-    } else {
-      confirmEntry();
-    }
-  }
+function entryBlip() {
+  Sfx.unlock();
+  Sfx.tone(720, 880, 0.04, 'square', 0.045);
 }
 
 window.addEventListener('pointermove', (e) => {
@@ -1861,22 +1519,15 @@ window.addEventListener('pointermove', (e) => {
   dom.canvas.style.cursor = 'default';
 });
 
-window.addEventListener('touchstart', (e) => {
-  if (isMobileDevice() && !isFullscreenActive()) {
-    goFullscreen();
-  }
-}, { passive: true });
-
 window.addEventListener('pointerdown', (e) => {
-  if (isMobileDevice() && !isFullscreenActive()) {
-    goFullscreen();
-  }
   if (state === STATES.LOADING || state === STATES.CHARACTER_SELECT) return;          // el menú usa sus propios botones
+  if (window.ArcadeEntryModal && window.ArcadeEntryModal.isOpen) return;
   if (dom.fullScoresModal && dom.fullScoresModal.classList.contains('is-open')) return;
-  if (e.target && e.target.closest && e.target.closest('#menu-btn, #gameover-actions, #gameover-scores-btn, #full-scores-modal, #full-scores-btn, #fullscreen-btn, #skip-tutorial-btn, #settings')) return;
+  if (e.target && e.target.closest && e.target.closest('#arcade-entry-modal, #restart-btn, #menu-btn, #gameover-actions, #gameover-scores-btn, #full-scores-modal, #full-scores-btn, #fullscreen-btn, #skip-tutorial-btn, #settings, #overlay')) return;
+  // En ENTRY y GAME_OVER no reiniciar por clic accidental sobre el fondo; se usan los botones dedicados
+  if (state === STATES.ENTRY || state === STATES.GAME_OVER) return;
   e.preventDefault();
   Sfx.unlock();
-  if (state === STATES.ENTRY) { handleEntryPointer(e.clientX, e.clientY); return; }
   // Cinemáticas: interacción con la máquina expendedora
   if (state === STATES.VENDING_MACHINE) { handleVendingClick(e.clientX, e.clientY); return; }
   onPress();
@@ -1888,18 +1539,30 @@ window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') { e.preventDefault(); Settings.close(); }
     return;
   }
+  // Modal Arcade de ingreso de iniciales: gestiona sus propias teclas (A-Z, 0-9, flechas, Enter)
+  if (window.ArcadeEntryModal && window.ArcadeEntryModal.isOpen) return;
   // Modal de ranking completo: Escape lo cierra y, mientras está abierto, las teclas no controlan el juego
   if (dom.fullScoresModal && dom.fullScoresModal.classList.contains('is-open')) {
     if (e.key === 'Escape') { e.preventDefault(); closeFullScoresModal(); }
     return;
   }
-  if (e.target && e.target.closest && e.target.closest('#settings, #full-scores-modal')) return;
-  if (state === STATES.LOADING) return;
+  if (e.target && e.target.closest && e.target.closest('#settings, #full-scores-modal, #arcade-entry-modal')) return;
+  if (state === STATES.LOADING || state === STATES.ENTRY) return;
   if (state === STATES.CHARACTER_SELECT) { handleMenuKey(e); return; }
-  if (state === STATES.ENTRY) { handleEntryKey(e); return; }
-  if (state === STATES.GAME_OVER && (e.key === 'm' || e.key === 'M' || e.key === 'Escape')) {
-    e.preventDefault();
-    showMenu();
+  if (state === STATES.GAME_OVER) {
+    if (e.key === 'm' || e.key === 'M' || e.key === 'Escape') {
+      e.preventDefault();
+      showMenu();
+      return;
+    }
+    if ((e.code === 'Space' || e.key === ' ' || e.key === 'Enter') && !e.repeat) {
+      e.preventDefault();
+      if (performance.now() - world.deadAt > CONFIG.deadInputLock) {
+        Sfx.unlock();
+        beginRunFromMenu();
+      }
+      return;
+    }
     return;
   }
   if (state === STATES.VENDING_MACHINE && (e.code === 'Space' || e.key === ' ' || e.code === 'Enter' || e.key === 'Enter')) {
@@ -1908,8 +1571,7 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   const isJump = e.code === 'Space' || e.code === 'ArrowUp' || e.key === ' ' || e.key === 'ArrowUp';
-  const isEnter = e.key === 'Enter' && state === STATES.GAME_OVER;
-  if (!isJump && !isEnter) return;
+  if (!isJump) return;
   e.preventDefault();
   if (e.repeat) return;
   Sfx.unlock();
@@ -1920,9 +1582,9 @@ window.addEventListener('keydown', (e) => {
 ['gesturestart', 'gesturechange', 'gestureend'].forEach((n) =>
   document.addEventListener(n, (e) => e.preventDefault()));
 document.addEventListener('contextmenu', (e) => e.preventDefault());
-// Bloquea el scroll/zoom táctil, salvo dentro del menú ⚙, overlay o el ranking completo (para scroll y volumen)
+// Bloquea el scroll/zoom táctil, salvo dentro del menú ⚙, overlay, modal de iniciales o ranking completo
 document.addEventListener('touchmove', (e) => {
-  if (e.target && e.target.closest && e.target.closest('#settings, #full-scores-modal, #overlay')) return;
+  if (e.target && e.target.closest && e.target.closest('#settings, #full-scores-modal, #arcade-entry-modal, #overlay')) return;
   e.preventDefault();
 }, { passive: false });
 document.addEventListener('dblclick', (e) => e.preventDefault());
@@ -3169,7 +2831,8 @@ stateHandlers[STATES.PLAYING] = {
     resetRun();
     world.vendingX = savedVendingX;
     layout();
-    Music.play('game'); // cuando se activa el juego comienza Musicajuego.mp3
+    Scores.startSession(); // Genera token HMAC de sesión anti-cheat para esta carrera
+    Music.play('game');    // cuando se activa el juego comienza Musicajuego.mp3
   },
 
   update(dt) {
@@ -3730,13 +3393,44 @@ stateHandlers[STATES.GAME_OVER] = {
   }
 };
 
-/* ---------- ENTRY (Ingreso de iniciales) ---------- */
+/* ---------- ENTRY (Ingreso de iniciales · Modal Arcade Interactivo) ---------- */
 stateHandlers[STATES.ENTRY] = {
+  enter() {
+    world.entryModalOpened = false;
+  },
   update(dt) {
     world.deadT += dt;
+    if (!world.entryModalOpened && world.deadT >= ENTRY_READY_AT) {
+      world.entryModalOpened = true;
+      if (window.ArcadeEntryModal) {
+        window.ArcadeEntryModal.open({
+          score: world.score,
+          defaultInitials: initials,
+          onComplete: (res) => {
+            if (res && !res.skipped) {
+              initials = res.initials || initials;
+              world.submitId = res.id || null;
+              world.addedRank = res.rank || 0;
+              if (res.rank === 1) world.newGlobalRecord = true;
+              if (res.rank > 0 && res.rank <= 5) {
+                Music.play('top5', false);
+                Sfx.play('bonus');
+              } else {
+                Music.play('lose', false);
+                Sfx.play('pickup');
+              }
+            }
+            transitionTo(STATES.GAME_OVER);
+            world.deadAt = performance.now();
+          }
+        });
+      } else {
+        transitionTo(STATES.GAME_OVER);
+      }
+    }
   },
   draw() {
-    // Render subyacente
+    // Render subyacente congelado con efecto de impacto antes de abrir el gabinete arcade
     let shake = false;
     if (world.deadT < 0.28) {
       shake = true;
@@ -3754,12 +3448,10 @@ stateHandlers[STATES.ENTRY] = {
     if (shake) ctx.restore();
     drawHUD();
 
-    const blink = Math.floor(performance.now() / 500) % 2 === 0;
     if (world.deadT < 0.18) {
       ctx.fillStyle = `rgba(255,255,255,${0.55 * (1 - world.deadT / 0.18)})`;
       ctx.fillRect(0, 0, W, H);
     }
-    if (world.deadT >= ENTRY_READY_AT) drawEntryPanel(blink);
   }
 };
 
@@ -4463,37 +4155,43 @@ function drawScoreboardCard(cardX, cardY, cardW, cardH, blink, inTop5, rows) {
   const rowH = clamp(rowSpacing * 0.88, 18, 28);
   const medalColors = ['#ffd700', '#d9dee8', '#e0a070', '#ffffff', '#ffffff'];
 
-  rows.forEach((r, idx) => {
-    const isPlayerRow = r.isNew;
-    const ry = rowStartY + idx * rowSpacing + rowSpacing / 2;
+  if (!rows.length) {
+    drawText('¡Aún sin marcas globales registradas!', cardX + cardW / 2, rowStartY + availableRowsH / 2, clamp(cardH * 0.036, 10, 12), {
+      color: '#94a3b8', weight: 700
+    });
+  } else {
+    rows.forEach((r, idx) => {
+      const isPlayerRow = r.isNew;
+      const ry = rowStartY + idx * rowSpacing + rowSpacing / 2;
 
-    if (isPlayerRow) {
-      rrect(cardX + 10, ry - rowH / 2, cardW - 20, rowH, 5);
-      ctx.fillStyle = blink ? 'rgba(0, 230, 118, 0.26)' : 'rgba(255, 211, 77, 0.26)';
-      ctx.fill();
-      ctx.strokeStyle = blink ? '#00e676' : '#ffd34d';
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-    } else if (idx % 2 === 1) {
-      rrect(cardX + 12, ry - rowH / 2, cardW - 24, rowH, 4);
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
-      ctx.fill();
-    }
+      if (isPlayerRow) {
+        rrect(cardX + 10, ry - rowH / 2, cardW - 20, rowH, 5);
+        ctx.fillStyle = blink ? 'rgba(0, 230, 118, 0.26)' : 'rgba(255, 211, 77, 0.26)';
+        ctx.fill();
+        ctx.strokeStyle = blink ? '#00e676' : '#ffd34d';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      } else if (idx % 2 === 1) {
+        rrect(cardX + 12, ry - rowH / 2, cardW - 24, rowH, 4);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
+        ctx.fill();
+      }
 
-    const rowColor = isPlayerRow ? (blink ? '#00e676' : '#ffd34d') : (medalColors[idx] || '#ffffff');
-    const rowFSize = clamp(rowH * 0.50, 10, 13);
-    const colRank = String(r.rank).padStart(2, ' ') + '.';
-    const colName = r.name;
-    const colPts = pad(r.score);
+      const rowColor = isPlayerRow ? (blink ? '#00e676' : '#ffd34d') : (medalColors[idx] || '#ffffff');
+      const rowFSize = clamp(rowH * 0.50, 10, 13);
+      const colRank = String(r.rank).padStart(2, ' ') + '.';
+      const colName = r.name;
+      const colPts = pad(r.score);
 
-    drawText(colRank, cardX + 22, ry, rowFSize, { align: 'left', color: rowColor, weight: 800 });
-    drawText(colName, cardX + Math.min(85, cardW * 0.24), ry, rowFSize, { align: 'left', color: rowColor, weight: 800 });
-    drawText(colPts, cardX + cardW - 22, ry, rowFSize, { align: 'right', color: rowColor, weight: 800 });
-  });
+      drawText(colRank, cardX + 22, ry, rowFSize, { align: 'left', color: rowColor, weight: 800 });
+      drawText(colName, cardX + Math.min(85, cardW * 0.24), ry, rowFSize, { align: 'left', color: rowColor, weight: 800 });
+      drawText(colPts, cardX + cardW - 22, ry, rowFSize, { align: 'right', color: rowColor, weight: 800 });
+    });
+  }
 
-  // 7. Footer: "Tocá para reiniciar"
-  drawText('Tocá para reiniciar', cardX + cardW / 2, footerY, clamp(cardH * 0.034, 10, 12), {
-    color: '#ffffff', alpha: blink ? 0.95 : 0.45, weight: 700
+  // 7. Footer: indicación explícita de reinicio seguro
+  drawText('Usá ▶ JUGAR DE NUEVO o ESPACIO', cardX + cardW / 2, footerY, clamp(cardH * 0.032, 9.5, 11.5), {
+    color: '#ffffff', alpha: blink ? 0.95 : 0.5, weight: 700
   });
 }
 
@@ -4522,9 +4220,9 @@ function drawDeadPanel(blink) {
   const cap = Math.min(CONFIG.maxScores, 5);
   const rows = Scores.list.slice(0, cap).map((e, i) => ({
     rank: i + 1,
-    name: e.name,
+    name: e.initials || e.name,
     score: e.score,
-    isNew: world.addedRank === i + 1
+    isNew: (world.submitId && e.id === world.submitId) || (!world.submitId && world.addedRank === i + 1)
   }));
 
   const isWide = W >= 560;
@@ -4787,18 +4485,14 @@ function die() {
   updatePersonalRecord(world.score);
   world.addedRank = 0;
   world.submitId = null;
-  entryUI.hits = [];
-  Scores.refresh();                            // trae el ranking global más reciente
+  Scores.refresh(false);                       // sincroniza el ranking global antes de registrar
   // En modos de prueba (?extreme o ?god), no entra al ranking para no bloquear a los estudiantes
   if (CONFIG.extremeTest || CONFIG.godMode) {
     transitionTo(STATES.GAME_OVER);
     return;
   }
-  if (Scores.qualifies(world.score)) {         // cualquier puntaje > 0 pide iniciales para registrarlo
+  if (Scores.qualifies(world.score)) {         // califica al Top 50 global (puntaje > 0)
     transitionTo(STATES.ENTRY);
-    entryUI.letters = initials.split('');
-    entryUI.slot = 0;
-    entryUI.rank = Scores.rankFor(world.score);
   } else {
     transitionTo(STATES.GAME_OVER);
   }
@@ -4887,39 +4581,67 @@ function selectCharacter(id) {
 function renderFullScores() {
   if (!dom.fullScoresList) return;
   updatePersonalRecord();
+  updateLivePills();
   dom.fullScoresList.textContent = '';
-  const list = Scores.list || [];
+  const list = (Scores.list || []).slice(0, CONFIG.maxScoresModal || 50);
 
   if (dom.fullScoresCount) {
-    dom.fullScoresCount.textContent = list.length
-      ? `${list.length} puntajes registrados`
-      : (Scores.status === 'loading' ? 'Cargando ranking…' : 'Sin puntajes registrados');
+    if (list.length) {
+      dom.fullScoresCount.textContent = `${list.length} marca${list.length === 1 ? '' : 's'} globales · Sincronización en tiempo real`;
+    } else {
+      dom.fullScoresCount.textContent = Scores.status === 'loading'
+        ? 'Sincronizando ranking global…'
+        : 'Ranking global listo · ¡Marcá el primer récord!';
+    }
   }
 
   if (dom.fullScoresPersonalPts) {
     dom.fullScoresPersonalPts.textContent = pad(personalRecord);
   }
   if (dom.fullScoresPersonalRank) {
-    const rank = personalRecord > 0 ? Scores.getRankOf(personalRecord, initials) : 0;
-    dom.fullScoresPersonalRank.textContent = rank > 0 ? `Tu récord: Puesto #${rank}` : 'Aún sin récord';
+    const rank = personalRecord > 0 ? Scores.getRankOf(personalRecord, initials, world.submitId) : 0;
+    dom.fullScoresPersonalRank.textContent = rank > 0 ? `Tu mejor marca: Puesto #${rank}` : 'Aún sin marca registrada';
   }
 
   const medalIcons = ['🥇', '🥈', '🥉'];
+  const fmtRel = window.LeaderboardUtils && window.LeaderboardUtils.formatRelativeTime;
+
   list.forEach((e, i) => {
     const rank = i + 1;
+    const isOwnNew = (world.submitId && e.id === world.submitId) || (!world.submitId && world.addedRank === rank);
+    const isLive = Scores.isLiveHighlighted(e.id);
+
     const li = document.createElement('li');
     li.className = 'full-scores-row';
     if (rank <= 3) li.classList.add('is-podium', 'is-rank-' + rank);
     else if (rank <= 5) li.classList.add('is-top5');
-    if (world.addedRank === rank) li.classList.add('is-new');
+    if (isOwnNew) li.classList.add('is-new');
+    if (isLive) li.classList.add('is-live-arrival');
 
     const rankSpan = document.createElement('span');
     rankSpan.className = 'col-rank';
-    rankSpan.textContent = (rank <= 3 ? medalIcons[rank - 1] + ' ' : '') + '#' + rank;
+    rankSpan.textContent = (rank <= 3 ? medalIcons[rank - 1] + ' ' : '') + '#' + String(rank).padStart(2, '0');
 
     const nameSpan = document.createElement('span');
     nameSpan.className = 'col-name';
-    nameSpan.textContent = e.name;
+    const iniTxt = document.createElement('span');
+    iniTxt.textContent = e.initials || e.name;
+    nameSpan.appendChild(iniTxt);
+
+    if (isLive) {
+      const liveTag = document.createElement('span');
+      liveTag.className = 'col-live-tag';
+      liveTag.textContent = e.pending ? 'ENVIANDO' : 'NUEVO';
+      nameSpan.appendChild(liveTag);
+    } else if (fmtRel && e.created_at) {
+      const rel = fmtRel(e.created_at);
+      if (rel) {
+        const timeSpan = document.createElement('span');
+        timeSpan.className = 'col-time';
+        timeSpan.textContent = rel;
+        nameSpan.appendChild(timeSpan);
+      }
+    }
 
     const ptsSpan = document.createElement('span');
     ptsSpan.className = 'col-pts';
@@ -4935,15 +4657,15 @@ function renderFullScores() {
     const emptyLi = document.createElement('li');
     emptyLi.className = 'full-scores-row is-empty';
     emptyLi.textContent = Scores.status === 'loading'
-      ? 'Cargando ranking…'
-      : '¡Sé la primera persona en dejar su marca!';
+      ? 'Conectando con el Leaderboard Global…'
+      : '¡Sé la primera persona en registrar sus iniciales en el arcade!';
     dom.fullScoresList.appendChild(emptyLi);
   }
 }
 
 function openFullScoresModal() {
   renderFullScores();
-  Scores.refresh().then(() => {
+  Scores.refresh(true).then(() => {
     if (dom.fullScoresModal && dom.fullScoresModal.classList.contains('is-open')) {
       renderFullScores();
     }
@@ -4970,24 +4692,22 @@ function closeFullScoresModal() {
 function renderOverlayScores() {
   if (!dom.scoresList) return;
   updatePersonalRecord();
+  updateLivePills();
   dom.scoresList.textContent = '';
-  const top = Scores.list.slice(0, CONFIG.maxScores);
-  // Asegurar siempre que se muestren exactamente 5 filas usando INITIAL_SCORES como respaldo
-  while (top.length < CONFIG.maxScores) {
-    const candidate = INITIAL_SCORES.find(s => !top.some(t => t.name === s.name && t.score === s.score));
-    if (candidate) top.push(candidate);
-    else break;
-  }
 
-  const badges = ['👑', '🥈', '🥉', '', ''];
+  const top = (Scores.list || []).slice(0, CONFIG.maxScoresOverlay || 10);
+  const badges = ['👑', '🥈', '🥉'];
+
   top.forEach((e, i) => {
     const rank = i + 1;
+    const isLive = Scores.isLiveHighlighted(e.id);
     const li = document.createElement('li');
-    li.className = 'scores__row scores__row--rank-' + rank;
+    li.className = 'scores__row scores__row--rank-' + Math.min(rank, 5);
+    if (isLive) li.classList.add('is-live-arrival');
 
     const rankSpan = document.createElement('span');
     rankSpan.className = 'col-rank';
-    rankSpan.textContent = rank + '.';
+    rankSpan.textContent = '#' + String(rank).padStart(2, '0');
 
     const badgeSpan = document.createElement('span');
     badgeSpan.className = 'col-badge';
@@ -4995,7 +4715,7 @@ function renderOverlayScores() {
 
     const nameSpan = document.createElement('span');
     nameSpan.className = 'col-name';
-    nameSpan.textContent = e.name;
+    nameSpan.textContent = e.initials || e.name;
 
     const dotsSpan = document.createElement('span');
     dotsSpan.className = 'col-dots';
@@ -5008,22 +4728,32 @@ function renderOverlayScores() {
     li.appendChild(rankSpan);
     if (badges[i]) li.appendChild(badgeSpan);
     li.appendChild(nameSpan);
+    if (isLive) {
+      const liveTag = document.createElement('span');
+      liveTag.className = 'col-live-tag';
+      liveTag.textContent = 'NUEVO';
+      li.appendChild(liveTag);
+    }
     li.appendChild(dotsSpan);
     li.appendChild(ptsSpan);
 
     dom.scoresList.appendChild(li);
   });
+
   if (!top.length) {
     const li = document.createElement('li');
     li.className = 'empty';
-    li.textContent = Scores.status === 'loading' ? 'Cargando ranking…' : '¡Sé la primera persona en dejar su marca!';
+    li.textContent = Scores.status === 'loading'
+      ? 'Sincronizando ranking en tiempo real…'
+      : 'Ranking global abierto · ¡Jugá y marcá el #01!';
     dom.scoresList.appendChild(li);
   }
+
   if (dom.scoresState) {
     dom.scoresState.dataset.state = Scores.status;
     dom.scoresState.textContent = Scores.status === 'offline'
-      ? (Scores.pending.length ? 'Sin conexión · tu puntaje se enviará solo' : 'Sin conexión · mostrando el último ranking')
-      : (Scores.status === 'loading' ? 'Conectando…' : '');
+      ? (Scores.pending.length ? 'Sin conexión · tu récord se sincronizará automáticamente' : 'Modo sin conexión · mostrando última copia sincronizada')
+      : (Scores.status === 'loading' ? 'Conectando al servidor global…' : '');
   }
 }
 
@@ -5203,6 +4933,16 @@ function setupOverlay() {
     rotateModal.addEventListener('touchstart', () => { if (isMobileDevice()) goFullscreen(); }, { passive: true });
   }
 
+  if (dom.restartBtn) {
+    dom.restartBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
+    dom.restartBtn.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
+    dom.restartBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      Sfx.unlock();
+      beginRunFromMenu();
+    });
+  }
   if (dom.menuBtn) {
     dom.menuBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
     dom.menuBtn.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
@@ -5228,7 +4968,11 @@ function setupOverlay() {
     dom.skipTutorialBtn.addEventListener('mousedown', (e) => e.stopPropagation());
   }
 
-  // Ranking global: al cambiar la lista se actualiza el récord, la pantalla de inicio y el puesto obtenido
+  if (window.ArcadeEntryModal) {
+    window.ArcadeEntryModal.init({ onBlip: () => entryBlip() });
+  }
+
+  // Ranking global en tiempo real: suscripciones a cambios, confirmación de puesto y llegadas live
   Scores.onChange = () => {
     hiScore = Scores.best();
     renderOverlayScores();
@@ -5239,15 +4983,11 @@ function setupOverlay() {
   Scores.onRank = (id, rank) => {
     if (id === world.submitId && rank > 0) world.addedRank = rank;
   };
-  window.addEventListener('online', () => Scores.refresh());   // reenvía lo pendiente al volver la conexión
-  document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) Scores.refresh();                    // sincroniza al volver a la pestaña o desbloquear celular
-  });
-  setInterval(() => {
-    if (!document.hidden && (state === STATES.CHARACTER_SELECT || state === STATES.GAME_OVER)) {
-      Scores.refresh();                                        // sondeo periódico en reposo para ver puntajes de otros
+  Scores.onLiveArrival = (entries) => {
+    if (entries && entries.length) {
+      showLiveScoreBanner(entries[0]);
     }
-  }, 20000);
+  };
 }
 
 async function main() {

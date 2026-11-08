@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const scoresHandler = require('./api/scores.js');
 
-const PORT = 8080;
+const PORT = Number(process.env.PORT) || 8080;
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
@@ -23,13 +23,14 @@ const server = http.createServer(async (req, res) => {
   const pathname = parsedUrl.pathname;
 
   if (pathname === '/api/scores') {
+    req.query = Object.fromEntries(parsedUrl.searchParams.entries());
     const chunks = [];
-    req.on('data', c => chunks.push(c));
+    req.on('data', (c) => chunks.push(c));
     req.on('end', async () => {
       req.body = Buffer.concat(chunks).toString('utf8');
       res.status = (code) => { res.statusCode = code; return res; };
       res.json = (data) => {
-        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
         res.end(JSON.stringify(data));
         return res;
       };

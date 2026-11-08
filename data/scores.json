@@ -1,22 +1,6 @@
-[
-  {
-    "name": "UNL",
-    "score": 1200
-  },
-  {
-    "name": "FAN",
-    "score": 950
-  },
-  {
-    "name": "MAT",
-    "score": 780
-  },
-  {
-    "name": "RUN",
-    "score": 620
-  },
-  {
-    "name": "BOY",
-    "score": 500
-  }
-]
+{
+  "schemaVersion": 4,
+  "epoch": 1,
+  "updatedAt": 1,
+  "scores": []
+}

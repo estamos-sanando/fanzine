@@ -19,7 +19,7 @@
   <link rel="preload" as="image" href="ASSETS/SUELO.png">
   <link rel="preload" as="image" href="ASSETS/chicaquieta.png">
   <link rel="preload" as="image" href="ASSETS/chicoquieto.png">
-  <link rel="stylesheet" href="style.css?v=77">
+  <link rel="stylesheet" href="style.css?v=78">
 </head>
 <body>
   <!-- Canvas del juego -->
@@ -47,7 +47,63 @@
     </div>
   </aside>
 
-    <!-- Modal: Ranking Global Completo -->
+  <!-- Modal Arcade Interactivo: Ingreso de 3 Iniciales (A-Z, 0-9) -->
+  <aside id="arcade-entry-modal" class="arcade-entry-modal" aria-hidden="true" role="dialog" aria-label="Registrar iniciales en el Ranking Global">
+    <div class="arcade-entry-modal__backdrop"></div>
+    <div class="arcade-entry-modal__cabinet">
+      <span class="scores__bolt scores__bolt--tl" aria-hidden="true"></span>
+      <span class="scores__bolt scores__bolt--tr" aria-hidden="true"></span>
+      <span class="scores__bolt scores__bolt--bl" aria-hidden="true"></span>
+      <span class="scores__bolt scores__bolt--br" aria-hidden="true"></span>
+
+      <p id="arcade-entry-badge" class="arcade-entry-modal__badge">🕹️ ¡REGISTRÁ TUS INICIALES EN EL RANKING!</p>
+
+      <div class="arcade-entry-modal__stats">
+        <div class="arcade-stat-pill">
+          <span class="arcade-stat-pill__label">PUNTAJE</span>
+          <span id="arcade-entry-score" class="arcade-stat-pill__val">00000</span>
+        </div>
+        <div class="arcade-stat-pill arcade-stat-pill--rank">
+          <span class="arcade-stat-pill__label">PUESTO GLOBAL</span>
+          <span id="arcade-entry-rank" class="arcade-stat-pill__val">#01</span>
+        </div>
+      </div>
+
+      <p class="arcade-entry-modal__inst">Ingresá <b>3 caracteres</b> (A-Z o 0-9) con teclado, flechas o toque:</p>
+
+      <div class="arcade-slots" role="group" aria-label="Selector de 3 iniciales">
+        <div class="arcade-slot is-active" data-slot="0">
+          <button type="button" class="arcade-slot__arrow" data-dir="1" aria-label="Siguiente carácter casilla 1">▲</button>
+          <button type="button" class="arcade-slot__char" aria-label="Casilla 1">A</button>
+          <button type="button" class="arcade-slot__arrow" data-dir="-1" aria-label="Carácter anterior casilla 1">▼</button>
+        </div>
+        <div class="arcade-slot" data-slot="1">
+          <button type="button" class="arcade-slot__arrow" data-dir="1" aria-label="Siguiente carácter casilla 2">▲</button>
+          <button type="button" class="arcade-slot__char" aria-label="Casilla 2">A</button>
+          <button type="button" class="arcade-slot__arrow" data-dir="-1" aria-label="Carácter anterior casilla 2">▼</button>
+        </div>
+        <div class="arcade-slot" data-slot="2">
+          <button type="button" class="arcade-slot__arrow" data-dir="1" aria-label="Siguiente carácter casilla 3">▲</button>
+          <button type="button" class="arcade-slot__char" aria-label="Casilla 3">A</button>
+          <button type="button" class="arcade-slot__arrow" data-dir="-1" aria-label="Carácter anterior casilla 3">▼</button>
+        </div>
+      </div>
+
+      <input id="arcade-hidden-input" class="arcade-hidden-input" type="text" inputmode="text" maxlength="3" autocapitalize="characters" autocomplete="off" spellcheck="false" aria-label="Escribir iniciales con teclado">
+
+      <p id="arcade-entry-error" class="arcade-entry-modal__error" role="alert"></p>
+
+      <div class="arcade-entry-modal__actions">
+        <button id="arcade-submit-btn" class="arcade-entry-modal__submit" type="button">💾 REGISTRAR PUNTAJE</button>
+        <div class="arcade-entry-modal__subactions">
+          <button id="arcade-kbd-btn" class="arcade-entry-modal__kbd" type="button">⌨ Usar teclado</button>
+          <button id="arcade-skip-btn" class="arcade-entry-modal__skip" type="button">Omitir</button>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Modal: Ranking Global Completo en Tiempo Real -->
   <aside id="full-scores-modal" class="full-scores-modal" aria-hidden="true" role="dialog" aria-label="Ranking global completo">
     <div class="full-scores-modal__backdrop"></div>
     <div class="full-scores-modal__content">
@@ -58,24 +114,27 @@
 
       <header class="full-scores-modal__header">
         <div class="full-scores-modal__title-wrap">
-          <h2 class="full-scores-modal__title">⭐ RANKING GLOBAL ⭐</h2>
-          <span id="full-scores-count" class="full-scores-modal__subtitle">Cargando puntajes…</span>
+          <div class="full-scores-modal__title-row">
+            <h2 class="full-scores-modal__title">⭐ LEADERBOARD ARCADE GLOBAL ⭐</h2>
+            <span id="modal-live-pill" class="live-pill" data-state="loading">● CONECTANDO</span>
+          </div>
+          <span id="full-scores-count" class="full-scores-modal__subtitle">Sincronizando puntajes en tiempo real…</span>
         </div>
         <button id="full-scores-close" class="full-scores-modal__close" type="button" aria-label="Cerrar ranking">✕</button>
       </header>
 
       <div class="full-scores-modal__personal" id="full-scores-personal">
         <div class="full-scores-modal__personal-left">
-          <span class="full-scores-modal__personal-label">⭐ Tu récord personal</span>
+          <span class="full-scores-modal__personal-label">⭐ Tu mejor marca</span>
           <span class="full-scores-modal__personal-rank" id="full-scores-personal-rank">Puesto #—</span>
         </div>
         <span class="full-scores-modal__personal-pts" id="full-scores-personal-pts">00000</span>
       </div>
 
       <div class="full-scores-modal__table-header">
-        <span class="col-rank">#</span>
-        <span class="col-name">JUGADOR</span>
-        <span class="col-pts">PUNTOS</span>
+        <span class="col-rank">POS</span>
+        <span class="col-name">INICIALES</span>
+        <span class="col-pts">SCORE</span>
       </div>
 
       <div class="full-scores-modal__body">
@@ -88,9 +147,10 @@
     </div>
   </aside>
 
-  <!-- Auxiliares -->
+  <!-- Auxiliares y Notificación Live Arcade -->
   <div id="safe-probe" aria-hidden="true"></div>
   <div id="toast" role="status" aria-live="polite"></div>
+  <div id="live-score-banner" class="live-score-banner" role="status" aria-live="polite"></div>
 
   <!-- Pantalla de inicio: logo + elección de personaje + COMENZAR + ranking global -->
   <main id="overlay" class="is-loading">
@@ -124,13 +184,21 @@
         <span class="scores__bolt scores__bolt--bl" aria-hidden="true"></span>
         <span class="scores__bolt scores__bolt--br" aria-hidden="true"></span>
 
-        <h2 class="scores__title"><span class="scores__title-star">★</span> RANKING GLOBAL • TOP 5 <span class="scores__title-star">★</span></h2>
+        <div class="scores__header-bar">
+          <h2 class="scores__title"><span class="scores__title-star">★</span> RANKING GLOBAL <span class="scores__title-star">★</span></h2>
+          <span id="overlay-live-pill" class="live-pill" data-state="loading">● SYNC</span>
+        </div>
         <div class="scores__personal" id="scores-personal" aria-label="Tu récord actual">
-          <span class="scores__personal-label"><span class="star">★</span> TU RÉCORD ACTUAL <span class="star">★</span></span>
+          <span class="scores__personal-label"><span class="star">★</span> TU MEJOR MARCA</span>
           <span class="scores__personal-pts" id="personal-record-pts">00000</span>
         </div>
+        <div class="scores__cols-head" aria-hidden="true">
+          <span>POS</span>
+          <span>INI</span>
+          <span>SCORE</span>
+        </div>
         <ol id="hiscores" class="scores__list"></ol>
-        <button id="full-scores-btn" class="scores__more-btn" type="button"><span class="btn-trophy">🏆</span> VER RANKING COMPLETO</button>
+        <button id="full-scores-btn" class="scores__more-btn" type="button"><span class="btn-trophy">🏆</span> VER TOP 50 EN VIVO</button>
         <p id="hiscores-status" class="scores__status" data-state="loading" role="status"></p>
       </section>
     </div>
@@ -149,10 +217,11 @@
     </svg>
   </button>
 
-  <!-- Volver a la pantalla de inicio (solo visible en game over) -->
+  <!-- Acciones en pantalla de Game Over -->
   <div id="gameover-actions" class="gameover-actions">
+    <button id="restart-btn" class="menu-btn menu-btn--restart" type="button">▶ Jugar de nuevo</button>
+    <button id="gameover-scores-btn" class="menu-btn menu-btn--scores" type="button">🏆 Ranking Global</button>
     <button id="menu-btn" class="menu-btn" type="button">↩ Menú</button>
-    <button id="gameover-scores-btn" class="menu-btn menu-btn--scores" type="button">🏆 Ranking completo</button>
   </div>
 
   <!-- Configuración: tuerca arriba a la derecha con menú desplegable -->
@@ -199,7 +268,8 @@
     </div>
   </div>
 
-  <script src="game.js?v=77"></script>
+  <script src="leaderboard.js?v=78"></script>
+  <script src="game.js?v=78"></script>
   <script>
     // Registro del Service Worker (modo offline). Requiere HTTPS o localhost.
     if ('serviceWorker' in navigator) {

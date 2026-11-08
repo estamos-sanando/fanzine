@@ -4,7 +4,7 @@
  * - fetch   : Network-First para HTML/JS/CSS (garantiza código actualizado)
  *             Cache-First para imágenes y audios pesados (máxima velocidad)
  * ========================================================= */
-const CACHE_VERSION = 'v77';
+const CACHE_VERSION = 'v78';
 const CACHE_NAME = 'fanzine-runner-' + CACHE_VERSION;
 
 // Mantener sincronizado con el diccionario ASSETS de game.js
@@ -12,6 +12,7 @@ const PRECACHE = [
   './',
   'index.html',
   'style.css',
+  'leaderboard.js',
   'game.js',
   'ASSETS/avion.png',
   'ASSETS/avion1.png',
@@ -141,9 +142,9 @@ self.addEventListener('fetch', (event) => {
   const isCode = isNav || url.pathname.endsWith('.js') || url.pathname.endsWith('.css');
 
   if (isCode) {
-    // Network-First para código: asegura ver los cambios desplegados en Vercel de inmediato
+    // Network-First real (cache: no-cache) para garantizar código JS/CSS/HTML siempre al día
     event.respondWith(
-      fetch(req)
+      fetch(new Request(req, { cache: 'no-cache' }))
         .then((res) => {
           if (res && res.ok && res.type === 'basic') {
             const copy = res.clone();
