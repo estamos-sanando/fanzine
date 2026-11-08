@@ -10,23 +10,35 @@ const LOCAL_FILE = path.join(__dirname, '..', 'data', 'scores.json');
 const TMP_FILE = '/tmp/fanzine_scores.json';
 
 const INITIAL_SCORES = [
+  { name: 'ANT', score: 10446 },
   { name: 'ANT', score: 10388 },
   { name: 'ANT', score: 10024 },
   { name: 'ANT', score: 9839 },
+  { name: 'MAU', score: 9645 },
   { name: 'ANT', score: 9620 },
+  { name: 'ANR', score: 9096 },
   { name: 'ANW', score: 8335 },
   { name: 'ANT', score: 3764 },
+  { name: 'ANT', score: 3654 },
   { name: 'ANT', score: 3637 },
   { name: 'APX', score: 3145 },
   { name: 'ANT', score: 2642 },
   { name: 'ANT', score: 2610 },
   { name: 'AOW', score: 2538 },
+  { name: 'ANT', score: 2469 },
+  { name: 'VAL', score: 1865 },
+  { name: 'YIQ', score: 1743 },
+  { name: 'ANT', score: 1484 },
   { name: 'UNL', score: 1200 },
+  { name: 'ANT', score: 1103 },
   { name: 'AMS', score: 977 },
   { name: 'FAN', score: 950 },
   { name: 'MAT', score: 780 },
   { name: 'RUN', score: 620 },
-  { name: 'BOY', score: 500 }
+  { name: 'BOY', score: 500 },
+  { name: 'ANT', score: 168 },
+  { name: 'ANT', score: 159 },
+  { name: 'ANT', score: 28 }
 ];
 
 let memScores = null;
@@ -38,6 +50,7 @@ function cleanName(n) {
 function sanitize(arr) {
   if (!Array.isArray(arr) || !arr.length) return [...INITIAL_SCORES];
   const valid = [];
+  const seen = new Set();
   for (let e of arr) {
     if (!e) continue;
     if (typeof e === 'string') {
@@ -55,6 +68,9 @@ function sanitize(arr) {
       const name = cleanName(e.name);
       // Evitar que el puntaje de prueba 'TES 9999' quede registrado
       if (name === 'TES' && score === 9999) continue;
+      const key = `${name}:${Math.floor(score)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
       valid.push({ name, score: Math.floor(score) });
     }
   }
@@ -62,7 +78,9 @@ function sanitize(arr) {
   // Asegurar siempre un mínimo de 5 filas usando los iniciales si hiciera falta
   if (valid.length < 5) {
     for (const init of INITIAL_SCORES) {
-      if (!valid.some(s => s.name === init.name && s.score === init.score)) {
+      const key = `${init.name}:${init.score}`;
+      if (!seen.has(key)) {
+        seen.add(key);
         valid.push(init);
         if (valid.length >= 5) break;
       }
@@ -161,7 +179,7 @@ async function saveToCloud(scores) {
       fetch(BACKUP_CLOUD_URL, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'fanzine_scores', data: { scores } }),
+        body: JSON.stringify({ name: 'fanzine_scores', data: { scores: scores.slice(0, 20) } }),
         signal: ctl2.signal,
         cache: 'no-store'
       }).finally(() => clearTimeout(t2))
@@ -203,7 +221,8 @@ async function loadScores() {
   if (!list) list = getFromFile();
   if (!list && memScores) list = memScores;
   if (!list) list = INITIAL_SCORES;
-  memScores = sanitize(list);
+  const combined = Array.isArray(list) ? [...list, ...INITIAL_SCORES] : [...INITIAL_SCORES];
+  memScores = sanitize(combined);
   return memScores;
 }
 

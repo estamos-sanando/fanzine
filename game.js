@@ -173,7 +173,7 @@ const CONFIG = {
   godMode: /[?&]god\b/.test(location.search),   // ?god activa modo invencible para testing visual
   skipCinematic: /[?&]skip\b/.test(location.search), // ?skip salta las cinemáticas
   extremeTest: /[?&]extreme\b/.test(location.search), // ?extreme arranca en modo extremo (20.000 pts) para testing visual
-  storageScores:   'fanzine_runner_global_v8',  // copia local del ranking global limpia y reiniciada
+  storageScores:   'fanzine_runner_global_v9',  // copia local del ranking global limpia y reiniciada
   storagePending:  'fanzine_runner_pending_v4', // puntajes que todavía no se pudieron enviar al servidor
   storageInitials: 'fanzine_runner_initials',   // últimas iniciales usadas
   storagePersonalRecord: 'fanzine_runner_personal_record_v5', // récord personal en este dispositivo
@@ -1211,23 +1211,35 @@ const cleanName = (s) =>
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
 const INITIAL_SCORES = [
+  { name: 'ANT', score: 10446 },
   { name: 'ANT', score: 10388 },
   { name: 'ANT', score: 10024 },
   { name: 'ANT', score: 9839 },
+  { name: 'MAU', score: 9645 },
   { name: 'ANT', score: 9620 },
+  { name: 'ANR', score: 9096 },
   { name: 'ANW', score: 8335 },
   { name: 'ANT', score: 3764 },
+  { name: 'ANT', score: 3654 },
   { name: 'ANT', score: 3637 },
   { name: 'APX', score: 3145 },
   { name: 'ANT', score: 2642 },
   { name: 'ANT', score: 2610 },
   { name: 'AOW', score: 2538 },
+  { name: 'ANT', score: 2469 },
+  { name: 'VAL', score: 1865 },
+  { name: 'YIQ', score: 1743 },
+  { name: 'ANT', score: 1484 },
   { name: 'UNL', score: 1200 },
+  { name: 'ANT', score: 1103 },
   { name: 'AMS', score: 977 },
   { name: 'FAN', score: 950 },
   { name: 'MAT', score: 780 },
   { name: 'RUN', score: 620 },
-  { name: 'BOY', score: 500 }
+  { name: 'BOY', score: 500 },
+  { name: 'ANT', score: 168 },
+  { name: 'ANT', score: 159 },
+  { name: 'ANT', score: 28 }
 ];
 
 const Scores = {
@@ -1257,6 +1269,7 @@ const Scores = {
   sanitize(raw) {
     if (!Array.isArray(raw) || !raw.length) return [...INITIAL_SCORES];
     const valid = [];
+    const seen = new Set();
     for (let e of raw) {
       if (!e) continue;
       if (typeof e === 'string') {
@@ -1273,20 +1286,22 @@ const Scores = {
       if (Number.isFinite(score) && score > 0) {
         const name = cleanName(e.name);
         if (name === 'TES' && score === 9999) continue;
+        const key = `${name}:${Math.floor(score)}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
         valid.push({ name, score: Math.floor(score) });
       }
     }
-    // Asegurar siempre un mínimo de 5 filas usando los iniciales si hiciera falta
-    if (valid.length < 5) {
-      for (const init of INITIAL_SCORES) {
-        if (!valid.some(s => s.name === init.name && s.score === init.score)) {
-          valid.push(init);
-          if (valid.length >= 5) break;
-        }
+    // Asegurar siempre que no se pierdan los iniciales históricos
+    for (const init of INITIAL_SCORES) {
+      const key = `${init.name}:${init.score}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        valid.push(init);
       }
     }
     valid.sort((a, b) => b.score - a.score);
-    return valid.length ? valid.slice(0, CONFIG.maxScoresStored || 500) : [...INITIAL_SCORES];
+    return valid.slice(0, CONFIG.maxScoresStored || 500);
   },
   // Muestra también los puntajes propios que aún no confirmó el servidor
   rebuild() {
@@ -1314,10 +1329,19 @@ const Scores = {
     if (this.list.length < cap) return true;
     return score >= this.list[cap - 1].score;
   },
-  rankFor(score) {                            // puesto (1..n) que ocuparía; empates van abajo
+  rankFor(score) {                            // puesto (1..n) que ocuparía un nuevo puntaje
     let i = 0;
-    while (i < this.list.length && this.list[i].score >= score) i++;
+    while (i < this.list.length && this.list[i].score > score) i++;
     return i + 1;
+  },
+  getRankOf(score, name) {                    // puesto (1..n) exacto de un récord (evita off-by-one)
+    if (!Number.isFinite(score) || score <= 0) return 0;
+    const clean = name ? cleanName(name) : '';
+    const exactIdx = this.list.findIndex(e => e.score === score && (!clean || e.name === clean));
+    if (exactIdx !== -1) return exactIdx + 1;
+    let count = 0;
+    while (count < this.list.length && this.list[count].score > score) count++;
+    return count + 1;
   },
 
   async request(method, body) {
@@ -1387,25 +1411,16 @@ const Scores = {
         let rank = 1;
         while (rank <= merged.length && merged[rank - 1].score > body.score) rank++;
 
-        const saveTasks = [
-          fetch(CONFIG.cloudScores, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ scores: merged }),
-            signal: ctlCloud.signal
-          })
-        ];
         if (CONFIG.cloudBackupScores) {
-          saveTasks.push(
-            fetch(CONFIG.cloudBackupScores, {
+          try {
+            await fetch(CONFIG.cloudBackupScores, {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ name: 'fanzine_scores', data: { scores: merged } }),
+              body: JSON.stringify({ name: 'fanzine_scores', data: { scores: merged.slice(0, 20) } }),
               signal: ctlCloud.signal
-            })
-          );
+            });
+          } catch (_) {}
         }
-        await Promise.allSettled(saveTasks);
         return { rank, scores: merged };
       }
     } finally {
@@ -1415,11 +1430,11 @@ const Scores = {
 
   // Baja el ranking global sincronizado
   async refresh() {
-    const version = this.version;
     try {
       const data = await this.request('GET');
-      if (data && Array.isArray(data.scores) && version === this.version) {
-        this.remote = this.sanitize(data.scores);
+      if (data && Array.isArray(data.scores) && data.scores.length > 0) {
+        const combined = [...data.scores, ...this.remote];
+        this.remote = this.sanitize(combined);
         this.rebuild();
         this.save();
       }
@@ -1433,8 +1448,12 @@ const Scores = {
 
   // Guarda al instante (se ve en el ranking) y envía en segundo plano
   submit(name, score) {
-    const item = { id: uid(), name: cleanName(name), score: Math.floor(score) };
-    const rank = this.rankFor(item.score);
+    const clean = cleanName(name);
+    const num = Math.floor(Number(score));
+    if (!Number.isFinite(num) || num <= 0) return { id: null, rank: 0 };
+
+    const item = { id: uid(), name: clean, score: num };
+    const rank = this.getRankOf(num, clean);
     this.pending.push(item);
     this.savePending();
     // Guardar inmediatamente en remote para que NUNCA desaparezca
@@ -1459,7 +1478,8 @@ const Scores = {
           this.version++;
           this.savePending();
           if (data && Array.isArray(data.scores)) {
-            this.remote = this.sanitize(data.scores);
+            const combined = [...data.scores, ...this.remote];
+            this.remote = this.sanitize(combined);
             this.rebuild();
             this.save();
           }
@@ -1501,6 +1521,16 @@ function updatePersonalRecord(newScore = 0) {
     if (myEntries.length) {
       personalRecord = Math.max(...myEntries.map((e) => e.score));
       storageSet(CONFIG.storagePersonalRecord, personalRecord);
+    }
+  }
+  // AUTO-SYNC: Si el jugador tiene un récord personal mayor a 0, verificar que esté en el ranking global
+  if (personalRecord > 0) {
+    const currentInitials = cleanName(storageGet(CONFIG.storageInitials, initials || 'ANT'));
+    const existsInList = Scores.list.some((e) => e.score === personalRecord);
+    const existsInPending = Scores.pending.some((e) => e.score === personalRecord);
+    if (!existsInList && !existsInPending) {
+      // Registrar automáticamente para que NUNCA quede solo local
+      Scores.submit(currentInitials, personalRecord);
     }
   }
   if (dom.scoresPersonal) {
@@ -1780,8 +1810,10 @@ function confirmEntry() {
 function handleEntryPointer(clientX, clientY) {
   if (world.deadT < ENTRY_READY_AT) return;
   const rect = dom.canvas.getBoundingClientRect();
-  const x = clientX - rect.left;
-  const y = clientY - rect.top;
+  const scaleX = W / (rect.width || W);
+  const scaleY = H / (rect.height || H);
+  const x = (clientX - rect.left) * scaleX;
+  const y = (clientY - rect.top) * scaleY;
   for (const h of entryUI.hits) {
     if (x < h.x || x > h.x + h.w || y < h.y || y > h.y + h.h) continue;
     if (h.type === 'up') cycleLetter(h.i, 1);
@@ -1814,8 +1846,14 @@ function handleEntryKey(e) {
   } else if (e.key === 'Enter') {
     e.preventDefault();
     if (!e.repeat) confirmEntry();
-  } else if (e.key === ' ') {
+  } else if (e.key === ' ' || e.code === 'Space') {
     e.preventDefault();
+    if (entryUI.slot < last) {
+      entryUI.slot++;
+      entryBlip();
+    } else {
+      confirmEntry();
+    }
   }
 }
 
@@ -4324,7 +4362,7 @@ function drawEntryPanel(blink) {
     const col = active ? UNLAM.green : 'rgba(255,255,255,0.8)';
 
     drawTriangle(cx, arrowsY[0] + arrowH / 2, f * 0.7, true, col);
-    hits.push({ type: 'up', i, x, y: arrowsY[0], w: slot, h: arrowH });
+    hits.push({ type: 'up', i, x: x - 5, y: arrowsY[0] - 8, w: slot + 10, h: arrowH + 16 });
 
     const by = y + arrowH;
     rrect(x, by, slot, slot, f * 0.4);
@@ -4337,7 +4375,7 @@ function drawEntryPanel(blink) {
     hits.push({ type: 'slot', i, x, y: by, w: slot, h: slot });
 
     drawTriangle(cx, arrowsY[1] + arrowH / 2, f * 0.7, false, col);
-    hits.push({ type: 'down', i, x, y: arrowsY[1], w: slot, h: arrowH });
+    hits.push({ type: 'down', i, x: x - 5, y: arrowsY[1] - 8, w: slot + 10, h: arrowH + 16 });
   }
   y += arrowH * 2 + slot + f * 0.5;
 
@@ -4348,7 +4386,7 @@ function drawEntryPanel(blink) {
   ctx.fillStyle = grad;
   ctx.fill();
   drawText('LISTO', W / 2, y + btnH / 2 + 1, f * 1.1, { color: '#ffffff', stroke: 'rgba(0,0,0,0)' });
-  hits.push({ type: 'ok', x: bx, y, w: btnW, h: btnH });
+  hits.push({ type: 'ok', x: bx - 20, y: y - 10, w: btnW + 40, h: btnH + 20 });
   y += btnH;
   const hintText = inTop5 ? '¡Tu nombre aparecerá en el Top 5!' : 'Solo los 5 mejores puntajes se muestran en el Top 5';
   drawText(hintText, W / 2, y + f * 0.9, f * 0.65, { alpha: 0.75, weight: 600 });
@@ -4874,7 +4912,7 @@ function renderFullScores() {
     dom.fullScoresPersonalPts.textContent = pad(personalRecord);
   }
   if (dom.fullScoresPersonalRank) {
-    const rank = personalRecord > 0 ? Scores.rankFor(personalRecord) : 0;
+    const rank = personalRecord > 0 ? Scores.getRankOf(personalRecord, initials) : 0;
     dom.fullScoresPersonalRank.textContent = rank > 0 ? `Tu récord: Puesto #${rank}` : 'Aún sin récord';
   }
 
@@ -4916,8 +4954,12 @@ function renderFullScores() {
 }
 
 function openFullScoresModal() {
-  Scores.refresh();
   renderFullScores();
+  Scores.refresh().then(() => {
+    if (dom.fullScoresModal && dom.fullScoresModal.classList.contains('is-open')) {
+      renderFullScores();
+    }
+  });
   if (dom.fullScoresModal) {
     dom.fullScoresModal.setAttribute('aria-hidden', 'false');
     dom.fullScoresModal.classList.add('is-open');
