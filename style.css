@@ -1013,13 +1013,17 @@ body.is-extreme {
   to   { opacity: 1; transform: none; }
 }
 
-/* Pantallas bajas (celular en horizontal): distribución responsive para que el score sea 100% visible */
-@media (max-height: 520px) {
+/* Pantallas en horizontal (celular o tablet en landscape, o pantallas de baja/mediana altura):
+   distribución en 2 columnas para que el selector de personaje, el botón COMENZAR y el Ranking Global
+   estén SIEMPRE 100% visibles juntos sin cortarse ni saltar al tocar la pantalla */
+@media (orientation: landscape), (max-height: 720px) and (min-width: 541px) {
   #overlay {
     padding: max(6px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
     display: flex;
     align-items: center;
     justify-content: center;
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
   .start {
     display: grid;
@@ -1028,7 +1032,7 @@ body.is-extreme {
     column-gap: 16px;
     row-gap: 4px;
     width: 100%;
-    max-width: 660px;
+    max-width: 680px;
     align-items: center;
     margin: auto;
     padding: 2px 8px;
@@ -1039,7 +1043,7 @@ body.is-extreme {
     margin-bottom: 2px;
   }
   .start__logo img {
-    max-height: 48px;
+    max-height: min(12vh, 52px);
     width: auto;
   }
   .start__pick {
@@ -1055,8 +1059,8 @@ body.is-extreme {
     gap: 10px;
   }
   .picker__btn {
-    width: 54px;
-    height: 54px;
+    width: clamp(48px, 11vh, 60px);
+    height: clamp(48px, 11vh, 60px);
     padding: 3px;
     border-radius: 12px;
   }
@@ -1066,7 +1070,7 @@ body.is-extreme {
     bottom: 4px;
   }
   .picker__btn img {
-    height: 40px;
+    height: clamp(36px, 8.5vh, 46px);
   }
   .picker__btn[aria-pressed="true"]::after {
     top: 2px;
@@ -1077,7 +1081,7 @@ body.is-extreme {
     grid-column: 1;
     grid-row: 3;
     padding: 7px 22px;
-    font-size: 12px;
+    font-size: clamp(12px, 2.8vh, 15px);
     margin: 2px auto;
     border-bottom-width: 3px;
   }
@@ -1098,7 +1102,7 @@ body.is-extreme {
     grid-column: 2;
     grid-row: 1 / span 4;
     width: 100%;
-    max-width: 320px;
+    max-width: 330px;
     margin: 0 auto;
     padding: 6px 12px;
     border-radius: 12px;
@@ -1162,7 +1166,7 @@ body.is-extreme {
   }
 }
 
-@media (max-height: 520px) and (max-width: 540px) {
+@media (max-width: 540px) {
   .start {
     display: flex;
     flex-direction: column;

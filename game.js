@@ -173,10 +173,10 @@ const CONFIG = {
   godMode: /[?&]god\b/.test(location.search),   // ?god activa modo invencible para testing visual
   skipCinematic: /[?&]skip\b/.test(location.search), // ?skip salta las cinemáticas
   extremeTest: /[?&]extreme\b/.test(location.search), // ?extreme arranca en modo extremo (20.000 pts) para testing visual
-  storageScores:   'fanzine_runner_global_v11', // copia local del ranking global limpia y reiniciada
-  storagePending:  'fanzine_runner_pending_v6',  // puntajes que todavía no se pudieron enviar al servidor
+  storageScores:   'fanzine_runner_global_v12', // copia local del ranking global limpia y reiniciada
+  storagePending:  'fanzine_runner_pending_v7',  // puntajes que todavía no se pudieron enviar al servidor
   storageInitials: 'fanzine_runner_initials',    // últimas iniciales usadas
-  storagePersonalRecord: 'fanzine_runner_personal_record_v7', // récord personal en este dispositivo
+  storagePersonalRecord: 'fanzine_runner_personal_record_v8', // récord personal en este dispositivo
   apiScores: '/api/scores',                     // endpoint local/Vercel (api/scores.js)
   cloudScores: 'https://extendsclass.com/api/json-storage/bin/acbfcbc', // almacenamiento global principal persistente
   cloudBackupScores: 'https://api.restful-api.dev/objects/ff808181a09d98f701a1bcfc75bf687b', // respaldo secundario
@@ -271,7 +271,7 @@ const CONFIG = {
     magnetRangeFrac: 0.60,              // alcance horizontal del imán como fracción del ancho de pantalla
     magnetMinU: 6.0                     // alcance mínimo del imán en U
   },
-  deadInputLock: 450                      // ms antes de poder reiniciar
+  deadInputLock: 1200                     // ms antes de poder reiniciar en game over (evita toques accidentales)
 };
 
 
@@ -1237,13 +1237,14 @@ const Scores = {
       'fanzine_runner_global_v1', 'fanzine_runner_global_v2', 'fanzine_runner_global_v3',
       'fanzine_runner_global_v4', 'fanzine_runner_global_v5', 'fanzine_runner_global_v6',
       'fanzine_runner_global_v7', 'fanzine_runner_global_v8', 'fanzine_runner_global_v9',
-      'fanzine_runner_global_v10',
+      'fanzine_runner_global_v10', 'fanzine_runner_global_v11',
       'fanzine_runner_personal_record', 'fanzine_runner_personal_record_v1',
       'fanzine_runner_personal_record_v2', 'fanzine_runner_personal_record_v3',
       'fanzine_runner_personal_record_v4', 'fanzine_runner_personal_record_v5',
-      'fanzine_runner_personal_record_v6',
+      'fanzine_runner_personal_record_v6', 'fanzine_runner_personal_record_v7',
       'fanzine_runner_pending', 'fanzine_runner_pending_v1', 'fanzine_runner_pending_v2',
-      'fanzine_runner_pending_v3', 'fanzine_runner_pending_v4', 'fanzine_runner_pending_v5'
+      'fanzine_runner_pending_v3', 'fanzine_runner_pending_v4', 'fanzine_runner_pending_v5',
+      'fanzine_runner_pending_v6'
     ].forEach((k) => {
       try { storageRemove(k); } catch (_) {}
     });
@@ -1406,16 +1407,28 @@ const Scores = {
         let rank = 1;
         while (rank <= merged.length && merged[rank - 1].score > body.score) rank++;
 
+        const cloudTasks = [];
+        if (CONFIG.cloudScores) {
+          cloudTasks.push(
+            fetch(CONFIG.cloudScores, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ scores: merged }),
+              signal: ctlCloud.signal
+            }).catch(() => {})
+          );
+        }
         if (CONFIG.cloudBackupScores) {
-          try {
-            await fetch(CONFIG.cloudBackupScores, {
+          cloudTasks.push(
+            fetch(CONFIG.cloudBackupScores, {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ name: 'fanzine_scores', data: { scores: merged.slice(0, 20) } }),
               signal: ctlCloud.signal
-            });
-          } catch (_) {}
+            }).catch(() => {})
+          );
         }
+        try { await Promise.allSettled(cloudTasks); } catch (_) {}
         return { rank, scores: merged };
       }
     } finally {
@@ -1907,9 +1920,9 @@ window.addEventListener('keydown', (e) => {
 ['gesturestart', 'gesturechange', 'gestureend'].forEach((n) =>
   document.addEventListener(n, (e) => e.preventDefault()));
 document.addEventListener('contextmenu', (e) => e.preventDefault());
-// Bloquea el scroll/zoom táctil, salvo dentro del menú ⚙ o el ranking completo (para scroll y volumen)
+// Bloquea el scroll/zoom táctil, salvo dentro del menú ⚙, overlay o el ranking completo (para scroll y volumen)
 document.addEventListener('touchmove', (e) => {
-  if (e.target && e.target.closest && e.target.closest('#settings, #full-scores-modal')) return;
+  if (e.target && e.target.closest && e.target.closest('#settings, #full-scores-modal, #overlay')) return;
   e.preventDefault();
 }, { passive: false });
 document.addEventListener('dblclick', (e) => e.preventDefault());
