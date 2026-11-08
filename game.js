@@ -173,10 +173,10 @@ const CONFIG = {
   godMode: /[?&]god\b/.test(location.search),   // ?god activa modo invencible para testing visual
   skipCinematic: /[?&]skip\b/.test(location.search), // ?skip salta las cinemáticas
   extremeTest: /[?&]extreme\b/.test(location.search), // ?extreme arranca en modo extremo (20.000 pts) para testing visual
-  storageScores:   'fanzine_runner_global_v9',  // copia local del ranking global limpia y reiniciada
-  storagePending:  'fanzine_runner_pending_v4', // puntajes que todavía no se pudieron enviar al servidor
-  storageInitials: 'fanzine_runner_initials',   // últimas iniciales usadas
-  storagePersonalRecord: 'fanzine_runner_personal_record_v5', // récord personal en este dispositivo
+  storageScores:   'fanzine_runner_global_v10', // copia local del ranking global limpia y reiniciada
+  storagePending:  'fanzine_runner_pending_v5',  // puntajes que todavía no se pudieron enviar al servidor
+  storageInitials: 'fanzine_runner_initials',    // últimas iniciales usadas
+  storagePersonalRecord: 'fanzine_runner_personal_record_v6', // récord personal en este dispositivo
   apiScores: '/api/scores',                     // endpoint local/Vercel (api/scores.js)
   cloudScores: 'https://extendsclass.com/api/json-storage/bin/efefedd', // almacenamiento global principal persistente
   cloudBackupScores: 'https://api.restful-api.dev/objects/ff808181a09d98f701a18d9ecd606591', // respaldo secundario
@@ -1211,35 +1211,11 @@ const cleanName = (s) =>
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
 const INITIAL_SCORES = [
-  { name: 'ANT', score: 10446 },
-  { name: 'ANT', score: 10388 },
-  { name: 'ANT', score: 10024 },
-  { name: 'ANT', score: 9839 },
-  { name: 'MAU', score: 9645 },
-  { name: 'ANT', score: 9620 },
-  { name: 'ANR', score: 9096 },
-  { name: 'ANW', score: 8335 },
-  { name: 'ANT', score: 3764 },
-  { name: 'ANT', score: 3654 },
-  { name: 'ANT', score: 3637 },
-  { name: 'APX', score: 3145 },
-  { name: 'ANT', score: 2642 },
-  { name: 'ANT', score: 2610 },
-  { name: 'AOW', score: 2538 },
-  { name: 'ANT', score: 2469 },
-  { name: 'VAL', score: 1865 },
-  { name: 'YIQ', score: 1743 },
-  { name: 'ANT', score: 1484 },
   { name: 'UNL', score: 1200 },
-  { name: 'ANT', score: 1103 },
-  { name: 'AMS', score: 977 },
   { name: 'FAN', score: 950 },
   { name: 'MAT', score: 780 },
   { name: 'RUN', score: 620 },
-  { name: 'BOY', score: 500 },
-  { name: 'ANT', score: 168 },
-  { name: 'ANT', score: 159 },
-  { name: 'ANT', score: 28 }
+  { name: 'BOY', score: 500 }
 ];
 
 const Scores = {
@@ -1505,7 +1481,8 @@ const Scores = {
 };
 Scores.load();
 
-let personalRecord = parseInt(storageGet(CONFIG.storagePersonalRecord, storageGet('fanzine_runner_personal_record_v4', '0')), 10) || 0;
+let initials = cleanName(storageGet(CONFIG.storageInitials, 'ANT'));
+let personalRecord = parseInt(storageGet(CONFIG.storagePersonalRecord, '0'), 10) || 0;
 if (personalRecord >= 20000) {
   personalRecord = 0;
   storageSet(CONFIG.storagePersonalRecord, 0);
@@ -1516,7 +1493,7 @@ function updatePersonalRecord(newScore = 0) {
     personalRecord = Math.floor(newScore);
     storageSet(CONFIG.storagePersonalRecord, personalRecord);
   } else if (personalRecord === 0) {
-    const currentInitials = cleanName(storageGet(CONFIG.storageInitials, 'ANT'));
+    const currentInitials = cleanName(storageGet(CONFIG.storageInitials, initials || 'ANT'));
     const myEntries = Scores.list.filter((e) => e.name === currentInitials);
     if (myEntries.length) {
       personalRecord = Math.max(...myEntries.map((e) => e.score));
@@ -1541,8 +1518,6 @@ function updatePersonalRecord(newScore = 0) {
 updatePersonalRecord();
 
 let hiScore = Scores.best();
-let initials = cleanName(storageGet(CONFIG.storageInitials, 'AAA'));
-
 // Estado de la pantalla de ingreso de iniciales
 const entryUI = { letters: initials.split(''), slot: 0, rank: 1, hits: [] };
 
