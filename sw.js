@@ -4,7 +4,7 @@
  * - fetch   : Network-First para HTML/JS/CSS (garantiza código actualizado)
  *             Cache-First para imágenes y audios pesados (máxima velocidad)
  * ========================================================= */
-const CACHE_VERSION = 'v81';
+const CACHE_VERSION = 'v82';
 const CACHE_NAME = 'fanzine-runner-' + CACHE_VERSION;
 
 // Mantener sincronizado con el diccionario ASSETS de game.js
@@ -21,6 +21,7 @@ const PRECACHE = [
   'ASSETS/avionnoterindas1.png',
   'ASSETS/avionnoterindas2.png',
   'ASSETS/logonoterindas.png',
+  'ASSETS/logonoterindas.png?v=82',
   'ASSETS/fondoinfinito.png',
   'ASSETS/fondoinicio.png',
   'ASSETS/Entrada.png',
@@ -163,22 +164,25 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Cache-First para imágenes y sonidos estáticos
+  // Cache-First para imágenes y sonidos estáticos (prioriza URL exacta si incluye versión)
   event.respondWith(
-    caches.match(req, { ignoreSearch: true }).then((cached) => {
-      if (cached) return cached;
+    caches.match(req).then((exactCached) => {
+      if (exactCached) return exactCached;
+      return caches.match(req, { ignoreSearch: true }).then((cached) => {
+        if (cached && !url.search) return cached;
 
-      return fetch(req)
-        .then((res) => {
-          if (res && res.ok && res.type === 'basic') {
-            const copy = res.clone();
-            caches.open(CACHE_NAME).then((c) => c.put(req, copy));
-          }
-          return res;
-        })
-        .catch(() => {
-          return Response.error();
-        });
+        return fetch(req)
+          .then((res) => {
+            if (res && res.ok && res.type === 'basic') {
+              const copy = res.clone();
+              caches.open(CACHE_NAME).then((c) => c.put(req, copy));
+            }
+            return res;
+          })
+          .catch(() => {
+            return cached || Response.error();
+          });
+      });
     })
   );
 });

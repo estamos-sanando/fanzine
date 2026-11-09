@@ -19,7 +19,7 @@
 const ASSETS = {
   // Escenario, obstáculos y coleccionables
   images: {
-    logo:          'ASSETS/logonoterindas.png',  // Logo oficial "¡No te rindas!"
+    logo:          'ASSETS/logonoterindas.png?v=82',  // Logo oficial "¡No te rindas!"
     fondoinfinito: 'ASSETS/fondoinfinito.png',   // fondo infinito durante la carrera (Teatro, Auditorio, Biblioteca)
     ground:        'ASSETS/SUELO.png',           // vereda
     book:          'ASSETS/manualobstaculo.png', // obstáculo bajo
