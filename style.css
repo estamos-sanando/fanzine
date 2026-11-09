@@ -146,16 +146,20 @@ body.is-extreme {
 
 /* Logo "¡No te rindas!" */
 .start__logo {
-  margin: 0;
+  margin: 0 0 4px;
   padding: 0;
   line-height: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
 }
 .start__logo img {
-  width: min(84vw, 360px);
+  width: min(92vw, 460px);
   height: auto;
-  max-height: 120px;
+  max-height: clamp(110px, 22vh, 160px);
   object-fit: contain;
-  filter: drop-shadow(0 6px 18px rgba(0, 0, 0, 0.75)) drop-shadow(0 0 16px rgba(255, 180, 50, 0.25));
+  filter: drop-shadow(0 8px 22px rgba(0, 0, 0, 0.8)) drop-shadow(0 0 20px rgba(255, 180, 50, 0.3));
   animation: floatLogo 3s ease-in-out infinite alternate;
 }
 
@@ -1101,27 +1105,35 @@ body.is-extreme {
 }
 
 /* Monitores de escritorio y tablets en horizontal (alto >= 541px):
-   Diseño Gabinete Arcade de 2 columnas amplias para que nada desborde verticalmente */
+   Diseño Gabinete Arcade: Logo arriba destacado y centrado, 2 columnas inferiores bien balanceadas */
 @media (min-width: 580px) and (min-height: 541px) {
   .start {
     display: grid;
     grid-template-columns: 1fr 1.05fr;
     grid-template-rows: auto auto auto auto;
-    column-gap: 28px;
-    row-gap: 10px;
+    column-gap: 32px;
+    row-gap: 12px;
     width: 100%;
-    max-width: 840px;
+    max-width: 860px;
     align-items: center;
     margin: auto;
-    padding: 8px 14px;
+    padding: 10px 16px;
   }
   .start__logo {
-    grid-column: 1;
+    grid-column: 1 / -1;
     grid-row: 1;
+    margin: 0 auto 6px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    text-align: center;
   }
   .start__logo img {
-    max-height: min(16vh, 108px);
-    width: auto;
+    max-height: min(22vh, 160px);
+    width: min(88vw, 500px);
+    height: auto;
+    filter: drop-shadow(0 8px 24px rgba(0, 0, 0, 0.85)) drop-shadow(0 0 24px rgba(255, 180, 50, 0.35));
   }
   .start__pick {
     grid-column: 1;
@@ -1137,16 +1149,16 @@ body.is-extreme {
   }
   .scores {
     grid-column: 2;
-    grid-row: 1 / span 4;
+    grid-row: 2 / span 3;
     width: 100%;
-    max-width: 375px;
+    max-width: 385px;
     margin: 0 auto;
     align-self: center;
   }
 }
 
 /* Pantallas bajas (celular en horizontal <= 540px de alto):
-   2 columnas compactas para que botones y score sean 100% visibles sin scroll ni saltos */
+   Logo arriba y 2 columnas compactas para que botones y score sean 100% visibles sin scroll */
 @media (max-height: 540px) and (min-width: 541px) {
   #overlay {
     padding: max(6px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
@@ -1163,19 +1175,25 @@ body.is-extreme {
     column-gap: 16px;
     row-gap: 4px;
     width: 100%;
-    max-width: 680px;
+    max-width: 720px;
     align-items: center;
     margin: auto;
     padding: 2px 8px;
   }
   .start__logo {
-    grid-column: 1;
+    grid-column: 1 / -1;
     grid-row: 1;
-    margin-bottom: 2px;
+    margin: 0 auto 2px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    text-align: center;
   }
   .start__logo img {
-    max-height: min(12vh, 50px);
-    width: auto;
+    max-height: min(15vh, 60px);
+    width: min(80vw, 260px);
+    height: auto;
   }
   .start__pick {
     grid-column: 1;
@@ -1231,7 +1249,7 @@ body.is-extreme {
   .scores {
     display: block !important;
     grid-column: 2;
-    grid-row: 1 / span 4;
+    grid-row: 2 / span 3;
     width: 100%;
     max-width: 330px;
     margin: 0 auto;
