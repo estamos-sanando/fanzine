@@ -1,6 +1,21 @@
 {
   "schemaVersion": 5,
-  "epoch": 1,
-  "updatedAt": 1,
-  "scores": []
+  "epoch": 2,
+  "updatedAt": 1794182762809,
+  "scores": [
+    {
+      "id": "406f32f9-9f82-4798-8d57-2edb2e4987c9",
+      "initials": "ANT",
+      "name": "ANT",
+      "score": 8019,
+      "created_at": "2026-11-08T23:14:17.955Z"
+    },
+    {
+      "id": "db9a137d-5e9b-4913-a403-71920d63beec",
+      "initials": "ONT",
+      "name": "ONT",
+      "score": 1742,
+      "created_at": "2026-11-08T23:15:57.176Z"
+    }
+  ]
 }

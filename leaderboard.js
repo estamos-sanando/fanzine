@@ -17,13 +17,14 @@
   const MAX_PLAUSIBLE_SCORE = 100000;
 
   const STORAGE_KEYS = {
-    cache: 'fanzine_lb_cache_v4',        // Solo caché de lectura para modo sin conexión
+    cache: 'fanzine_lb_cache_v5',        // Caché de lectura estructurado { epoch, updatedAt, scores }
     outbox: 'fanzine_lb_outbox_v4',      // Cola idempotente de envíos pendientes de red
     initials: 'fanzine_runner_initials', // Últimas 3 iniciales elegidas por el jugador
     personal: 'fanzine_lb_personal_v4'   // Mejor marca personal local del jugador
   };
 
   const LEGACY_KEYS = [
+    'fanzine_lb_cache_v4',
     'fanzine_runner_global_v1', 'fanzine_runner_global_v2', 'fanzine_runner_global_v3',
     'fanzine_runner_global_v4', 'fanzine_runner_global_v5', 'fanzine_runner_global_v6',
     'fanzine_runner_global_v7', 'fanzine_runner_global_v8', 'fanzine_runner_global_v9',
@@ -167,6 +168,7 @@
     pending: [],
     status: 'loading', // loading | live | ok | offline
     mode: 'connecting',
+    epoch: 0,
     updatedAt: 0,
     hasLoadedOnce: false,
     syncing: false,
@@ -202,8 +204,16 @@
 
       // Cargar caché de solo lectura (respaldo offline) y cola de salida pendiente
       try {
-        const cached = JSON.parse(safeStorageGet(STORAGE_KEYS.cache, '[]'));
-        this.remote = Array.isArray(cached) ? sortEntries(cached, 100) : [];
+        const cached = JSON.parse(safeStorageGet(STORAGE_KEYS.cache, 'null'));
+        if (cached && typeof cached === 'object' && !Array.isArray(cached) && Array.isArray(cached.scores)) {
+          this.epoch = Number(cached.epoch) > 0 ? Math.floor(Number(cached.epoch)) : 0;
+          this.updatedAt = Number(cached.updatedAt) || 0;
+          this.remote = sortEntries(cached.scores, 100);
+        } else if (Array.isArray(cached)) {
+          this.remote = sortEntries(cached, 100);
+        } else {
+          this.remote = [];
+        }
         for (const s of this.remote) this.knownIds.add(s.id);
       } catch (_) {
         this.remote = [];
@@ -215,7 +225,7 @@
           ? outbox.filter((x) => {
             if (!x || !isValidInitials(x.initials)) return false;
             const s = Number(x.score);
-            return Number.isSafeInteger(s) && s > 0 && s <= MAX_PLAUSIBLE_SCORE && Boolean(x.sessionToken);
+            return Number.isSafeInteger(s) && s > 0 && s <= MAX_PLAUSIBLE_SCORE;
           })
           : [];
         for (const p of this.pending) {
@@ -287,7 +297,11 @@
     },
 
     _saveCache() {
-      safeStorageSet(STORAGE_KEYS.cache, JSON.stringify(this.remote.slice(0, 50)));
+      safeStorageSet(STORAGE_KEYS.cache, JSON.stringify({
+        epoch: this.epoch || 1,
+        updatedAt: this.updatedAt || 0,
+        scores: this.remote.slice(0, 100)
+      }));
     },
 
     _saveOutbox() {
@@ -408,12 +422,44 @@
       }
     },
 
-    _ingestServerScores(rawScores, serverUpdatedAt, broadcast = true) {
+    _ingestServerScores(rawScores, serverUpdatedAt, broadcast = true, serverEpoch = null) {
       const incoming = sortEntries(Array.isArray(rawScores) ? rawScores : [], 100);
-      const liveNew = [];
+      const hasEpoch = serverEpoch !== null && serverEpoch !== undefined && Number.isFinite(Number(serverEpoch)) && Number(serverEpoch) > 0;
+      const incomingEpoch = hasEpoch ? Math.floor(Number(serverEpoch)) : this.epoch;
 
-      if (this.hasLoadedOnce) {
-        for (const entry of incoming) {
+      // Ignorar respuestas obsoletas de un epoch anterior para evitar regresiones o borrados accidentales
+      if (hasEpoch && this.epoch > 0 && incomingEpoch < this.epoch) {
+        return;
+      }
+
+      const isExplicitEpochReset = hasEpoch && this.epoch > 0 && incomingEpoch > this.epoch;
+      const isAcidDirectReset = !isExplicitEpochReset
+        && (this.mode === 'supabase' || this.mode === 'redis')
+        && incoming.length === 0
+        && Number(serverUpdatedAt) > this.updatedAt;
+
+      let nextRemote;
+      if (isExplicitEpochReset || isAcidDirectReset) {
+        // Reinicio administrativo explícito confirmado: limpiar estado global en todos los dispositivos
+        this.knownIds.clear();
+        this.ownIds.clear();
+        nextRemote = incoming;
+        this.updatedAt = Number(serverUpdatedAt) || Date.now();
+      } else {
+        // Mismo epoch: unión monotónica G-Set (ninguna réplica con lag ni cold-start puede borrar puntajes confirmados)
+        nextRemote = sortEntries([...this.remote, ...incoming], 100);
+        if (serverUpdatedAt) {
+          this.updatedAt = Math.max(this.updatedAt, Number(serverUpdatedAt) || 0);
+        }
+      }
+
+      if (hasEpoch && incomingEpoch > this.epoch) {
+        this.epoch = incomingEpoch;
+      }
+
+      const liveNew = [];
+      if (this.hasLoadedOnce && !isExplicitEpochReset && !isAcidDirectReset) {
+        for (const entry of nextRemote) {
           if (!this.knownIds.has(entry.id) && !this.ownIds.has(entry.id)) {
             this.liveHighlights.set(entry.id, Date.now() + this.liveHighlightDurationMs);
             liveNew.push(entry);
@@ -421,13 +467,11 @@
         }
       }
 
-      // Si el servidor se reinició (0 puntajes), reflejar fielmente la base global limpia
       this.knownIds.clear();
-      for (const entry of incoming) this.knownIds.add(entry.id);
+      for (const entry of nextRemote) this.knownIds.add(entry.id);
       for (const p of this.pending) this.knownIds.add(p.id);
 
-      this.remote = incoming;
-      if (serverUpdatedAt) this.updatedAt = Math.max(this.updatedAt, Number(serverUpdatedAt) || 0);
+      this.remote = nextRemote;
       this.hasLoadedOnce = true;
       this.rebuild();
       this._saveCache();
@@ -445,6 +489,7 @@
         try {
           this._bc.postMessage({
             type: 'SYNC',
+            epoch: this.epoch,
             scores: this.remote,
             updatedAt: this.updatedAt
           });
@@ -455,7 +500,7 @@
     async refresh(forceFull = false) {
       try {
         const sinceParam = !forceFull && this.hasLoadedOnce && this.updatedAt > 0
-          ? `&since=${encodeURIComponent(this.updatedAt)}`
+          ? `&since=${encodeURIComponent(this.updatedAt)}&epoch=${encodeURIComponent(this.epoch || 1)}&count=${encodeURIComponent(this.remote.length)}`
           : '';
         const data = await this._apiFetch('GET', null, `limit=50${sinceParam}`);
 
@@ -465,11 +510,12 @@
         this.status = this.wsConnected ? 'live' : 'ok';
 
         if (data && data.unchanged) {
+          if (data.epoch && Number(data.epoch) > this.epoch) {
+            this.epoch = Math.floor(Number(data.epoch));
+          }
           this.changed();
         } else if (data && Array.isArray(data.scores)) {
-          // Si servidor envió reinicio (updatedAt distinto y lista vacía), reiniciar estado limpio
-          if (data.scores.length === 0) this.updatedAt = Number(data.updatedAt) || Date.now();
-          this._ingestServerScores(data.scores, data.updatedAt, true);
+          this._ingestServerScores(data.scores, data.updatedAt, true, data.epoch);
         }
 
         if (this.pending.length) this.flush();
@@ -570,6 +616,17 @@
       return { id, rank };
     },
 
+    async _obtainRecoverySessionToken() {
+      try {
+        const data = await this._apiFetch('POST', { action: 'session' });
+        if (data && data.sessionToken) {
+          await new Promise((r) => setTimeout(r, 600));
+          return data.sessionToken;
+        }
+      } catch (_) { }
+      return null;
+    },
+
     async flush() {
       if (this.syncing || !this.pending.length) return;
       this.syncing = true;
@@ -579,6 +636,16 @@
         while (this.pending.length) {
           const item = this.pending[0];
           try {
+            // Si la partida comenzó sin señal móvil (sin token), adquirir sesión de recuperación al reconectar
+            if (!item.sessionToken && !item._tokenRenewed) {
+              const recovered = await this._obtainRecoverySessionToken();
+              if (recovered) {
+                item.sessionToken = recovered;
+                item._tokenRenewed = true;
+                this._saveOutbox();
+              }
+            }
+
             const res = await this._apiFetch('POST', {
               id: item.id,
               initials: item.initials,
@@ -593,7 +660,7 @@
             this._saveOutbox();
 
             if (res && Array.isArray(res.scores)) {
-              this._ingestServerScores(res.scores, res.updatedAt, true);
+              this._ingestServerScores(res.scores, res.updatedAt, true, res.epoch);
             }
             this.status = this.wsConnected ? 'live' : 'ok';
             if (typeof this.onRank === 'function' && res && res.rank) {
@@ -601,14 +668,35 @@
             }
             this.changed();
           } catch (err) {
-            // Si el servidor rechaza permanentemente el envío (400/403/409), retirarlo de la cola
+            // Si el token expiró tras un redeploy o viaje sin señal, renovar por única vez y reintentar
+            if (err && err.status === 403 && !item._tokenRenewed) {
+              const recovered = await this._obtainRecoverySessionToken();
+              if (recovered) {
+                item.sessionToken = recovered;
+                item._tokenRenewed = true;
+                this._saveOutbox();
+                continue;
+              }
+            }
+
+            // En caso de rate-limit compartido (429), conservar en cola y reintentar automáticamente sin perder el puntaje
+            if (err && err.status === 429) {
+              item._retried = true;
+              this._saveOutbox();
+              setTimeout(() => this.flush(), 2500);
+              break;
+            }
+
+            // Si el servidor rechaza permanentemente el payload (400/403/409), retirarlo de la cola
             if (err && (err.status === 400 || err.status === 403 || err.status === 409)) {
               this.pending.shift();
               this._saveOutbox();
               this.rebuild();
               this.changed();
+              if (err.status === 409) this.refresh(true);
               continue;
             }
+
             item._retried = true;
             this._saveOutbox();
             this.status = 'offline';
@@ -624,11 +712,11 @@
     _setupBroadcastChannel() {
       if (typeof global.BroadcastChannel !== 'function') return;
       try {
-        this._bc = new global.BroadcastChannel('fanzine_lb_live_v4');
+        this._bc = new global.BroadcastChannel('fanzine_lb_live_v5');
         this._bc.onmessage = (ev) => {
           const msg = ev && ev.data;
           if (msg && msg.type === 'SYNC' && Array.isArray(msg.scores)) {
-            this._ingestServerScores(msg.scores, msg.updatedAt, false);
+            this._ingestServerScores(msg.scores, msg.updatedAt, false, msg.epoch);
           }
         };
       } catch (_) { }
