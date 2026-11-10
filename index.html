@@ -146,6 +146,49 @@
     </div>
   </aside>
 
+  <!-- Modal Historia Instagram / Compartir Score (9:16 con QR) -->
+  <aside id="story-modal" class="story-modal" aria-hidden="true" role="dialog" aria-label="Compartir en Historias de Instagram">
+    <div class="story-modal__backdrop"></div>
+    <div class="story-modal__content">
+      <header class="story-modal__header">
+        <div class="story-modal__title-wrap">
+          <h2 class="story-modal__title">
+            <span class="scores__title-star">★</span>
+            <span data-i18n="shareModalTitle">HISTORIA DE INSTAGRAM</span>
+            <span class="scores__title-star">★</span>
+          </h2>
+          <p class="story-modal__subtitle" data-i18n="shareModalSubtitle">Tu placa 9:16 con QR lista para compartir o guardar</p>
+        </div>
+        <button id="story-modal-close" class="story-modal__close" type="button" aria-label="Cerrar" data-i18n-aria="close">✕</button>
+      </header>
+
+      <div class="story-modal__body">
+        <div class="story-modal__preview-wrap">
+          <img id="story-preview-img" class="story-modal__preview" alt="Vista previa de historia" width="270" height="480">
+          <div id="story-loading" class="story-modal__loading">
+            <div class="story-modal__spinner"></div>
+            <span data-i18n="shareGenerating">Generando historia…</span>
+          </div>
+        </div>
+      </div>
+
+      <footer class="story-modal__footer">
+        <button id="story-share-native-btn" class="story-btn story-btn--share" type="button">
+          <span class="story-btn__icon">📸</span>
+          <span data-i18n="shareBtnAction">Compartir en Historia</span>
+        </button>
+        <button id="story-download-btn" class="story-btn story-btn--download" type="button">
+          <span class="story-btn__icon">💾</span>
+          <span data-i18n="shareBtnDownload">Guardar Imagen</span>
+        </button>
+        <button id="story-copy-link-btn" class="story-btn story-btn--copy" type="button">
+          <span class="story-btn__icon">🔗</span>
+          <span data-i18n="shareBtnCopyLink">Copiar Enlace</span>
+        </button>
+      </footer>
+    </div>
+  </aside>
+
   <!-- Auxiliares y Notificación Live Arcade -->
   <div id="safe-probe" aria-hidden="true"></div>
   <div id="toast" role="status" aria-live="polite"></div>
@@ -234,6 +277,7 @@
   <!-- Acciones en pantalla de Game Over -->
   <div id="gameover-actions" class="gameover-actions">
     <button id="restart-btn" class="menu-btn menu-btn--restart" type="button" data-i18n="playAgain">▶ Jugar de nuevo</button>
+    <button id="gameover-share-btn" class="menu-btn menu-btn--share" type="button" data-i18n="shareScore" title="Compartir en Historias de Instagram">📸 Compartir</button>
     <button id="gameover-scores-btn" class="menu-btn menu-btn--scores" type="button" data-i18n="globalRanking">Ranking Global</button>
     <button id="menu-btn" class="menu-btn" type="button" data-i18n="menu">↩ Menú</button>
   </div>
@@ -290,8 +334,10 @@
     </div>
   </div>
 
-  <script src="i18n.js?v=89"></script>
-  <script src="leaderboard.js?v=89"></script>
-  <script src="game.js?v=89"></script>
+  <script src="qrcode.min.js?v=90"></script>
+  <script src="i18n.js?v=90"></script>
+  <script src="leaderboard.js?v=90"></script>
+  <script src="story-share.js?v=90"></script>
+  <script src="game.js?v=90"></script>
 </body>
 </html>

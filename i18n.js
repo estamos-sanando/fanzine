@@ -70,6 +70,7 @@
 
       // Game Over & Actions
       playAgain: '▶ Jugar de nuevo',
+      shareScore: '📸 Compartir',
       globalRanking: 'Ranking Global',
       menu: '↩ Menú',
       gameOver: 'PARTIDA FINALIZADA',
@@ -83,6 +84,22 @@
       extremeHud: '★ EXTREMO',
       bonus: '★ BONUS',
       noGlobalScoresYet: '¡Aún sin marcas globales registradas!',
+
+      // Share Story (Instagram)
+      shareModalTitle: 'HISTORIA DE INSTAGRAM',
+      shareModalSubtitle: 'Tu placa 9:16 con QR lista para compartir o guardar',
+      shareBtnAction: 'Compartir en Historia',
+      shareBtnDownload: 'Guardar Imagen',
+      shareBtnCopyLink: 'Copiar Enlace',
+      shareCopiedToast: '¡Enlace copiado al portapapeles!',
+      shareGenerating: 'Generando historia…',
+      shareStoryCardTitle: '★ JUEGO OFICIAL · UNLaM ★',
+      shareStoryBeatMe: '¿PODÉS SUPERAR MI MARCA?',
+      shareStoryScan: 'ESCANEÁ CON TU CÁMARA PARA JUGAR',
+      shareStoryScoreLabel: '★ MI RÉCORD ARCADE ★',
+      shareStoryFollow: '📸 Seguinos en Instagram @nellcstudio',
+      shareTitle: '¡Mi récord en NO TE RINDAS!',
+      shareSuccess: '¡Historia compartida con éxito!',
 
       // Tutorial dialogs
       tutorialTitle: 'TUTORIAL · ¡APRENDÉ A JUGAR!',
@@ -151,6 +168,7 @@
 
       // Game Over & Actions
       playAgain: '▶ Play Again',
+      shareScore: '📸 Share',
       globalRanking: 'Global Ranking',
       menu: '↩ Menu',
       gameOver: 'GAME OVER',
@@ -164,6 +182,22 @@
       extremeHud: '★ EXTREME',
       bonus: '★ BONUS',
       noGlobalScoresYet: 'No global scores recorded yet!',
+
+      // Share Story (Instagram)
+      shareModalTitle: 'INSTAGRAM STORY',
+      shareModalSubtitle: 'Your 9:16 card with QR ready to share or save',
+      shareBtnAction: 'Share to Story',
+      shareBtnDownload: 'Save Image',
+      shareBtnCopyLink: 'Copy Link',
+      shareCopiedToast: 'Link copied to clipboard!',
+      shareGenerating: 'Generating story…',
+      shareStoryCardTitle: '★ OFFICIAL GAME · UNLaM ★',
+      shareStoryBeatMe: 'CAN YOU BEAT MY RECORD?',
+      shareStoryScan: 'SCAN WITH YOUR CAMERA TO PLAY',
+      shareStoryScoreLabel: '★ MY ARCADE HIGH SCORE ★',
+      shareStoryFollow: '📸 Follow on Instagram @nellcstudio',
+      shareTitle: 'My record in NO TE RINDAS!',
+      shareSuccess: 'Story shared successfully!',
 
       // Tutorial dialogs
       tutorialTitle: 'TUTORIAL · LEARN TO PLAY!',

@@ -300,6 +300,7 @@ const dom = {
   restartBtn:      $('restart-btn'),
   menuBtn:         $('menu-btn'),
   gameOverActions: $('gameover-actions'),
+  gameOverShareBtn: $('gameover-share-btn'),
   gameOverScoresBtn: $('gameover-scores-btn'),
   fullScoresBtn:   $('full-scores-btn'),
   fullScoresModal: $('full-scores-modal'),
@@ -1545,7 +1546,7 @@ window.addEventListener('pointerdown', (e) => {
   if (state === STATES.LOADING || state === STATES.CHARACTER_SELECT) return;          // el menú usa sus propios botones
   if (window.ArcadeEntryModal && window.ArcadeEntryModal.isOpen) return;
   if (dom.fullScoresModal && dom.fullScoresModal.classList.contains('is-open')) return;
-  if (e.target && e.target.closest && e.target.closest('#arcade-entry-modal, #restart-btn, #menu-btn, #gameover-actions, #gameover-scores-btn, #full-scores-modal, #full-scores-btn, #fullscreen-btn, #skip-tutorial-btn, #settings, #overlay')) return;
+  if (e.target && e.target.closest && e.target.closest('#arcade-entry-modal, #story-modal, #restart-btn, #menu-btn, #gameover-actions, #gameover-share-btn, #gameover-scores-btn, #full-scores-modal, #full-scores-btn, #fullscreen-btn, #skip-tutorial-btn, #settings, #overlay')) return;
   // En ENTRY y GAME_OVER no reiniciar por clic accidental sobre el fondo; se usan los botones dedicados
   if (state === STATES.ENTRY || state === STATES.GAME_OVER) return;
   e.preventDefault();
@@ -4844,6 +4845,24 @@ function setupOverlay() {
     dom.fullScoresBtn.addEventListener('click', onOpen);
     dom.fullScoresBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
     dom.fullScoresBtn.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
+  }
+  if (dom.gameOverShareBtn) {
+    const onShareClick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (window.StoryShare) {
+        window.StoryShare.openModal({
+          score: world.score,
+          initials: initials,
+          rank: world.addedRank,
+          character: character,
+          bestScore: Scores.best
+        });
+      }
+    };
+    dom.gameOverShareBtn.addEventListener('click', onShareClick);
+    dom.gameOverShareBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
+    dom.gameOverShareBtn.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
   }
   if (dom.gameOverScoresBtn) {
     const onGameOverOpen = (e) => {

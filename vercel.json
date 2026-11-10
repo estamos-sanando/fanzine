@@ -42,7 +42,7 @@
       ]
     },
     {
-      "source": "/(index\\.html|sw\\.js|game\\.js|leaderboard\\.js|style\\.css)",
+      "source": "/(index\\.html|sw\\.js|game\\.js|leaderboard\\.js|i18n\\.js|story-share\\.js|qrcode\\.min\\.js|style\\.css)",
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
       ]
