@@ -37,9 +37,9 @@ const ASSETS = {
 
   // Avión publicitario de Instagram en el tutorial (@nella_costa)
   avion: [
-    'ASSETS/avion.webp',
-    'ASSETS/avion1.webp',
-    'ASSETS/avion2.webp'
+    'ASSETS/avion.webp?v=89',
+    'ASSETS/avion1.webp?v=89',
+    'ASSETS/avion2.webp?v=89'
   ],
 
   // Avión oficial "No te rindas" durante el juego
