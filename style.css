@@ -485,9 +485,10 @@ body.is-extreme {
 .scores__header-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   gap: 6px;
   margin: 0 0 7px;
+  text-align: center;
 }
 
 .scores__title {

@@ -4,7 +4,7 @@
  * - fetch   : Network-First para HTML/JS/CSS (garantiza código actualizado)
  *             Cache-First para imágenes y audios pesados (máxima velocidad)
  * ========================================================= */
-const CACHE_VERSION = 'v82';
+const CACHE_VERSION = 'v83';
 const CACHE_NAME = 'fanzine-runner-' + CACHE_VERSION;
 
 // Mantener sincronizado con el diccionario ASSETS de game.js
@@ -21,7 +21,7 @@ const PRECACHE = [
   'ASSETS/avionnoterindas1.png',
   'ASSETS/avionnoterindas2.png',
   'ASSETS/logonoterindas.png',
-  'ASSETS/logonoterindas.png?v=82',
+  'ASSETS/logonoterindas.png?v=83',
   'ASSETS/fondoinfinito.png',
   'ASSETS/fondoinicio.png',
   'ASSETS/Entrada.png',

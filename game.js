@@ -19,7 +19,7 @@
 const ASSETS = {
   // Escenario, obstáculos y coleccionables
   images: {
-    logo:          'ASSETS/logonoterindas.png?v=82',  // Logo oficial "¡No te rindas!"
+    logo:          'ASSETS/logonoterindas.png?v=83',  // Logo oficial "¡No te rindas!"
     fondoinfinito: 'ASSETS/fondoinfinito.png',   // fondo infinito durante la carrera (Teatro, Auditorio, Biblioteca)
     ground:        'ASSETS/SUELO.png',           // vereda
     book:          'ASSETS/manualobstaculo.png', // obstáculo bajo
@@ -1240,7 +1240,7 @@ let liveBannerTimer = 0;
 function showLiveScoreBanner(entry) {
   if (!dom.liveScoreBanner || !entry) return;
   const rankTxt = entry.rank > 0 ? ` (#${String(entry.rank).padStart(2, '0')})` : '';
-  dom.liveScoreBanner.textContent = `⚡ EN VIVO · ${entry.initials} marcó ${pad(entry.score)} pts${rankTxt}`;
+  dom.liveScoreBanner.textContent = `⚡ RÉCORD · ${entry.initials} marcó ${pad(entry.score)} pts${rankTxt}`;
   dom.liveScoreBanner.classList.add('is-visible');
   if (state !== STATES.PLAYING) {
     Sfx.tone(880, 1320, 0.09, 'triangle', 0.045);
@@ -1253,8 +1253,8 @@ function showLiveScoreBanner(entry) {
 
 function updateLivePills() {
   const st = Scores.status || 'loading';
-  const labelOverlay = st === 'live' ? '● WS LIVE' : (st === 'ok' ? '● EN VIVO' : (st === 'offline' ? '● SIN RED' : '● SYNC'));
-  const labelModal = st === 'live' ? '● TIEMPO REAL WS' : (st === 'ok' ? '● EN VIVO' : (st === 'offline' ? '● SIN RED' : '● CONECTANDO'));
+  const labelOverlay = st === 'offline' ? '● SIN RED' : (st === 'loading' ? '● CONECTANDO' : '● ONLINE');
+  const labelModal = st === 'offline' ? '● SIN RED' : (st === 'loading' ? '● CONECTANDO' : '● SINCRONIZADO');
   if (dom.overlayLivePill) {
     dom.overlayLivePill.dataset.state = st;
     dom.overlayLivePill.textContent = labelOverlay;
