@@ -35,7 +35,7 @@ const ASSETS = {
     bus620open:    'ASSETS/620abrepoco.webp',     // bondi con puerta abierta
   },
 
-  // Avión publicitario de Instagram en el tutorial (@nella_costa)
+  // Avión publicitario de Instagram en el tutorial (@nellcstudio)
   avion: [
     'ASSETS/avion.webp?v=89',
     'ASSETS/avion1.webp?v=89',
@@ -1311,7 +1311,7 @@ const world = {
   plane: { active: false, x: 0, y: 0, w: 0, h: 0, t: 0, speed: 150, timer: 1.5 }
 };
 
-/* ---------- Avión publicitario en el cielo (Tutorial: @nella_costa | Juego: No te rindas) ---------- */
+/* ---------- Avión publicitario en el cielo (Tutorial: @nellcstudio | Juego: No te rindas) ---------- */
 function updatePlane(dt) {
   const p = world.plane;
   if (!p) return;
