@@ -179,7 +179,7 @@ const CONFIG = {
   apiScores: '/api/scores',                     // endpoint backend global en tiempo real (api/scores.js)
   apiTimeout: 6500,                             // ms de espera máxima de red
   maxScores: 5,                                 // Cantidad visualizada en tarjeta Canvas de Game Over
-  maxScoresOverlay: 10,                         // Top 10 en pizarra principal de inicio
+  maxScoresOverlay: 5,                          // Top 5 en pizarra principal de inicio (coherente con título y sin scroll)
   maxScoresModal: 50,                           // Top 50 en pizarra global completa
   initialsLength: 3,
   storageChar: 'fanzine_runner_char',
@@ -4729,7 +4729,7 @@ function renderOverlayScores() {
   updateLivePills();
   dom.scoresList.textContent = '';
 
-  const top = (Scores.list || []).slice(0, CONFIG.maxScoresOverlay || 10);
+  const top = (Scores.list || []).slice(0, CONFIG.maxScoresOverlay || 5);
 
   top.forEach((e, i) => {
     const rank = i + 1;
