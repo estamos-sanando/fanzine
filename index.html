@@ -12,14 +12,13 @@
   <meta name="format-detection" content="telephone=no">
   <link rel="icon" href="ASSETS/chicaquieta.png" type="image/png">
   <link rel="apple-touch-icon" href="ASSETS/chicaquieta.png">
-  <!-- Precarga de imágenes críticas para inicio instantáneo -->
-  <link rel="preload" as="image" href="ASSETS/logonoterindas.png?v=87">
-  <link rel="preload" as="image" href="ASSETS/fondoinicio.png">
-  <link rel="preload" as="image" href="ASSETS/fondoinfinito.png">
-  <link rel="preload" as="image" href="ASSETS/SUELO.png">
-  <link rel="preload" as="image" href="ASSETS/chicaquieta.png">
-  <link rel="preload" as="image" href="ASSETS/chicoquieto.png">
-  <link rel="stylesheet" href="style.css?v=87">
+  <!-- Precarga de imágenes críticas ultra-ligeras (<120 KB total en WebP) para inicio instantáneo -->
+  <link rel="preload" as="image" href="ASSETS/logonoterindas.webp?v=88" type="image/webp">
+  <link rel="preload" as="image" href="ASSETS/fondoinicio.webp" type="image/webp">
+  <link rel="preload" as="image" href="ASSETS/SUELO.webp" type="image/webp">
+  <link rel="preload" as="image" href="ASSETS/chicaquieta.webp" type="image/webp">
+  <link rel="preload" as="image" href="ASSETS/chicoquieto.webp" type="image/webp">
+  <link rel="stylesheet" href="style.css?v=88">
 </head>
 <body>
   <!-- Canvas del juego -->
@@ -29,7 +28,7 @@
   <aside id="rotate-device-modal" class="rotate-modal" aria-hidden="true" role="dialog" aria-label="Girá tu pantalla para jugar a NO TE RINDAS">
     <div class="rotate-modal__content">
       <div class="rotate-modal__logo">
-        <img src="ASSETS/logonoterindas.png?v=87" alt="NO TE RINDAS" class="rotate-modal__logo-img" width="240" height="94" decoding="async">
+        <img src="ASSETS/logonoterindas.webp?v=88" alt="NO TE RINDAS" class="rotate-modal__logo-img" width="240" height="94" decoding="async">
       </div>
       <div class="rotate-modal__icon" aria-hidden="true">
         <svg viewBox="0 0 100 100" class="rotate-phone-svg" width="84" height="84">
@@ -156,7 +155,7 @@
   <main id="overlay" class="is-loading">
     <div class="start">
       <h1 class="start__logo">
-        <img src="ASSETS/logonoterindas.png?v=87" alt="¡No te rindas!" width="1027" height="401" decoding="async">
+        <img src="ASSETS/logonoterindas.webp?v=88" alt="¡No te rindas!" width="1027" height="401" decoding="async">
       </h1>
 
       <div class="start__cards">
@@ -174,10 +173,10 @@
           <section class="start__pick" aria-labelledby="pick-title">
             <div class="picker" role="group" aria-label="Elegí tu personaje" data-i18n-aria="chooseChar">
               <button id="pick-chica" class="picker__btn" type="button" data-char="chica" aria-pressed="true" aria-label="Chica" data-i18n-aria="charChica">
-                <img src="ASSETS/chicaquieta.png" alt="" height="110">
+                <img src="ASSETS/chicaquieta.webp" alt="" height="110">
               </button>
               <button id="pick-chico" class="picker__btn" type="button" data-char="chico" aria-pressed="false" aria-label="Chico" data-i18n-aria="charChico">
-                <img src="ASSETS/chicoquieto.png" alt="" height="110">
+                <img src="ASSETS/chicoquieto.webp" alt="" height="110">
               </button>
             </div>
           </section>
@@ -291,8 +290,8 @@
     </div>
   </div>
 
-  <script src="i18n.js?v=87"></script>
-  <script src="leaderboard.js?v=87"></script>
-  <script src="game.js?v=87"></script>
+  <script src="i18n.js?v=88"></script>
+  <script src="leaderboard.js?v=88"></script>
+  <script src="game.js?v=88"></script>
 </body>
 </html>

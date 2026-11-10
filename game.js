@@ -19,128 +19,128 @@
 const ASSETS = {
   // Escenario, obstáculos y coleccionables
   images: {
-    logo:          'ASSETS/logonoterindas.png?v=87',  // Logo oficial "¡No te rindas!"
-    fondoinfinito: 'ASSETS/fondoinfinito.png',   // fondo infinito durante la carrera (Teatro, Auditorio, Biblioteca)
-    ground:        'ASSETS/SUELO.png',           // vereda
-    book:          'ASSETS/manualobstaculo.png', // obstáculo bajo
-    horse:         'ASSETS/caballoobstaculo.png',// obstáculo alto
-    virgen:        'ASSETS/virgenobstaculo.png', // obstáculo alto: ermita de la Virgen
-    toast:         'ASSETS/100puntostostado.png',// +100
-    tortilla:      'ASSETS/200puntostortilla.png',// +200
-    mate:          'ASSETS/500puntosmate.png',   // +500 recompensa alta especial
-    bonus:         'ASSETS/bonus.png',           // +1000 y activa carrito de golf por 5s
-    fondoInicio:   'ASSETS/fondoinicio.png',    // fondo escena del bondi
-    fondoEntrada:  'ASSETS/Entrada.png',        // fondo de la entrada a UNLaM
-    bus620closed:  'ASSETS/620cerrado.png',      // bondi cerrado
-    bus620open:    'ASSETS/620abrepoco.png',     // bondi con puerta abierta
+    logo:          'ASSETS/logonoterindas.webp?v=88',  // Logo oficial "¡No te rindas!"
+    fondoinfinito: 'ASSETS/fondoinfinito.webp',   // fondo infinito durante la carrera (Teatro, Auditorio, Biblioteca)
+    ground:        'ASSETS/SUELO.webp',           // vereda
+    book:          'ASSETS/manualobstaculo.webp', // obstáculo bajo
+    horse:         'ASSETS/caballoobstaculo.webp',// obstáculo alto
+    virgen:        'ASSETS/virgenobstaculo.webp', // obstáculo alto: ermita de la Virgen
+    toast:         'ASSETS/100puntostostado.webp',// +100
+    tortilla:      'ASSETS/200puntostortilla.webp',// +200
+    mate:          'ASSETS/500puntosmate.webp',   // +500 recompensa alta especial
+    bonus:         'ASSETS/bonus.webp',           // +1000 y activa carrito de golf por 5s
+    fondoInicio:   'ASSETS/fondoinicio.webp',    // fondo escena del bondi
+    fondoEntrada:  'ASSETS/Entrada.webp',        // fondo de la entrada a UNLaM
+    bus620closed:  'ASSETS/620cerrado.webp',      // bondi cerrado
+    bus620open:    'ASSETS/620abrepoco.webp',     // bondi con puerta abierta
   },
 
   // Avión publicitario de Instagram en el tutorial (@nella_costa)
   avion: [
-    'ASSETS/avion.png',
-    'ASSETS/avion1.png',
-    'ASSETS/avion2.png'
+    'ASSETS/avion.webp',
+    'ASSETS/avion1.webp',
+    'ASSETS/avion2.webp'
   ],
 
   // Avión oficial "No te rindas" durante el juego
   avionNoTeRindas: [
-    'ASSETS/avionnoterindas.png',
-    'ASSETS/avionnoterindas1.png',
-    'ASSETS/avionnoterindas2.png'
+    'ASSETS/avionnoterindas.webp',
+    'ASSETS/avionnoterindas1.webp',
+    'ASSETS/avionnoterindas2.webp'
   ],
 
   // Bus con personaje bajando
   bus620sale: {
-    chica: 'ASSETS/620chicasale.png',
-    chico: 'ASSETS/620chicosale.png'
+    chica: 'ASSETS/620chicasale.webp',
+    chico: 'ASSETS/620chicosale.webp'
   },
 
   // Obstáculo aéreo: tero en vuelo (4 frames de aleteo, miran a la derecha => se espejan)
   tero: [
-    'ASSETS/terovolando1.png',
-    'ASSETS/terovolando2.png',
-    'ASSETS/terovolando3.png',
-    'ASSETS/terovolando4.png'
+    'ASSETS/terovolando1.webp',
+    'ASSETS/terovolando2.webp',
+    'ASSETS/terovolando3.webp',
+    'ASSETS/terovolando4.webp'
   ],
 
   // Máquina expendedora (4 frames de animación)
   maquina: [
-    'ASSETS/maquina1.png',
-    'ASSETS/maquina2.png',
-    'ASSETS/maquina3.png',
-    'ASSETS/maquina4.png'
+    'ASSETS/maquina1.webp',
+    'ASSETS/maquina2.webp',
+    'ASSETS/maquina3.webp',
+    'ASSETS/maquina4.webp'
   ],
 
   // Coca / bebida animación (4 frames cada personaje)
   coca: {
-    chica: ['ASSETS/cocachica1.png', 'ASSETS/cocachica2.png', 'ASSETS/cocachica3.png', 'ASSETS/cocachica4.png'],
-    chico: ['ASSETS/cocachico1.png', 'ASSETS/cocachico2.png', 'ASSETS/cocachico3.png', 'ASSETS/cocachico4.png']
+    chica: ['ASSETS/cocachica1.webp', 'ASSETS/cocachica2.webp', 'ASSETS/cocachica3.webp', 'ASSETS/cocachica4.webp'],
+    chico: ['ASSETS/cocachico1.webp', 'ASSETS/cocachico2.webp', 'ASSETS/cocachico3.webp', 'ASSETS/cocachico4.webp']
   },
 
   // Diálogos del tutorial (6 frames cada personaje: 0=base, 1-5=secuencia)
   dialogo: {
-    chica: ['ASSETS/chicadialogo.png', 'ASSETS/chicadialogo1.png', 'ASSETS/chicadialogo2.png',
-            'ASSETS/chicadialogo3.png', 'ASSETS/chicadialogo4.png', 'ASSETS/chicadialogo5.png'],
-    chico: ['ASSETS/chicodialogo.png', 'ASSETS/chicodialogo1.png', 'ASSETS/chicodialogo2.png',
-            'ASSETS/chicodialogo3.png', 'ASSETS/chicodialogo4.png', 'ASSETS/chicodialogo5.png']
+    chica: ['ASSETS/chicadialogo.webp', 'ASSETS/chicadialogo1.webp', 'ASSETS/chicadialogo2.webp',
+            'ASSETS/chicadialogo3.webp', 'ASSETS/chicadialogo4.webp', 'ASSETS/chicadialogo5.webp'],
+    chico: ['ASSETS/chicodialogo.webp', 'ASSETS/chicodialogo1.webp', 'ASSETS/chicodialogo2.webp',
+            'ASSETS/chicodialogo3.webp', 'ASSETS/chicodialogo4.webp', 'ASSETS/chicodialogo5.webp']
   },
 
   // Personaje caminando hacia la puerta (perspectiva de espalda)
   caminaPuerta: {
-    chica: ['ASSETS/chicacaminapuerta.png', 'ASSETS/chicacaminapuerta2.png'],
-    chico: ['ASSETS/chicocaminapuerta.png', 'ASSETS/chicocaminapuerta2.png']
+    chica: ['ASSETS/chicacaminapuerta.webp', 'ASSETS/chicacaminapuerta2.webp'],
+    chico: ['ASSETS/chicocaminapuerta.webp', 'ASSETS/chicocaminapuerta2.webp']
   },
 
   // Festejo graduación (4 frames cada personaje con birrete y diploma UNLaM)
   festejo: {
     chica: [
-      'ASSETS/chicafestejo1.png',
-      'ASSETS/chicafestejo2.png',
-      'ASSETS/chicafestejo3.png',
-      'ASSETS/chicafestejo4.png'
+      'ASSETS/chicafestejo1.webp',
+      'ASSETS/chicafestejo2.webp',
+      'ASSETS/chicafestejo3.webp',
+      'ASSETS/chicafestejo4.webp'
     ],
     chico: [
-      'ASSETS/chicofestejo1.png',
-      'ASSETS/chicofestejo2.png',
-      'ASSETS/chicofestejo3.png',
-      'ASSETS/chicofestejo4.png'
+      'ASSETS/chicofestejo1.webp',
+      'ASSETS/chicofestejo2.webp',
+      'ASSETS/chicofestejo3.webp',
+      'ASSETS/chicofestejo4.webp'
     ]
   },
 
   // Personajes disponibles (se elige en la pantalla de inicio)
   characters: {
     chica: {
-      idle:        'ASSETS/chicaquieta.png',
+      idle:        'ASSETS/chicaquieta.webp',
       run: [
-        'ASSETS/chicacorreder.png',
-        'ASSETS/chicacorre1.png',
-        'ASSETS/chicacorreizq.png',
-        'ASSETS/chicacorre2.png'
+        'ASSETS/chicacorreder.webp',
+        'ASSETS/chicacorre1.webp',
+        'ASSETS/chicacorreizq.webp',
+        'ASSETS/chicacorre2.webp'
       ],
-      jumpTakeoff: 'ASSETS/chicasalto.png',
-      jumpRise:    'ASSETS/chicasalto1.png',
-      jumpApex:    'ASSETS/chicasalto2.png',
-      jumpFall:    'ASSETS/chicasalto3.png',
+      jumpTakeoff: 'ASSETS/chicasalto.webp',
+      jumpRise:    'ASSETS/chicasalto1.webp',
+      jumpApex:    'ASSETS/chicasalto2.webp',
+      jumpFall:    'ASSETS/chicasalto3.webp',
       golf: [
-        'ASSETS/golfchica.png',
-        'ASSETS/golfchica1.png'
+        'ASSETS/golfchica.webp',
+        'ASSETS/golfchica1.webp'
       ]
     },
     chico: {
-      idle:        'ASSETS/chicoquieto.png',
+      idle:        'ASSETS/chicoquieto.webp',
       run: [
-        'ASSETS/chicocorreder.png',
-        'ASSETS/chicocorre1.png',
-        'ASSETS/chicocorreizq.png',
-        'ASSETS/chicocorre2.png'
+        'ASSETS/chicocorreder.webp',
+        'ASSETS/chicocorre1.webp',
+        'ASSETS/chicocorreizq.webp',
+        'ASSETS/chicocorre2.webp'
       ],
-      jumpTakeoff: 'ASSETS/chicosalto.png',
-      jumpRise:    'ASSETS/chicosalto1.png',
-      jumpApex:    'ASSETS/chicosalto2.png',
-      jumpFall:    'ASSETS/chicosalto3.png',
+      jumpTakeoff: 'ASSETS/chicosalto.webp',
+      jumpRise:    'ASSETS/chicosalto1.webp',
+      jumpApex:    'ASSETS/chicosalto2.webp',
+      jumpFall:    'ASSETS/chicosalto3.webp',
       golf: [
-        'ASSETS/golfchico.png',
-        'ASSETS/golfchico1.png'
+        'ASSETS/golfchico.webp',
+        'ASSETS/golfchico1.webp'
       ]
     }
   },
@@ -984,6 +984,11 @@ function loadImage(src, timeoutMs) {
 
     img.onerror = () => {
       if (!settled) {
+        if (src.includes('.webp')) {
+          // Fallback a PNG si el navegador no soporta WebP
+          img.src = src.replace('.webp', '.png');
+          return;
+        }
         settled = true;
         clearTimeout(timer);
         missingAssets.push(src);
@@ -1000,12 +1005,11 @@ function loadImage(src, timeoutMs) {
 }
 
 // --- Carga progresiva en 3 niveles de prioridad ---
-// Nivel 1: Críticos para renderizar pantalla de inicio, menú y selector de personaje
+// Nivel 1: Críticos ultra-ligeros (< 120 KB total en WebP) para mostrar el menú de inicio al instante
 async function loadCriticalAssets() {
   const criticalJobs = [
     loadImage(ASSETS.images.logo).then(img => { IMG.logo = img; }),
     loadImage(ASSETS.images.fondoInicio).then(img => { IMG.fondoInicio = img; }),
-    loadImage(ASSETS.images.fondoinfinito).then(img => { IMG.fondoinfinito = img; }),
     loadImage(ASSETS.images.ground).then(img => { IMG.ground = img; buildGroundTile(); }),
     loadImage(ASSETS.characters.chica.idle).then(img => { IMG.chars.chica.idle = img; }),
     loadImage(ASSETS.characters.chico.idle).then(img => { IMG.chars.chico.idle = img; })
@@ -1013,11 +1017,14 @@ async function loadCriticalAssets() {
   await Promise.all(criticalJobs);
 }
 
-// Nivel 2: Esenciales para cinemática del colectivo 620, personajes corriendo/saltando y jugabilidad principal
+// Nivel 2: Esenciales para cinemática del colectivo 620, fondo de carrera, personajes corriendo/saltando y jugabilidad principal
 let tier2Promise = null;
 function loadGameplayAssets() {
   if (tier2Promise) return tier2Promise;
   const jobs = [
+    // Fondo de carrera infinito (optimizado en WebP)
+    loadImage(ASSETS.images.fondoinfinito).then(img => { IMG.fondoinfinito = img; }),
+
     // Colectivo 620 y entrada UNLaM
     loadImage(ASSETS.images.bus620closed).then(img => { IMG.bus620closed = img; }),
     loadImage(ASSETS.images.bus620open).then(img => { IMG.bus620open = img; }),
