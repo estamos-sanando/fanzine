@@ -13,13 +13,13 @@
   <link rel="icon" href="ASSETS/chicaquieta.png" type="image/png">
   <link rel="apple-touch-icon" href="ASSETS/chicaquieta.png">
   <!-- Precarga de imágenes críticas para inicio instantáneo -->
-  <link rel="preload" as="image" href="ASSETS/logonoterindas.png?v=84">
+  <link rel="preload" as="image" href="ASSETS/logonoterindas.png?v=85">
   <link rel="preload" as="image" href="ASSETS/fondoinicio.png">
   <link rel="preload" as="image" href="ASSETS/fondoinfinito.png">
   <link rel="preload" as="image" href="ASSETS/SUELO.png">
   <link rel="preload" as="image" href="ASSETS/chicaquieta.png">
   <link rel="preload" as="image" href="ASSETS/chicoquieto.png">
-  <link rel="stylesheet" href="style.css?v=84">
+  <link rel="stylesheet" href="style.css?v=85">
 </head>
 <body>
   <!-- Canvas del juego -->
@@ -29,7 +29,7 @@
   <aside id="rotate-device-modal" class="rotate-modal" aria-hidden="true" role="dialog" aria-label="Girá tu pantalla para jugar a NO TE RINDAS">
     <div class="rotate-modal__content">
       <div class="rotate-modal__logo">
-        <img src="ASSETS/logonoterindas.png?v=84" alt="NO TE RINDAS" class="rotate-modal__logo-img" width="240" height="94" decoding="async">
+        <img src="ASSETS/logonoterindas.png?v=85" alt="NO TE RINDAS" class="rotate-modal__logo-img" width="240" height="94" decoding="async">
       </div>
       <div class="rotate-modal__icon" aria-hidden="true">
         <svg viewBox="0 0 100 100" class="rotate-phone-svg" width="84" height="84">
@@ -156,51 +156,66 @@
   <main id="overlay" class="is-loading">
     <div class="start">
       <h1 class="start__logo">
-        <img src="ASSETS/logonoterindas.png?v=84" alt="¡No te rindas!" width="1027" height="401" decoding="async">
+        <img src="ASSETS/logonoterindas.png?v=85" alt="¡No te rindas!" width="1027" height="401" decoding="async">
       </h1>
 
-      <section class="start__pick" aria-labelledby="pick-title">
-        <h2 id="pick-title" class="start__label">Elegí tu personaje</h2>
-        <div class="picker" role="group" aria-label="Elegí tu personaje">
-          <button id="pick-chica" class="picker__btn" type="button" data-char="chica" aria-pressed="true" aria-label="Chica">
-            <img src="ASSETS/chicaquieta.png" alt="" height="110">
-          </button>
-          <button id="pick-chico" class="picker__btn" type="button" data-char="chico" aria-pressed="false" aria-label="Chico">
-            <img src="ASSETS/chicoquieto.png" alt="" height="110">
-          </button>
-        </div>
-      </section>
+      <div class="start__cards">
+        <!-- Cabina Izquierda: Selección de personaje, botón COMENZAR y controles -->
+        <section class="start__card start__card--play" aria-label="Elegir personaje y comenzar partida">
+          <span class="scores__bolt scores__bolt--tl" aria-hidden="true"></span>
+          <span class="scores__bolt scores__bolt--tr" aria-hidden="true"></span>
+          <span class="scores__bolt scores__bolt--bl" aria-hidden="true"></span>
+          <span class="scores__bolt scores__bolt--br" aria-hidden="true"></span>
 
-      <button id="start-btn" class="start__btn" type="button">Cargando…</button>
-      <div class="start__hint-box">
-        <span class="start__hint-arrow" aria-hidden="true">›</span>
-        <p class="start__hint"><b>Tocá</b> o barra espaciadora para saltar (máx. 3) · ¡ojo con el <b class="highlight-tero">tero</b> en el cielo!</p>
+          <div class="start__card-header">
+            <h2 id="pick-title" class="start__card-title"><span class="scores__title-star">★</span> ELEGÍ TU PERSONAJE <span class="scores__title-star">★</span></h2>
+          </div>
+
+          <section class="start__pick" aria-labelledby="pick-title">
+            <div class="picker" role="group" aria-label="Elegí tu personaje">
+              <button id="pick-chica" class="picker__btn" type="button" data-char="chica" aria-pressed="true" aria-label="Chica">
+                <img src="ASSETS/chicaquieta.png" alt="" height="110">
+              </button>
+              <button id="pick-chico" class="picker__btn" type="button" data-char="chico" aria-pressed="false" aria-label="Chico">
+                <img src="ASSETS/chicoquieto.png" alt="" height="110">
+              </button>
+            </div>
+          </section>
+
+          <button id="start-btn" class="start__btn" type="button">Cargando…</button>
+
+          <div class="start__hint-box">
+            <span class="start__hint-arrow" aria-hidden="true">›</span>
+            <p class="start__hint"><b>Tocá</b> o barra espaciadora para saltar (máx. 3) · ¡ojo con el <b class="highlight-tero">tero</b> en el cielo!</p>
+          </div>
+        </section>
+
+        <!-- Cabina Derecha: Ranking global arcade -->
+        <section id="hiscores-box" class="scores start__card start__card--scores" aria-label="Ranking global">
+          <!-- Remaches metálicos dorados en las 4 esquinas (estilo retro arcade) -->
+          <span class="scores__bolt scores__bolt--tl" aria-hidden="true"></span>
+          <span class="scores__bolt scores__bolt--tr" aria-hidden="true"></span>
+          <span class="scores__bolt scores__bolt--bl" aria-hidden="true"></span>
+          <span class="scores__bolt scores__bolt--br" aria-hidden="true"></span>
+
+          <div class="scores__header-bar">
+            <h2 class="scores__title"><span class="scores__title-star">★</span> RANKING GLOBAL · TOP 5 <span class="scores__title-star">★</span></h2>
+            <span id="overlay-live-pill" class="live-pill" style="display:none;" aria-hidden="true"></span>
+          </div>
+          <div class="scores__personal" id="scores-personal" aria-label="Tu récord actual">
+            <span class="scores__personal-label"><span class="star">★</span> TU MEJOR MARCA</span>
+            <span class="scores__personal-pts" id="personal-record-pts">00000</span>
+          </div>
+          <div class="scores__cols-head" aria-hidden="true">
+            <span>POS</span>
+            <span>INI</span>
+            <span>SCORE</span>
+          </div>
+          <ol id="hiscores" class="scores__list"></ol>
+          <button id="full-scores-btn" class="scores__more-btn" type="button"><span class="btn-trophy">🏆</span> VER RANKING COMPLETO</button>
+          <p id="hiscores-status" class="scores__status" data-state="loading" role="status"></p>
+        </section>
       </div>
-
-      <section id="hiscores-box" class="scores" aria-label="Ranking global">
-        <!-- Remaches metálicos dorados en las 4 esquinas (estilo retro arcade) -->
-        <span class="scores__bolt scores__bolt--tl" aria-hidden="true"></span>
-        <span class="scores__bolt scores__bolt--tr" aria-hidden="true"></span>
-        <span class="scores__bolt scores__bolt--bl" aria-hidden="true"></span>
-        <span class="scores__bolt scores__bolt--br" aria-hidden="true"></span>
-
-        <div class="scores__header-bar">
-          <h2 class="scores__title"><span class="scores__title-star">★</span> RANKING GLOBAL · TOP 5 <span class="scores__title-star">★</span></h2>
-          <span id="overlay-live-pill" class="live-pill" style="display:none;" aria-hidden="true"></span>
-        </div>
-        <div class="scores__personal" id="scores-personal" aria-label="Tu récord actual">
-          <span class="scores__personal-label"><span class="star">★</span> TU MEJOR MARCA</span>
-          <span class="scores__personal-pts" id="personal-record-pts">00000</span>
-        </div>
-        <div class="scores__cols-head" aria-hidden="true">
-          <span>POS</span>
-          <span>INI</span>
-          <span>SCORE</span>
-        </div>
-        <ol id="hiscores" class="scores__list"></ol>
-        <button id="full-scores-btn" class="scores__more-btn" type="button"><span class="btn-trophy">🏆</span> VER RANKING COMPLETO</button>
-        <p id="hiscores-status" class="scores__status" data-state="loading" role="status"></p>
-      </section>
     </div>
   </main>
 
@@ -268,7 +283,7 @@
     </div>
   </div>
 
-  <script src="leaderboard.js?v=84"></script>
-  <script src="game.js?v=84"></script>
+  <script src="leaderboard.js?v=85"></script>
+  <script src="game.js?v=85"></script>
 </body>
 </html>
