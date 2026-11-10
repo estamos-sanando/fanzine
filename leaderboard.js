@@ -1061,9 +1061,12 @@
       const inTop10 = this.projectedRank <= 10;
 
       if (this._els.badge) {
+        const isEn = window.I18n && window.I18n.lang === 'en';
         this._els.badge.textContent = inTop5
-          ? '👑 ¡CLASIFICASTE AL TOP 5 GLOBAL! 👑'
-          : (inTop10 ? '⭐ ¡NUEVO RÉCORD TOP 10 GLOBAL! ⭐' : '🕹️ ¡REGISTRÁ TUS INICIALES EN EL RANKING!');
+          ? (isEn ? '★ YOU MADE THE GLOBAL TOP 5! ★' : '★ ¡CLASIFICASTE AL TOP 5 GLOBAL! ★')
+          : (inTop10
+            ? (isEn ? '★ NEW TOP 10 GLOBAL RECORD! ★' : '★ ¡NUEVO RÉCORD TOP 10 GLOBAL! ★')
+            : (isEn ? 'ENTER YOUR INITIALS ON THE LEADERBOARD' : 'REGISTRÁ TUS INICIALES EN EL RANKING'));
         this._els.badge.classList.toggle('is-gold', inTop5);
       }
 
@@ -1082,10 +1085,11 @@
       });
 
       if (this._els.submitBtn) {
+        const isEn = window.I18n && window.I18n.lang === 'en';
         this._els.submitBtn.disabled = this.submitting;
         this._els.submitBtn.textContent = this.submitting
-          ? '⏳ GUARDANDO EN NUBE…'
-          : '💾 REGISTRAR PUNTAJE';
+          ? (isEn ? 'SAVING…' : 'GUARDANDO…')
+          : (isEn ? 'SUBMIT SCORE' : 'REGISTRAR PUNTAJE');
       }
     },
 

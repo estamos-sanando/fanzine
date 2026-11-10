@@ -19,7 +19,7 @@
 const ASSETS = {
   // Escenario, obstáculos y coleccionables
   images: {
-    logo:          'ASSETS/logonoterindas.png?v=86',  // Logo oficial "¡No te rindas!"
+    logo:          'ASSETS/logonoterindas.png?v=87',  // Logo oficial "¡No te rindas!"
     fondoinfinito: 'ASSETS/fondoinfinito.png',   // fondo infinito durante la carrera (Teatro, Auditorio, Biblioteca)
     ground:        'ASSETS/SUELO.png',           // vereda
     book:          'ASSETS/manualobstaculo.png', // obstáculo bajo
@@ -715,12 +715,38 @@ const Settings = {
         this.render();
       });
     }
+
     if (musicMuteBtn) {
       musicMuteBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         Music.setVolume(Music.volume > 0 ? 0 : (Music.lastVolume || CONFIG.musicVolume));
         if (musicVolume) musicVolume.value = String(Math.round(Music.volume * 100));
         this.render();
+      });
+    }
+
+    const langBtnEs = $('lang-btn-es');
+    const langBtnEn = $('lang-btn-en');
+    if (langBtnEs) {
+      langBtnEs.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (window.I18n) window.I18n.lang = 'es';
+      });
+    }
+    if (langBtnEn) {
+      langBtnEn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (window.I18n) window.I18n.lang = 'en';
+      });
+    }
+
+    if (window.I18n) {
+      window.I18n.onChange(() => {
+        if (dom.startBtn) setStartButtonReady(dom.startBtn);
+        renderOverlayScores();
+        if (dom.fullScoresModal && dom.fullScoresModal.classList.contains('is-open')) {
+          renderFullScores();
+        }
       });
     }
 
@@ -1862,7 +1888,8 @@ function setStartButtonReady(btn) {
   icon.setAttribute('aria-hidden', 'true');
   icon.textContent = '▶';
   btn.appendChild(icon);
-  btn.appendChild(document.createTextNode(' COMENZAR'));
+  const txt = (window.I18n ? window.I18n.t('startBtn') : 'COMENZAR');
+  btn.appendChild(document.createTextNode(' ' + txt));
 }
 
 stateHandlers[STATES.CHARACTER_SELECT] = {
@@ -2879,7 +2906,7 @@ stateHandlers[STATES.PLAYING] = {
         Sfx.play('milestone');
         Sfx.tone(960, 480, 0.35, 'sawtooth', 0.15);
         world.popups.push({
-          text: '⚡ ¡MODO EXTREMO: 20.000 PTS! ⚡',
+          text: (window.I18n ? window.I18n.t('extremeMode') : '★ MODO EXTREMO: 20.000 PTS ★'),
           x: W / 2,
           y: groundY - U * 1.6,
           t: 0,
@@ -3720,14 +3747,15 @@ function drawTutorialDialog(tut) {
 
   const textW = boxW - (textX - boxX) - 14;
   let fullInstruction = '';
+  const i18n = window.I18n;
   if (tut.phase === 'dialog1' || tut.phase === 'practiceBook') {
-    fullInstruction = 'Un toque / Barra espaciadora: Salto simple (esquiva manuales)';
+    fullInstruction = i18n ? i18n.t('tutDialog1') : 'Un toque / Barra espaciadora: Salto simple (esquiva manuales)';
   } else if (tut.phase === 'dialog2' || tut.phase === 'practiceHorse') {
-    fullInstruction = 'Doble toque / Doble espacio: Doble salto (esquiva el caballo)';
+    fullInstruction = i18n ? i18n.t('tutDialog2') : 'Doble toque / Doble espacio: Doble salto (esquiva el caballo)';
   } else if (tut.phase === 'dialogVirgen' || tut.phase === 'practiceVirgen') {
-    fullInstruction = 'Hasta 3 saltos seguidos: ¡Saltá alto para esquivar la Virgen!';
+    fullInstruction = i18n ? i18n.t('tutDialog3') : 'Hasta 3 saltos seguidos: ¡Saltá alto para esquivar la Virgen!';
   } else if (tut.phase === 'dialog3' || tut.phase === 'practiceTero') {
-    fullInstruction = '¡Ojo en el cielo! Esquivá los teros (no saltes sin parar)';
+    fullInstruction = i18n ? i18n.t('tutDialog4') : '¡Ojo en el cielo! Esquivá los teros (no saltes sin parar)';
   }
 
   const charCount = Number.isFinite(tut.charCount) ? tut.charCount : fullInstruction.length;
@@ -3744,7 +3772,7 @@ function drawTutorialDialog(tut) {
   ctx.fillStyle = UNLAM.light;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
-  ctx.fillText('TUTORIAL · ¡APRENDÉ A JUGAR!', textX, boxY + 12);
+  ctx.fillText(i18n ? i18n.t('tutorialTitle') : 'TUTORIAL · ¡APRENDÉ A JUGAR!', textX, boxY + 12);
 
   // Body: texto sincronizado con los sprites de diálogo
   ctx.font = `700 ${clamp(boxH * 0.22, 11, 15)}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
@@ -3941,14 +3969,17 @@ function drawHUD() {
   const marginR = Math.max(safeRight + 16, 24, settingsInset + 12);   // deja lugar a la tuerca ⚙
   const isMilestone = world.milestoneT > 0 && Math.floor(world.milestoneT * 6) % 2 === 0;
   const isExtreme = world.isExtreme && state === STATES.PLAYING;
-  const scoreText = 'PUNTOS ' + pad(world.score) + (isExtreme ? ' ⚡ EXTREMO' : '');
+  const scoreLabel = window.I18n ? window.I18n.t('points') : 'PUNTOS';
+  const extremeHudLabel = window.I18n ? window.I18n.t('extremeHud') : '★ EXTREMO';
+  const scoreText = scoreLabel + ' ' + pad(world.score) + (isExtreme ? ' ' + extremeHudLabel : '');
   const scoreColor = isMilestone ? UNLAM.light : (isExtreme ? '#ff3b30' : '#fff');
 
   drawText(scoreText, marginL, y, size, {
     align: 'left',
     color: scoreColor
   });
-  drawText('RÉCORD ' + pad(Math.max(personalRecord, world.score)), W - marginR, y, size,
+  const recordLabel = window.I18n && window.I18n.lang === 'en' ? 'RECORD ' : 'RÉCORD ';
+  drawText(recordLabel + pad(Math.max(personalRecord, world.score)), W - marginR, y, size,
            { align: 'right', color: isExtreme ? '#ffd34d' : UNLAM.green });
 
   // Indicador activo del bonus de carrito de golf (5s)
@@ -4103,13 +4134,15 @@ function drawScoreboardCard(cardX, cardY, cardW, cardH, blink, inTop5, rows) {
   // 3. Subtítulo / Estado de la partida
   const subY = cardY + clamp(cardH * 0.17, 34, 56);
   if (inTop5) {
-    drawText('★ ¡ENTRASTE AL TOP 5! ★', cardX + cardW / 2, subY, clamp(cardH * 0.040, 10, 13), {
+    drawText(window.I18n ? window.I18n.t('enteredTop5') : '★ ¡ENTRASTE AL TOP 5! ★', cardX + cardW / 2, subY, clamp(cardH * 0.040, 10, 13), {
       color: '#ffd34d', weight: 800, blink: true
     });
   } else {
     const rankMsg = world.addedRank > 5
-      ? 'PUNTAJE REGISTRADO • PUESTO #' + world.addedRank
-      : (world.newPersonalRecord ? '★ ¡SUPERASTE TU RÉCORD! ★' : 'PARTIDA FINALIZADA');
+      ? (window.I18n ? window.I18n.t('scoreSavedRank', world.addedRank) : 'PUNTAJE REGISTRADO • PUESTO #' + world.addedRank)
+      : (world.newPersonalRecord
+        ? (window.I18n ? window.I18n.t('beatPersonalRecord') : '★ ¡SUPERASTE TU RÉCORD! ★')
+        : (window.I18n ? window.I18n.t('gameOver') : 'PARTIDA FINALIZADA'));
     const subColor = world.newPersonalRecord ? '#00e676' : '#94a3b8';
     drawText(rankMsg, cardX + cardW / 2, subY, clamp(cardH * 0.038, 9.5, 12), {
       color: subColor, weight: 800
@@ -4129,7 +4162,7 @@ function drawScoreboardCard(cardX, cardY, cardW, cardH, blink, inTop5, rows) {
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.20)';
   ctx.lineWidth = 1.5;
   ctx.stroke();
-  drawText('PUNTOS', leftX + statW / 2, statY - statH * 0.22, clamp(statH * 0.26, 8.5, 11), { color: '#94a3b8', weight: 800 });
+  drawText(window.I18n ? window.I18n.t('points') : 'PUNTOS', leftX + statW / 2, statY - statH * 0.22, clamp(statH * 0.26, 8.5, 11), { color: '#94a3b8', weight: 800 });
   drawText(pad(world.score), leftX + statW / 2, statY + statH * 0.22, clamp(statH * 0.40, 13, 18), { color: '#ffffff', weight: 900 });
 
   // Caja derecha: TU RÉCORD
@@ -4140,12 +4173,12 @@ function drawScoreboardCard(cardX, cardY, cardW, cardH, blink, inTop5, rows) {
   ctx.strokeStyle = 'rgba(0, 230, 118, 0.45)';
   ctx.lineWidth = 1.5;
   ctx.stroke();
-  drawText('TU RÉCORD', rightX + statW / 2, statY - statH * 0.22, clamp(statH * 0.26, 8.5, 11), { color: '#00e676', weight: 800 });
+  drawText(window.I18n ? window.I18n.t('yourRecord') : 'TU RÉCORD', rightX + statW / 2, statY - statH * 0.22, clamp(statH * 0.26, 8.5, 11), { color: '#00e676', weight: 800 });
   drawText(pad(personalRecord), rightX + statW / 2, statY + statH * 0.22, clamp(statH * 0.40, 13, 18), { color: '#ffd34d', weight: 900 });
 
   // 5. Encabezado del Top 5
   const top5Y = cardY + clamp(cardH * 0.40, 86, 136);
-  drawText('— TOP 5 GLOBAL —', cardX + cardW / 2, top5Y, clamp(cardH * 0.038, 9, 12), { color: '#00e676', weight: 800 });
+  drawText(window.I18n ? window.I18n.t('top5Global') : '— TOP 5 GLOBAL —', cardX + cardW / 2, top5Y, clamp(cardH * 0.038, 9, 12), { color: '#00e676', weight: 800 });
 
   // 6. Filas del Top 5 distribuidas homogéneamente en el espacio vertical
   const rowStartY = cardY + clamp(cardH * 0.47, 102, 158);
@@ -4156,7 +4189,7 @@ function drawScoreboardCard(cardX, cardY, cardW, cardH, blink, inTop5, rows) {
   const medalColors = ['#ffd700', '#d9dee8', '#e0a070', '#ffffff', '#ffffff'];
 
   if (!rows.length) {
-    drawText('¡Aún sin marcas globales registradas!', cardX + cardW / 2, rowStartY + availableRowsH / 2, clamp(cardH * 0.036, 9.5, 12), {
+    drawText(window.I18n ? window.I18n.t('noGlobalScoresYet') : '¡Aún sin marcas globales registradas!', cardX + cardW / 2, rowStartY + availableRowsH / 2, clamp(cardH * 0.036, 9.5, 12), {
       color: '#94a3b8', weight: 700
     });
   } else {
@@ -4322,19 +4355,16 @@ function drawDeadPanel(blink) {
       }
     }
 
-    // Tira superior: "UNLaM • TOP 5"
+    // Tira superior: "★ TOP 5 GLOBAL ★"
     rrect(innerX + 10, innerY + 8, innerW - 20, 22, 6);
     ctx.fillStyle = 'rgba(6, 40, 24, 0.85)';
     ctx.fill();
     ctx.strokeStyle = '#ffd34d';
     ctx.lineWidth = 1.5;
     ctx.stroke();
-    drawText('🎓 UNLaM • TOP 5 🎓', charCenterX, innerY + 19, clamp(innerW * 0.065, 10, 12), { color: '#ffd34d', weight: 800 });
+    drawText('★ TOP 5 GLOBAL ★', charCenterX, innerY + 19, clamp(innerW * 0.065, 10, 12), { color: '#ffd34d', weight: 800 });
 
     // Placa dorada inferior con el puesto
-    const medalIcons = ['🥇', '🥈', '🥉', '★', '★'];
-    const rankIdx = (world.addedRank > 0 && world.addedRank <= 5) ? world.addedRank - 1 : 0;
-    const rankIcon = medalIcons[rankIdx] || '★';
     const displayRank = world.addedRank > 0 ? world.addedRank : 1;
     const plaqueH = clamp(innerH * 0.11, 26, 32);
     const plaqueY = innerY + innerH - plaqueH - 6;
@@ -4348,7 +4378,8 @@ function drawDeadPanel(blink) {
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
-    drawText(rankIcon + ' PUESTO #' + displayRank + ' ' + rankIcon, charCenterX, plaqueY + plaqueH / 2, clamp(plaqueH * 0.48, 12, 14), {
+    const rankWord = (window.I18n && window.I18n.lang === 'en' ? 'RANK #' : 'PUESTO #');
+    drawText('★ ' + rankWord + displayRank + ' ★', charCenterX, plaqueY + plaqueH / 2, clamp(plaqueH * 0.48, 12, 14), {
       color: '#1a1002', stroke: 'rgba(255,255,255,0.4)', weight: 900
     });
     ctx.restore();
@@ -4417,14 +4448,12 @@ function drawDeadPanel(blink) {
       }
     }
 
-    const medalIcons = ['🥇', '🥈', '🥉', '★', '★'];
-    const rankIdx = (world.addedRank > 0 && world.addedRank <= 5) ? world.addedRank - 1 : 0;
-    const rankIcon = medalIcons[rankIdx] || '★';
     const displayRank = world.addedRank > 0 ? world.addedRank : 1;
     rrect(innerX + 6, innerY + innerH - 22, innerW - 12, 18, 6);
     ctx.fillStyle = '#f59e0b';
     ctx.fill();
-    drawText(rankIcon + ' PUESTO #' + displayRank, charCenterX, innerY + innerH - 13, 10, { color: '#000', weight: 900 });
+    const rankWord = (window.I18n && window.I18n.lang === 'en' ? 'RANK #' : 'PUESTO #');
+    drawText('★ ' + rankWord + displayRank + ' ★', charCenterX, innerY + innerH - 13, 10, { color: '#000', weight: 900 });
     ctx.restore();
 
     // Card abajo
@@ -4585,11 +4614,11 @@ function renderFullScores() {
 
   if (dom.fullScoresCount) {
     if (list.length) {
-      dom.fullScoresCount.textContent = `${list.length} mejores marcas registradas`;
+      dom.fullScoresCount.textContent = window.I18n ? window.I18n.t('fullScoresCount', list.length) : `${list.length} mejores marcas registradas`;
     } else {
       dom.fullScoresCount.textContent = Scores.status === 'loading'
-        ? 'Cargando ranking global…'
-        : 'Ranking global listo · ¡Marcá el primer récord!';
+        ? (window.I18n ? window.I18n.t('fullScoresLoading') : 'Cargando ranking global…')
+        : (window.I18n ? window.I18n.t('noScoresYet') : 'Ranking global listo · ¡Marcá el primer récord!');
     }
   }
 
@@ -4598,10 +4627,9 @@ function renderFullScores() {
   }
   if (dom.fullScoresPersonalRank) {
     const rank = personalRecord > 0 ? Scores.getRankOf(personalRecord, initials, world.submitId) : 0;
-    dom.fullScoresPersonalRank.textContent = rank > 0 ? `Tu mejor marca: Puesto #${rank}` : 'Aún sin marca registrada';
+    dom.fullScoresPersonalRank.textContent = window.I18n ? window.I18n.t('yourRank', rank) : (rank > 0 ? `Tu mejor marca: Puesto #${rank}` : 'Aún sin marca registrada');
   }
 
-  const medalIcons = ['🥇', '🥈', '🥉'];
   const fmtRel = window.LeaderboardUtils && window.LeaderboardUtils.formatRelativeTime;
 
   list.forEach((e, i) => {
@@ -4618,7 +4646,7 @@ function renderFullScores() {
 
     const rankSpan = document.createElement('span');
     rankSpan.className = 'col-rank';
-    rankSpan.textContent = (rank <= 3 ? medalIcons[rank - 1] + ' ' : '') + '#' + String(rank).padStart(2, '0');
+    rankSpan.textContent = '#' + String(rank).padStart(2, '0');
 
     const nameSpan = document.createElement('span');
     nameSpan.className = 'col-name';
@@ -4655,8 +4683,8 @@ function renderFullScores() {
     const emptyLi = document.createElement('li');
     emptyLi.className = 'full-scores-row is-empty';
     emptyLi.textContent = Scores.status === 'loading'
-      ? 'Conectando con el Leaderboard Global…'
-      : '¡Sé la primera persona en registrar sus iniciales en el arcade!';
+      ? (window.I18n ? window.I18n.t('fullScoresLoading') : 'Cargando ranking…')
+      : (window.I18n ? window.I18n.t('noScoresYet') : '¡Marcá el primer récord!');
     dom.fullScoresList.appendChild(emptyLi);
   }
 }
@@ -4694,7 +4722,6 @@ function renderOverlayScores() {
   dom.scoresList.textContent = '';
 
   const top = (Scores.list || []).slice(0, CONFIG.maxScoresOverlay || 10);
-  const badges = ['👑', '🥈', '🥉'];
 
   top.forEach((e, i) => {
     const rank = i + 1;
@@ -4706,10 +4733,6 @@ function renderOverlayScores() {
     const rankSpan = document.createElement('span');
     rankSpan.className = 'col-rank';
     rankSpan.textContent = '#' + String(rank).padStart(2, '0');
-
-    const badgeSpan = document.createElement('span');
-    badgeSpan.className = 'col-badge';
-    badgeSpan.textContent = badges[i] || '';
 
     const nameSpan = document.createElement('span');
     nameSpan.className = 'col-name';
@@ -4724,7 +4747,6 @@ function renderOverlayScores() {
     ptsSpan.textContent = pad(e.score);
 
     li.appendChild(rankSpan);
-    if (badges[i]) li.appendChild(badgeSpan);
     li.appendChild(nameSpan);
     if (isLive) {
       const liveTag = document.createElement('span');
@@ -4742,16 +4764,18 @@ function renderOverlayScores() {
     const li = document.createElement('li');
     li.className = 'empty';
     li.textContent = Scores.status === 'loading'
-      ? 'Cargando ranking…'
-      : 'Ranking global abierto · ¡Jugá y marcá el #01!';
+      ? (window.I18n ? window.I18n.t('loadingScores') : 'Cargando ranking…')
+      : (window.I18n ? window.I18n.t('noScoresYet') : '¡Marcá el #01!');
     dom.scoresList.appendChild(li);
   }
 
   if (dom.scoresState) {
     dom.scoresState.dataset.state = Scores.status;
     dom.scoresState.textContent = Scores.status === 'offline'
-      ? (Scores.pending.length ? 'Sin conexión · tu récord se guardará al reconectar' : 'Modo sin conexión · mostrando ranking guardado')
-      : (Scores.status === 'loading' ? 'Conectando al servidor…' : '');
+      ? (Scores.pending.length
+        ? (window.I18n ? window.I18n.t('offlineNotice') : 'Sin conexión · tu récord se guardará al reconectar')
+        : (window.I18n ? window.I18n.t('offlineCopy') : 'Modo sin conexión · mostrando ranking guardado'))
+      : (Scores.status === 'loading' ? (window.I18n ? window.I18n.t('connecting') : 'Conectando al servidor…') : '');
   }
 }
 
@@ -4985,6 +5009,7 @@ function setupOverlay() {
 }
 
 async function main() {
+  if (window.I18n) window.I18n.updateDOM();
   Sfx.init();
   Music.init();
   setupOverlay();
