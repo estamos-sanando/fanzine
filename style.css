@@ -1536,17 +1536,18 @@ body.is-extreme {
 /* Grupo de botones en Game Over */
 .gameover-actions {
   position: fixed;
-  bottom: max(14px, env(safe-area-inset-bottom));
+  bottom: max(10px, env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%) translateY(20px);
   z-index: 8;
   display: flex;
-  gap: 12px;
+  gap: 10px;
   align-items: center;
   justify-content: center;
   pointer-events: none;
   opacity: 0;
   transition: opacity .25s ease, transform .25s ease;
+  max-width: calc(100vw - 20px);
 }
 .gameover-actions.is-visible {
   opacity: 1;
@@ -1967,12 +1968,15 @@ body.is-extreme {
 
   /* Game Over: botones inferiores compactos en mobile horizontal */
   .gameover-actions {
-    bottom: max(8px, env(safe-area-inset-bottom));
+    bottom: max(6px, env(safe-area-inset-bottom));
     gap: 8px;
+    width: auto;
+    max-width: calc(100vw - 16px);
   }
   .gameover-actions .menu-btn {
     padding: 6px 14px;
     font-size: 11px;
+    white-space: nowrap;
   }
 
   /* Botón ranking completo en pantalla de inicio */

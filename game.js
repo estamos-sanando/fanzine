@@ -19,7 +19,7 @@
 const ASSETS = {
   // Escenario, obstáculos y coleccionables
   images: {
-    logo:          'ASSETS/logonoterindas.png?v=83',  // Logo oficial "¡No te rindas!"
+    logo:          'ASSETS/logonoterindas.png?v=84',  // Logo oficial "¡No te rindas!"
     fondoinfinito: 'ASSETS/fondoinfinito.png',   // fondo infinito durante la carrera (Teatro, Auditorio, Biblioteca)
     ground:        'ASSETS/SUELO.png',           // vereda
     book:          'ASSETS/manualobstaculo.png', // obstáculo bajo
@@ -4109,14 +4109,14 @@ function drawScoreboardCard(cardX, cardY, cardW, cardH, blink, inTop5, rows) {
   ctx.fill();
 
   // 2. Logo oficial "¡NO TE RINDAS!"
-  const logoH = clamp(cardH * 0.125, 28, 44);
-  const logoY = cardY + clamp(cardH * 0.095, 26, 36);
+  const logoH = clamp(cardH * 0.115, 20, 38);
+  const logoY = cardY + clamp(cardH * 0.08, 14, 26);
   drawGameOverLogo(cardX + cardW / 2, logoY, logoH, cardW * 0.74);
 
   // 3. Subtítulo / Estado de la partida
-  const subY = cardY + clamp(cardH * 0.20, 52, 74);
+  const subY = cardY + clamp(cardH * 0.17, 34, 56);
   if (inTop5) {
-    drawText('★ ¡ENTRASTE AL TOP 5! ★', cardX + cardW / 2, subY, clamp(cardH * 0.040, 11, 13), {
+    drawText('★ ¡ENTRASTE AL TOP 5! ★', cardX + cardW / 2, subY, clamp(cardH * 0.040, 10, 13), {
       color: '#ffd34d', weight: 800, blink: true
     });
   } else {
@@ -4124,14 +4124,14 @@ function drawScoreboardCard(cardX, cardY, cardW, cardH, blink, inTop5, rows) {
       ? 'PUNTAJE REGISTRADO • PUESTO #' + world.addedRank
       : (world.newPersonalRecord ? '★ ¡SUPERASTE TU RÉCORD! ★' : 'PARTIDA FINALIZADA');
     const subColor = world.newPersonalRecord ? '#00e676' : '#94a3b8';
-    drawText(rankMsg, cardX + cardW / 2, subY, clamp(cardH * 0.038, 10, 12), {
+    drawText(rankMsg, cardX + cardW / 2, subY, clamp(cardH * 0.038, 9.5, 12), {
       color: subColor, weight: 800
     });
   }
 
   // 4. Cajas de PUNTOS y TU RÉCORD (amplias, legibles, estilo display arcade)
-  const statY = cardY + clamp(cardH * 0.325, 88, 122);
-  const statH = clamp(cardH * 0.125, 34, 46);
+  const statY = cardY + clamp(cardH * 0.28, 58, 94);
+  const statH = clamp(cardH * 0.115, 24, 40);
   const statW = Math.floor((cardW - 32) / 2);
 
   // Caja izquierda: PUNTOS
@@ -4142,8 +4142,8 @@ function drawScoreboardCard(cardX, cardY, cardW, cardH, blink, inTop5, rows) {
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.20)';
   ctx.lineWidth = 1.5;
   ctx.stroke();
-  drawText('PUNTOS', leftX + statW / 2, statY - statH * 0.22, clamp(statH * 0.26, 9, 11), { color: '#94a3b8', weight: 800 });
-  drawText(pad(world.score), leftX + statW / 2, statY + statH * 0.22, clamp(statH * 0.40, 15, 18), { color: '#ffffff', weight: 900 });
+  drawText('PUNTOS', leftX + statW / 2, statY - statH * 0.22, clamp(statH * 0.26, 8.5, 11), { color: '#94a3b8', weight: 800 });
+  drawText(pad(world.score), leftX + statW / 2, statY + statH * 0.22, clamp(statH * 0.40, 13, 18), { color: '#ffffff', weight: 900 });
 
   // Caja derecha: TU RÉCORD
   const rightX = cardX + cardW - 14 - statW;
@@ -4153,23 +4153,23 @@ function drawScoreboardCard(cardX, cardY, cardW, cardH, blink, inTop5, rows) {
   ctx.strokeStyle = 'rgba(0, 230, 118, 0.45)';
   ctx.lineWidth = 1.5;
   ctx.stroke();
-  drawText('TU RÉCORD', rightX + statW / 2, statY - statH * 0.22, clamp(statH * 0.26, 9, 11), { color: '#00e676', weight: 800 });
-  drawText(pad(personalRecord), rightX + statW / 2, statY + statH * 0.22, clamp(statH * 0.40, 15, 18), { color: '#ffd34d', weight: 900 });
+  drawText('TU RÉCORD', rightX + statW / 2, statY - statH * 0.22, clamp(statH * 0.26, 8.5, 11), { color: '#00e676', weight: 800 });
+  drawText(pad(personalRecord), rightX + statW / 2, statY + statH * 0.22, clamp(statH * 0.40, 13, 18), { color: '#ffd34d', weight: 900 });
 
   // 5. Encabezado del Top 5
-  const top5Y = cardY + clamp(cardH * 0.46, 126, 168);
-  drawText('— TOP 5 GLOBAL —', cardX + cardW / 2, top5Y, clamp(cardH * 0.038, 10, 12), { color: '#00e676', weight: 800 });
+  const top5Y = cardY + clamp(cardH * 0.40, 86, 136);
+  drawText('— TOP 5 GLOBAL —', cardX + cardW / 2, top5Y, clamp(cardH * 0.038, 9, 12), { color: '#00e676', weight: 800 });
 
   // 6. Filas del Top 5 distribuidas homogéneamente en el espacio vertical
-  const rowStartY = cardY + clamp(cardH * 0.535, 148, 196);
-  const footerY = cardY + cardH - clamp(cardH * 0.048, 15, 20);
-  const availableRowsH = (footerY - clamp(cardH * 0.04, 12, 16)) - rowStartY;
+  const rowStartY = cardY + clamp(cardH * 0.47, 102, 158);
+  const rowBottomY = cardY + cardH - clamp(cardH * 0.035, 6, 12);
+  const availableRowsH = Math.max(50, rowBottomY - rowStartY);
   const rowSpacing = availableRowsH / 5;
-  const rowH = clamp(rowSpacing * 0.88, 18, 28);
+  const rowH = clamp(rowSpacing * 0.88, 14, 26);
   const medalColors = ['#ffd700', '#d9dee8', '#e0a070', '#ffffff', '#ffffff'];
 
   if (!rows.length) {
-    drawText('¡Aún sin marcas globales registradas!', cardX + cardW / 2, rowStartY + availableRowsH / 2, clamp(cardH * 0.036, 10, 12), {
+    drawText('¡Aún sin marcas globales registradas!', cardX + cardW / 2, rowStartY + availableRowsH / 2, clamp(cardH * 0.036, 9.5, 12), {
       color: '#94a3b8', weight: 700
     });
   } else {
@@ -4191,7 +4191,7 @@ function drawScoreboardCard(cardX, cardY, cardW, cardH, blink, inTop5, rows) {
       }
 
       const rowColor = isPlayerRow ? (blink ? '#00e676' : '#ffd34d') : (medalColors[idx] || '#ffffff');
-      const rowFSize = clamp(rowH * 0.50, 10, 13);
+      const rowFSize = clamp(rowH * 0.52, 9.5, 13);
       const colRank = String(r.rank).padStart(2, ' ') + '.';
       const colName = r.name;
       const colPts = pad(r.score);
@@ -4201,11 +4201,6 @@ function drawScoreboardCard(cardX, cardY, cardW, cardH, blink, inTop5, rows) {
       drawText(colPts, cardX + cardW - 22, ry, rowFSize, { align: 'right', color: rowColor, weight: 800 });
     });
   }
-
-  // 7. Footer: indicación explícita de reinicio seguro
-  drawText('Usá ▶ JUGAR DE NUEVO o ESPACIO', cardX + cardW / 2, footerY, clamp(cardH * 0.032, 9.5, 11.5), {
-    color: '#ffffff', alpha: blink ? 0.95 : 0.5, weight: 700
-  });
 }
 
 function drawDeadPanel(blink) {
@@ -4247,10 +4242,11 @@ function drawDeadPanel(blink) {
     const gap = clamp(W * 0.025, 14, 22);
     const cardW = totalW - cuadroW - gap;
 
-    const availH = H - safeTop - 50;
-    const panelH = clamp(availH * 0.95, 270, 360);
+    const bottomActionsH = Math.max(50, safeBottom + 44);
+    const maxPanelH = H - safeTop - bottomActionsH - 8;
+    const panelH = clamp(maxPanelH, 210, 360);
     const startX = Math.round((W - totalW) / 2);
-    const startY = Math.max(safeTop + 8, Math.round((H - 40 - panelH) / 2));
+    const startY = Math.max(safeTop + 4, Math.round((H - bottomActionsH - panelH) / 2));
 
     // === CUADRO DE GRADUACIÓN (IZQUIERDA) ===
     const cx = startX;
@@ -4378,14 +4374,15 @@ function drawDeadPanel(blink) {
   } else if (inTop5 && !isWide) {
     // PANTALLAS ANGOSTAS (< 560px): Cuadro arriba, Card abajo
     const totalW = clamp(W * 0.92, 280, 480);
-    const availH = H - safeTop - 50;
-    const panelH = clamp(availH, 320, 500);
+    const bottomActionsH = Math.max(50, safeBottom + 44);
+    const maxPanelH = H - safeTop - bottomActionsH - 8;
+    const panelH = clamp(maxPanelH, 240, 460);
     const startX = Math.round((W - totalW) / 2);
-    const startY = Math.max(safeTop + 6, Math.round((H - 40 - panelH) / 2));
+    const startY = Math.max(safeTop + 4, Math.round((H - bottomActionsH - panelH) / 2));
 
-    const cuadroH = clamp(panelH * 0.36, 120, 160);
-    const cuadroW = clamp(cuadroH * 0.85, 110, 150);
-    const cardH = panelH - cuadroH - 10;
+    const cuadroH = clamp(panelH * 0.34, 90, 140);
+    const cuadroW = clamp(cuadroH * 0.85, 85, 130);
+    const cardH = panelH - cuadroH - 8;
 
     // Cuadro centrado arriba
     const cx = Math.round((W - cuadroW) / 2);
@@ -4449,13 +4446,14 @@ function drawDeadPanel(blink) {
 
   } else {
     // PARTIDA FINALIZADA (Sin entrar al Top 5): Card arcade centrado y estético
-    const cardW = clamp(W * 0.82, 300, 460);
-    const availH = H - safeTop - 50;
-    const panelH = clamp(availH * 0.95, 270, 370);
-    const cardX = (W - cardW) / 2;
-    const cardY = Math.max(safeTop + 8, Math.round((H - 40 - panelH) / 2));
+    const cardW = clamp(W * 0.82, 300, 480);
+    const bottomActionsH = Math.max(50, safeBottom + 44);
+    const maxCardH = H - safeTop - bottomActionsH - 8;
+    const cardH = clamp(maxCardH, 205, 350);
+    const cardX = Math.round((W - cardW) / 2);
+    const cardY = Math.max(safeTop + 4, Math.round((H - bottomActionsH - cardH) / 2));
 
-    drawScoreboardCard(cardX, cardY, cardW, panelH, blink, false, rows);
+    drawScoreboardCard(cardX, cardY, cardW, cardH, blink, false, rows);
   }
 }
 
