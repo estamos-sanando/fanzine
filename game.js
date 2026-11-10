@@ -19,7 +19,7 @@
 const ASSETS = {
   // Escenario, obstáculos y coleccionables
   images: {
-    logo:          'ASSETS/logonoterindas.png?v=85',  // Logo oficial "¡No te rindas!"
+    logo:          'ASSETS/logonoterindas.png?v=86',  // Logo oficial "¡No te rindas!"
     fondoinfinito: 'ASSETS/fondoinfinito.png',   // fondo infinito durante la carrera (Teatro, Auditorio, Biblioteca)
     ground:        'ASSETS/SUELO.png',           // vereda
     book:          'ASSETS/manualobstaculo.png', // obstáculo bajo
@@ -1238,30 +1238,17 @@ updatePersonalRecord();
 
 let liveBannerTimer = 0;
 function showLiveScoreBanner(entry) {
-  if (!dom.liveScoreBanner || !entry) return;
-  const rankTxt = entry.rank > 0 ? ` (#${String(entry.rank).padStart(2, '0')})` : '';
-  dom.liveScoreBanner.textContent = `⚡ RÉCORD · ${entry.initials} marcó ${pad(entry.score)} pts${rankTxt}`;
-  dom.liveScoreBanner.classList.add('is-visible');
-  if (state !== STATES.PLAYING) {
-    Sfx.tone(880, 1320, 0.09, 'triangle', 0.045);
-  }
-  clearTimeout(liveBannerTimer);
-  liveBannerTimer = setTimeout(() => {
-    if (dom.liveScoreBanner) dom.liveScoreBanner.classList.remove('is-visible');
-  }, 4800);
+  // Deshabilitado: el usuario no desea recibir notificaciones al actualizarse el ranking
+  if (dom.liveScoreBanner) dom.liveScoreBanner.classList.remove('is-visible');
 }
 
 function updateLivePills() {
   const st = Scores.status || 'loading';
-  const labelOverlay = st === 'offline' ? '● SIN RED' : (st === 'loading' ? '● CONECTANDO' : '● ONLINE');
-  const labelModal = st === 'offline' ? '● SIN RED' : (st === 'loading' ? '● CONECTANDO' : '● SINCRONIZADO');
   if (dom.overlayLivePill) {
     dom.overlayLivePill.dataset.state = st;
-    dom.overlayLivePill.textContent = labelOverlay;
   }
   if (dom.modalLivePill) {
     dom.modalLivePill.dataset.state = st;
-    dom.modalLivePill.textContent = labelModal;
   }
 }
 
@@ -4598,10 +4585,10 @@ function renderFullScores() {
 
   if (dom.fullScoresCount) {
     if (list.length) {
-      dom.fullScoresCount.textContent = `${list.length} marca${list.length === 1 ? '' : 's'} globales · Sincronización en tiempo real`;
+      dom.fullScoresCount.textContent = `${list.length} mejores marcas registradas`;
     } else {
       dom.fullScoresCount.textContent = Scores.status === 'loading'
-        ? 'Sincronizando ranking global…'
+        ? 'Cargando ranking global…'
         : 'Ranking global listo · ¡Marcá el primer récord!';
     }
   }
@@ -4755,7 +4742,7 @@ function renderOverlayScores() {
     const li = document.createElement('li');
     li.className = 'empty';
     li.textContent = Scores.status === 'loading'
-      ? 'Sincronizando ranking en tiempo real…'
+      ? 'Cargando ranking…'
       : 'Ranking global abierto · ¡Jugá y marcá el #01!';
     dom.scoresList.appendChild(li);
   }
@@ -4763,8 +4750,8 @@ function renderOverlayScores() {
   if (dom.scoresState) {
     dom.scoresState.dataset.state = Scores.status;
     dom.scoresState.textContent = Scores.status === 'offline'
-      ? (Scores.pending.length ? 'Sin conexión · tu récord se sincronizará automáticamente' : 'Modo sin conexión · mostrando última copia sincronizada')
-      : (Scores.status === 'loading' ? 'Conectando al servidor global…' : '');
+      ? (Scores.pending.length ? 'Sin conexión · tu récord se guardará al reconectar' : 'Modo sin conexión · mostrando ranking guardado')
+      : (Scores.status === 'loading' ? 'Conectando al servidor…' : '');
   }
 }
 
@@ -4994,11 +4981,7 @@ function setupOverlay() {
   Scores.onRank = (id, rank) => {
     if (id === world.submitId && rank > 0) world.addedRank = rank;
   };
-  Scores.onLiveArrival = (entries) => {
-    if (entries && entries.length) {
-      showLiveScoreBanner(entries[0]);
-    }
-  };
+  Scores.onLiveArrival = null;
 }
 
 async function main() {
