@@ -180,7 +180,7 @@ const CONFIG = {
   apiTimeout: 6500,                             // ms de espera máxima de red
   maxScores: 5,                                 // Cantidad visualizada en tarjeta Canvas de Game Over
   maxScoresOverlay: 5,                          // Top 5 en pizarra principal de inicio (coherente con título y sin scroll)
-  maxScoresModal: 50,                           // Top 50 en pizarra global completa
+  maxScoresModal: 100,                          // Top 100 en pizarra global completa
   initialsLength: 3,
   storageChar: 'fanzine_runner_char',
   defaultCharacter: 'chica',
@@ -4526,7 +4526,7 @@ function die() {
     transitionTo(STATES.GAME_OVER);
     return;
   }
-  if (Scores.qualifies(world.score)) {         // califica al Top 50 global (puntaje > 0)
+  if (Scores.qualifies(world.score)) {         // califica al Top 100 global (puntaje > 0)
     transitionTo(STATES.ENTRY);
   } else {
     transitionTo(STATES.GAME_OVER);
@@ -4618,7 +4618,7 @@ function renderFullScores() {
   updatePersonalRecord();
   updateLivePills();
   dom.fullScoresList.textContent = '';
-  const list = (Scores.list || []).slice(0, CONFIG.maxScoresModal || 50);
+  const list = (Scores.list || []).slice(0, CONFIG.maxScoresModal || 100);
 
   if (dom.fullScoresCount) {
     if (list.length) {

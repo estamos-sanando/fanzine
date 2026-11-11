@@ -16,7 +16,7 @@ const path = require('path');
 
 const SCHEMA_VERSION = 5;
 const MAX_STORED_SCORES = 100;
-const DEFAULT_LIMIT = 50;
+const DEFAULT_LIMIT = 100;
 const MAX_PLAUSIBLE_SCORE = 100000;
 const MIN_RUN_DURATION_MS = 500;              // Bloquea envíos instantáneos por script permitiendo muertes rápidas tras cold-start
 const MAX_SCORE_PER_SECOND = 420;             // Techo físico teórico con bonus + mates + velocidad máx.

@@ -160,7 +160,7 @@
   // ===========================================================================
   const Leaderboard = {
     apiEndpoint: '/api/scores',
-    qualifyTopLimit: 50,
+    qualifyTopLimit: 100,
     liveHighlightDurationMs: 14000,
 
     remote: [],
@@ -502,7 +502,7 @@
         const sinceParam = !forceFull && this.hasLoadedOnce && this.updatedAt > 0
           ? `&since=${encodeURIComponent(this.updatedAt)}&epoch=${encodeURIComponent(this.epoch || 1)}&count=${encodeURIComponent(this.remote.length)}`
           : '';
-        const data = await this._apiFetch('GET', null, `limit=50${sinceParam}`);
+        const data = await this._apiFetch('GET', null, `limit=100${sinceParam}`);
 
         if (data && data.mode) this.mode = data.mode;
         if (data && data.realtime) this._ensureRealtimeWebSocket(data.realtime);
