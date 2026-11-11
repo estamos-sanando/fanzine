@@ -45,7 +45,7 @@
       rotateBadge: '↺ Modo Horizontal',
 
       // Full ranking modal
-      fullLeaderboardTitle: 'LEADERBOARD ARCADE GLOBAL',
+      fullLeaderboardTitle: 'RANKING GLOBAL',
       fullScoresLoading: 'Cargando mejores marcas…',
       fullScoresCount: (n) => `${n} mejores marcas registradas`,
       noScoresYet: 'Ranking global listo · ¡Marcá el primer récord!',
@@ -98,7 +98,7 @@
       shareStoryBeatMe: '¿PODÉS SUPERAR MI MARCA?',
       shareStoryScan: 'ESCANEÁ Y JUGÁ',
       shareStoryHelp: 'AYUDAME A LLEGAR A MÁS GENTE · ¡COMPARTÍ!',
-      shareStoryScoreLabel: '★ MI RÉCORD ARCADE ★',
+      shareStoryScoreLabel: '★ MI RÉCORD ★',
       shareStoryFollow: 'Seguinos en Instagram @nellcstudio',
       shareTitle: '¡Mi récord en NO TE RINDAS!',
       shareText: (score, url) => `¡Hice ${score} puntos en NO TE RINDAS! ¿Podés superarme? Ayudame a que llegue a más gente compartiéndolo. Jugá acá: ${url}`,
@@ -147,7 +147,7 @@
       rotateBadge: '↺ Landscape Mode',
 
       // Full ranking modal
-      fullLeaderboardTitle: 'GLOBAL ARCADE LEADERBOARD',
+      fullLeaderboardTitle: 'GLOBAL LEADERBOARD',
       fullScoresLoading: 'Loading top scores…',
       fullScoresCount: (n) => `${n} top scores recorded`,
       noScoresYet: 'Global leaderboard ready · Set the first record!',
@@ -200,7 +200,7 @@
       shareStoryBeatMe: 'CAN YOU BEAT MY RECORD?',
       shareStoryScan: 'SCAN AND PLAY',
       shareStoryHelp: 'HELP ME REACH MORE PEOPLE · SHARE IT!',
-      shareStoryScoreLabel: '★ MY ARCADE HIGH SCORE ★',
+      shareStoryScoreLabel: '★ MY HIGH SCORE ★',
       shareStoryFollow: 'Follow us on Instagram @nellcstudio',
       shareTitle: 'My record in NO TE RINDAS!',
       shareText: (score, url) => `I scored ${score} points in NO TE RINDAS! Can you beat me? Help me reach more people by sharing it. Play here: ${url}`,

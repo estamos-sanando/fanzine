@@ -216,7 +216,7 @@
     ctx.fillStyle = '#ffd752';
     ctx.font = '900 28px monospace, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(t('shareStoryScoreLabel', '★ MI RÉCORD ARCADE ★'), W / 2, cardY + 55);
+    ctx.fillText(t('shareStoryScoreLabel', '★ MI RÉCORD ★'), W / 2, cardY + 55);
 
     // Personaje en el centro
     let heroImg = null;
