@@ -18,7 +18,7 @@
   <link rel="preload" as="image" href="ASSETS/SUELO.webp" type="image/webp">
   <link rel="preload" as="image" href="ASSETS/chicaquieta.webp" type="image/webp">
   <link rel="preload" as="image" href="ASSETS/chicoquieto.webp" type="image/webp">
-  <link rel="stylesheet" href="style.css?v=89">
+  <link rel="stylesheet" href="style.css?v=92">
 </head>
 <body>
   <!-- Canvas del juego -->
@@ -127,7 +127,10 @@
           <span class="full-scores-modal__personal-label"><span class="star">★</span> <span data-i18n="yourBestScore">Tu mejor marca</span></span>
           <span class="full-scores-modal__personal-rank" id="full-scores-personal-rank">Puesto #—</span>
         </div>
-        <span class="full-scores-modal__personal-pts" id="full-scores-personal-pts">00000</span>
+        <div class="full-scores-modal__personal-right">
+          <span class="full-scores-modal__personal-pts" id="full-scores-personal-pts">00000</span>
+          <button id="modal-share-btn" class="modal-share-btn" type="button" data-i18n="shareScoreBtn" title="Compartir mi récord en Instagram">📸 Compartir</button>
+        </div>
       </div>
 
       <div class="full-scores-modal__table-header">
@@ -254,7 +257,10 @@
             <span data-i18n="colScore">SCORE</span>
           </div>
           <ol id="hiscores" class="scores__list"></ol>
-          <button id="full-scores-btn" class="scores__more-btn" type="button" data-i18n="viewFullRanking">VER RANKING COMPLETO</button>
+          <div class="scores__cabinet-actions">
+            <button id="full-scores-btn" class="scores__more-btn" type="button" data-i18n="viewFullRanking">VER RANKING COMPLETO</button>
+            <button id="overlay-share-btn" class="scores__share-btn" type="button" data-i18n="shareScoreBtn">📸 COMPARTIR SCORE</button>
+          </div>
           <p id="hiscores-status" class="scores__status" data-state="loading" role="status"></p>
         </section>
       </div>
@@ -334,10 +340,10 @@
     </div>
   </div>
 
-  <script src="qrcode.min.js?v=90"></script>
-  <script src="i18n.js?v=90"></script>
-  <script src="leaderboard.js?v=90"></script>
-  <script src="story-share.js?v=90"></script>
-  <script src="game.js?v=91"></script>
+  <script src="qrcode.min.js?v=92"></script>
+  <script src="i18n.js?v=92"></script>
+  <script src="leaderboard.js?v=92"></script>
+  <script src="story-share.js?v=92"></script>
+  <script src="game.js?v=92"></script>
 </body>
 </html>

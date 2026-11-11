@@ -1546,7 +1546,7 @@ window.addEventListener('pointerdown', (e) => {
   if (state === STATES.LOADING || state === STATES.CHARACTER_SELECT) return;          // el menú usa sus propios botones
   if (window.ArcadeEntryModal && window.ArcadeEntryModal.isOpen) return;
   if (dom.fullScoresModal && dom.fullScoresModal.classList.contains('is-open')) return;
-  if (e.target && e.target.closest && e.target.closest('#arcade-entry-modal, #story-modal, #restart-btn, #menu-btn, #gameover-actions, #gameover-share-btn, #gameover-scores-btn, #full-scores-modal, #full-scores-btn, #fullscreen-btn, #skip-tutorial-btn, #settings, #overlay')) return;
+  if (e.target && e.target.closest && e.target.closest('#arcade-entry-modal, #story-modal, #overlay-share-btn, #modal-share-btn, #restart-btn, #menu-btn, #gameover-actions, #gameover-share-btn, #gameover-scores-btn, #full-scores-modal, #full-scores-btn, #fullscreen-btn, #skip-tutorial-btn, #settings, #overlay')) return;
   // En ENTRY y GAME_OVER no reiniciar por clic accidental sobre el fondo; se usan los botones dedicados
   if (state === STATES.ENTRY || state === STATES.GAME_OVER) return;
   e.preventDefault();
@@ -4845,6 +4845,35 @@ function setupOverlay() {
     dom.fullScoresBtn.addEventListener('click', onOpen);
     dom.fullScoresBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
     dom.fullScoresBtn.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
+  }
+
+  // Compartir récord desde la cabina de la pantalla de inicio o desde el modal
+  const onSharePersonalRecord = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (window.StoryShare) {
+      const bestScore = Scores.best || 0;
+      const scoreToShare = (state === STATES.GAME_OVER && world && world.score > 0) ? world.score : bestScore;
+      window.StoryShare.openModal({
+        score: scoreToShare,
+        initials: initials || storageGet(CONFIG.storageInitials, 'JUG'),
+        rank: (state === STATES.GAME_OVER && world && world.addedRank) ? world.addedRank : (Scores.personalRank || 0),
+        character: character || 'chica',
+        bestScore: bestScore
+      });
+    }
+  };
+
+  const overlayShareBtn = $('overlay-share-btn');
+  if (overlayShareBtn) {
+    overlayShareBtn.addEventListener('click', onSharePersonalRecord);
+    overlayShareBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
+    overlayShareBtn.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
+  }
+
+  const modalShareBtn = $('modal-share-btn');
+  if (modalShareBtn) {
+    modalShareBtn.addEventListener('click', onSharePersonalRecord);
   }
   if (dom.gameOverShareBtn) {
     const onShareClick = (e) => {

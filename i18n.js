@@ -28,6 +28,7 @@
       globalRankingTop5: 'RANKING GLOBAL · TOP 5',
       yourBestScore: 'TU MEJOR MARCA',
       viewFullRanking: 'VER RANKING COMPLETO',
+      shareScoreBtn: '📸 Compartir Score',
       skipTutorial: 'Saltar tutorial »',
       fullscreen: 'Pantalla completa',
 
@@ -126,6 +127,7 @@
       globalRankingTop5: 'GLOBAL LEADERBOARD · TOP 5',
       yourBestScore: 'YOUR BEST SCORE',
       viewFullRanking: 'VIEW FULL RANKING',
+      shareScoreBtn: '📸 Share Score',
       skipTutorial: 'Skip tutorial »',
       fullscreen: 'Fullscreen',
 
