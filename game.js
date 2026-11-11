@@ -4712,8 +4712,8 @@ function loadStoryShareModules() {
     document.body.appendChild(s);
   });
 
-  storyShareLoadingPromise = loadScript('qrcode.min.js?v=101')
-    .then(() => loadScript('story-share.js?v=101'))
+  storyShareLoadingPromise = loadScript('qrcode.min.js?v=102')
+    .then(() => loadScript('story-share.js?v=102'))
     .catch((err) => {
       console.warn('[Share] Error cargando módulos diferidos:', err);
       storyShareLoadingPromise = null;
