@@ -4613,6 +4613,27 @@ function selectCharacter(id) {
 }
 
 
+/* ---------- Compartir en Historia de Instagram ----------
+ * En Game Over comparte la partida recién jugada (si hizo puntos); en el resto de pantallas,
+ * el récord personal real del jugador (nunca 0 si ya tiene una marca guardada). */
+function openStoryShare() {
+  if (!window.StoryShare) return;
+  const justPlayed = state === STATES.GAME_OVER && world && world.score > 0;
+  const bestPersonal = Math.max(Number(personalRecord) || 0, Number(Scores.getPersonalRecord()) || 0);
+  const score = justPlayed ? Math.floor(world.score) : bestPersonal;
+  const savedInitials = initials || storageGet(CONFIG.storageInitials, 'JUG');
+  let rank = 0;
+  if (justPlayed && world.addedRank) rank = world.addedRank;
+  else if (score > 0) rank = Scores.getRankOf(score, savedInitials, justPlayed ? world.submitId : null);
+  window.StoryShare.openModal({
+    score,
+    initials: savedInitials,
+    rank,
+    character: character || 'chica',
+    bestScore: bestPersonal
+  });
+}
+
 function renderFullScores() {
   if (!dom.fullScoresList) return;
   updatePersonalRecord();
@@ -4851,17 +4872,7 @@ function setupOverlay() {
   const onSharePersonalRecord = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (window.StoryShare) {
-      const bestScore = Scores.best || 0;
-      const scoreToShare = (state === STATES.GAME_OVER && world && world.score > 0) ? world.score : bestScore;
-      window.StoryShare.openModal({
-        score: scoreToShare,
-        initials: initials || storageGet(CONFIG.storageInitials, 'JUG'),
-        rank: (state === STATES.GAME_OVER && world && world.addedRank) ? world.addedRank : (Scores.personalRank || 0),
-        character: character || 'chica',
-        bestScore: bestScore
-      });
-    }
+    openStoryShare();
   };
 
   const overlayShareBtn = $('overlay-share-btn');
@@ -4879,15 +4890,7 @@ function setupOverlay() {
     const onShareClick = (e) => {
       e.preventDefault();
       e.stopPropagation();
-      if (window.StoryShare) {
-        window.StoryShare.openModal({
-          score: world.score,
-          initials: initials,
-          rank: world.addedRank,
-          character: character,
-          bestScore: Scores.best
-        });
-      }
+      openStoryShare();
     };
     dom.gameOverShareBtn.addEventListener('click', onShareClick);
     dom.gameOverShareBtn.addEventListener('pointerdown', (e) => e.stopPropagation());

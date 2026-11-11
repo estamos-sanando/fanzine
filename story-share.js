@@ -168,7 +168,7 @@
     ctx.font = '900 24px monospace, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(t('shareStoryCardTitle', '★ JUEGO OFICIAL · UNLaM ★'), W / 2, 119);
+    ctx.fillText(t('shareStoryCardTitle', '★ NO TE RINDAS ★'), W / 2, 119);
     ctx.restore();
 
     // Logo principal
