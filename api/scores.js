@@ -679,7 +679,18 @@ async function fetchSingleTarget(target, timeoutMs = 4500) {
       return { schemaVersion: SCHEMA_VERSION, epoch: 1, updatedAt: 1, scores: [] };
     }
     if (!res.ok) throw new Error(`${target.name} GET HTTP ${res.status}`);
-    const json = await res.json();
+    const rawText = await res.text();
+    let json;
+    try {
+      json = JSON.parse(rawText);
+    } catch (_) {
+      const match = rawText.match(/^\s*(\{[\s\S]*?\})\s*(?:<|$)/);
+      if (match) {
+        json = JSON.parse(match[1]);
+      } else {
+        throw new Error(`${target.name} invalid JSON envelope`);
+      }
+    }
     const parsed = parseEnvelopePayload(json);
     if (!parsed) throw new Error(`${target.name} invalid JSON envelope`);
     return parsed;

@@ -1286,13 +1286,13 @@ Scores.init({
 });
 
 let initials = Scores.getSavedInitials();
-let personalRecord = Scores.getPersonalRecord();
+let personalRecord = Scores.getPersonalRecord(initials);
 
 function updatePersonalRecord(newScore = 0) {
   if (newScore > 0) {
-    personalRecord = Scores.updatePersonalRecord(newScore);
+    personalRecord = Scores.updatePersonalRecord(newScore, initials);
   } else {
-    personalRecord = Scores.getPersonalRecord();
+    personalRecord = Scores.getPersonalRecord(initials);
   }
   if (dom.scoresPersonal) {
     dom.scoresPersonal.textContent = pad(personalRecord);
@@ -4712,8 +4712,8 @@ function loadStoryShareModules() {
     document.body.appendChild(s);
   });
 
-  storyShareLoadingPromise = loadScript('qrcode.min.js?v=97')
-    .then(() => loadScript('story-share.js?v=97'))
+  storyShareLoadingPromise = loadScript('qrcode.min.js?v=98')
+    .then(() => loadScript('story-share.js?v=98'))
     .catch((err) => {
       console.warn('[Share] Error cargando módulos diferidos:', err);
       storyShareLoadingPromise = null;
@@ -4727,9 +4727,9 @@ function openStoryShare() {
   const doOpen = () => {
     if (!window.StoryShare) return;
     const justPlayed = state === STATES.GAME_OVER && world && world.score > 0;
-    const bestPersonal = Math.max(Number(personalRecord) || 0, Number(Scores.getPersonalRecord()) || 0);
-    const score = justPlayed ? Math.floor(world.score) : bestPersonal;
     const savedInitials = initials || storageGet(CONFIG.storageInitials, 'JUG');
+    const bestPersonal = Math.max(Number(personalRecord) || 0, Number(Scores.getPersonalRecord(savedInitials)) || 0);
+    const score = justPlayed ? Math.floor(world.score) : bestPersonal;
     let rank = 0;
     if (justPlayed && world.addedRank) rank = world.addedRank;
     else if (score > 0) rank = Scores.getRankOf(score, savedInitials, justPlayed ? world.submitId : null);

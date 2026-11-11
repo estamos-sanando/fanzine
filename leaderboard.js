@@ -261,13 +261,25 @@
       return clean;
     },
 
-    getPersonalRecord() {
+    getPersonalRecord(initialsToCheck) {
       const val = parseInt(safeStorageGet(STORAGE_KEYS.personal, '0'), 10);
-      return Number.isSafeInteger(val) && val > 0 && val <= MAX_PLAUSIBLE_SCORE ? val : 0;
+      let best = Number.isSafeInteger(val) && val > 0 && val <= MAX_PLAUSIBLE_SCORE ? val : 0;
+
+      // Sincroniza automáticamente con la mejor marca existente en el ranking global según las iniciales
+      const targetInitials = sanitizeInitials(initialsToCheck || this.getSavedInitials(), true);
+      if (Array.isArray(this.list) && targetInitials) {
+        for (const entry of this.list) {
+          if (entry.initials === targetInitials && Number.isSafeInteger(entry.score) && entry.score > best) {
+            best = entry.score;
+            safeStorageSet(STORAGE_KEYS.personal, best);
+          }
+        }
+      }
+      return best;
     },
 
-    updatePersonalRecord(score) {
-      const current = this.getPersonalRecord();
+    updatePersonalRecord(score, initialsToCheck) {
+      const current = this.getPersonalRecord(initialsToCheck);
       const n = Math.floor(Number(score) || 0);
       if (Number.isSafeInteger(n) && n > current && n <= MAX_PLAUSIBLE_SCORE) {
         safeStorageSet(STORAGE_KEYS.personal, n);
