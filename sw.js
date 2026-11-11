@@ -4,7 +4,7 @@
  * - fetch   : Network-First para HTML/JS/CSS (garantiza código actualizado)
  *             Cache-First para imágenes y audios pesados (máxima velocidad)
  * ========================================================= */
-const CACHE_VERSION = 'v96';
+const CACHE_VERSION = 'v97';
 const CACHE_NAME = 'fanzine-runner-' + CACHE_VERSION;
 
 // Mantener sincronizado con el diccionario ASSETS de game.js
@@ -14,8 +14,6 @@ const PRECACHE = [
   'style.css',
   'i18n.js',
   'leaderboard.js',
-  'qrcode.min.js',
-  'story-share.js',
   'game.js',
   'ASSETS/avion.webp',
   'ASSETS/avion1.webp',
@@ -104,13 +102,7 @@ const PRECACHE = [
   'ASSETS/chicofestejo1.webp',
   'ASSETS/chicofestejo2.webp',
   'ASSETS/chicofestejo3.webp',
-  'ASSETS/chicofestejo4.webp',
-  // Música (game.js la descarga con fetch y la reproduce desde un blob)
-  'ASSETS/Musica intro.mp3',
-  'ASSETS/Musicajuego.mp3',
-  'ASSETS/bonus1.mp3',
-  'ASSETS/Musicaperder (1).mp3',
-  'ASSETS/musicatop5.mp3'
+  'ASSETS/chicofestejo4.webp'
 ];
 
 self.addEventListener('install', (event) => {

@@ -16,6 +16,20 @@
 /* =============================================================================
  * 1) MAPEO DE ASSETS
  * ============================================================================= */
+// Detección automática de códec Opus en contenedor WebM (~70% ahorro de ancho de banda)
+// Fallback transparente a MP3 para navegadores sin soporte WebM Opus
+const AUDIO_EXT = (() => {
+  try {
+    const a = document.createElement('audio');
+    if (a.canPlayType && a.canPlayType('audio/webm; codecs="opus"').replace(/^no$/, '') !== '') {
+      return '.webm';
+    }
+  } catch (_) {}
+  return '.mp3';
+})();
+
+const getAudioSrc = (name) => `ASSETS/audio/${name}${AUDIO_EXT}`;
+
 const ASSETS = {
   // Escenario, obstáculos y coleccionables
   images: {
@@ -152,13 +166,13 @@ const ASSETS = {
     hit:        null
   },
 
-  // Música de fondo (mantener sincronizado con PRECACHE de sw.js)
+  // Música de fondo optimizada: WebM Opus (48-64k) con fallback automático a MP3 (80-96k)
   music: {
-    intro: 'ASSETS/Musica intro.mp3',       // intro: menú, bondi, tutorial y entrada hasta tocar la máquina expendedora
-    game:  'ASSETS/Musicajuego.mp3',        // carrera principal cuando se activa el juego
-    bonus: 'ASSETS/bonus1.mp3',            // música especial durante el bonus de carrito de golf (bonus1)
-    lose:  'ASSETS/Musicaperder (1).mp3',   // al chocar contra un obstáculo
-    top5:  'ASSETS/musicatop5.mp3'          // música triunfal al entrar al Top 5
+    intro: getAudioSrc('intro'),  // menú, bondi, tutorial y entrada
+    game:  getAudioSrc('game'),   // carrera principal
+    bonus: getAudioSrc('bonus'),  // bonus de carrito de golf
+    lose:  getAudioSrc('lose'),   // al chocar contra un obstáculo
+    top5:  getAudioSrc('top5')    // música triunfal al entrar al Top 5
   }
 };
 
@@ -950,6 +964,16 @@ const IMG = {
 
 const missingAssets = [];
 const imageCache = new Map();
+let totalPreloadTarget = 24;
+let preloadedCount = 0;
+
+function reportAssetProgress() {
+  preloadedCount++;
+  if (dom.startBtn && dom.overlay && dom.overlay.classList.contains('is-loading')) {
+    const pct = Math.min(99, Math.round((preloadedCount / totalPreloadTarget) * 100));
+    dom.startBtn.textContent = `CARGANDO ${pct}%`;
+  }
+}
 
 function loadImage(src, timeoutMs) {
   if (!src) return Promise.resolve(null);
@@ -967,6 +991,7 @@ function loadImage(src, timeoutMs) {
       if (!settled) {
         settled = true;
         missingAssets.push(src);
+        reportAssetProgress();
         resolve(null);
       }
     }, validTimeout);
@@ -979,6 +1004,7 @@ function loadImage(src, timeoutMs) {
         if (img.decode) {
           try { await img.decode(); } catch (_) {}
         }
+        reportAssetProgress();
         resolve(img);
       }
     };
@@ -993,6 +1019,7 @@ function loadImage(src, timeoutMs) {
         settled = true;
         clearTimeout(timer);
         missingAssets.push(src);
+        reportAssetProgress();
         resolve(null);
       }
     };
@@ -1099,6 +1126,10 @@ async function loadAssets() {
     loadGameplayAssets(),
     new Promise(r => setTimeout(r, 2500))
   ]);
+
+  if (dom.startBtn && dom.overlay && dom.overlay.classList.contains('is-loading')) {
+    dom.startBtn.textContent = 'CARGANDO 100%';
+  }
 
   // 3. Carga diferida en segundo plano para escenas secundarias (aviones, tutorial, festejo Top 5)
   if (typeof requestIdleCallback === 'function') {
@@ -1620,6 +1651,8 @@ document.addEventListener('visibilitychange', () => {
   Music.setSuspended(document.hidden);
   if (document.hidden) {
     if (state === STATES.PLAYING) { state = STATES.PAUSED; world.pausedAt = performance.now(); }
+  } else {
+    lastT = performance.now();
   }
 });
 
@@ -2868,6 +2901,20 @@ stateHandlers[STATES.PLAYING] = {
     layout();
     Scores.startSession(); // Genera token HMAC de sesión anti-cheat para esta carrera
     Music.play('game');    // cuando se activa el juego comienza Musicajuego.mp3
+    // Precarga diferida de pistas de audio secundarias en segundo plano sin bloquear el juego
+    if (typeof requestIdleCallback === 'function') {
+      requestIdleCallback(() => {
+        Music.preload('bonus');
+        Music.preload('lose');
+        Music.preload('top5');
+      });
+    } else {
+      setTimeout(() => {
+        Music.preload('bonus');
+        Music.preload('lose');
+        Music.preload('top5');
+      }, 1500);
+    }
   },
 
   update(dt) {
@@ -3074,18 +3121,43 @@ stateHandlers[STATES.PLAYING] = {
       p.x -= dx;
     }
 
-    for (const p of world.pickups) {
+    for (let i = 0; i < world.pickups.length; i++) {
+      const p = world.pickups[i];
       if (p.kind === 'bonus' && !p.taken && p.x + pickupDims('bonus').w <= -U) {
         // Si no lo agarró en esta pasada, vuelve a ofrecerse más adelante
         world.bonusSpawnDelay = rand(5.5, 9.0);
       }
     }
-    world.obstacles = world.obstacles.filter((o) => o.x + obstacleDims(o.kind).w > -U);
-    world.pickups   = world.pickups.filter((p) => !p.taken && p.x + pickupDims(p.kind).w > -U);
+
+    // In-place compaction sin instanciación de nuevos arrays (zero GC pauses a 60 FPS)
+    let obsLen = 0;
+    for (let i = 0; i < world.obstacles.length; i++) {
+      const o = world.obstacles[i];
+      if (o.x + obstacleDims(o.kind).w > -U) {
+        world.obstacles[obsLen++] = o;
+      }
+    }
+    world.obstacles.length = obsLen;
+
+    let pickLen = 0;
+    for (let i = 0; i < world.pickups.length; i++) {
+      const p = world.pickups[i];
+      if (!p.taken && p.x + pickupDims(p.kind).w > -U) {
+        world.pickups[pickLen++] = p;
+      }
+    }
+    world.pickups.length = pickLen;
 
     // --- Popups ---
-    for (const p of world.popups) p.t += dt;
-    world.popups = world.popups.filter((p) => p.t < 0.8);
+    let popLen = 0;
+    for (let i = 0; i < world.popups.length; i++) {
+      const p = world.popups[i];
+      p.t += dt;
+      if (p.t < 0.8) {
+        world.popups[popLen++] = p;
+      }
+    }
+    world.popups.length = popLen;
 
     // --- Colisiones ---
     const hr = heroRect();
@@ -3391,6 +3463,12 @@ stateHandlers[STATES.GAME_OVER] = {
   enter() {
     if (world.addedRank > 0 && world.addedRank <= 5) {
       GameOverCelebration.reset();
+    }
+    // Precarga diferida en background de módulos para compartir sin bloquear el Game Over
+    if (typeof requestIdleCallback === 'function') {
+      requestIdleCallback(() => loadStoryShareModules());
+    } else {
+      setTimeout(loadStoryShareModules, 200);
     }
   },
   update(dt) {
@@ -4564,6 +4642,10 @@ let fullscreenBtnShown = true;
 
 function frame(t) {
   requestAnimationFrame(frame);
+  if (document.hidden) {
+    lastT = t;
+    return;
+  }
   const dt = lastT ? clamp((t - lastT) / 1000, 0, 0.05) : 0;
   lastT = t;
 
@@ -4613,25 +4695,58 @@ function selectCharacter(id) {
 }
 
 
-/* ---------- Compartir en Historia de Instagram ----------
- * En Game Over comparte la partida recién jugada (si hizo puntos); en el resto de pantallas,
- * el récord personal real del jugador (nunca 0 si ya tiene una marca guardada). */
-function openStoryShare() {
-  if (!window.StoryShare) return;
-  const justPlayed = state === STATES.GAME_OVER && world && world.score > 0;
-  const bestPersonal = Math.max(Number(personalRecord) || 0, Number(Scores.getPersonalRecord()) || 0);
-  const score = justPlayed ? Math.floor(world.score) : bestPersonal;
-  const savedInitials = initials || storageGet(CONFIG.storageInitials, 'JUG');
-  let rank = 0;
-  if (justPlayed && world.addedRank) rank = world.addedRank;
-  else if (score > 0) rank = Scores.getRankOf(score, savedInitials, justPlayed ? world.submitId : null);
-  window.StoryShare.openModal({
-    score,
-    initials: savedInitials,
-    rank,
-    character: character || 'chica',
-    bestScore: bestPersonal
+/* ---------- Compartir en Historia de Instagram (Code-Splitting Dinámico) ----------
+ * Módulos de compartir (qrcode.min.js y story-share.js) se cargan bajo demanda
+ * sin ralentizar el arranque inicial ni la descarga del juego. */
+let storyShareLoadingPromise = null;
+function loadStoryShareModules() {
+  if (window.StoryShare && window.QRCode) return Promise.resolve();
+  if (storyShareLoadingPromise) return storyShareLoadingPromise;
+
+  const loadScript = (src) => new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src;
+    s.async = true;
+    s.onload = () => resolve();
+    s.onerror = (e) => reject(e);
+    document.body.appendChild(s);
   });
+
+  storyShareLoadingPromise = loadScript('qrcode.min.js?v=97')
+    .then(() => loadScript('story-share.js?v=97'))
+    .catch((err) => {
+      console.warn('[Share] Error cargando módulos diferidos:', err);
+      storyShareLoadingPromise = null;
+      throw err;
+    });
+
+  return storyShareLoadingPromise;
+}
+
+function openStoryShare() {
+  const doOpen = () => {
+    if (!window.StoryShare) return;
+    const justPlayed = state === STATES.GAME_OVER && world && world.score > 0;
+    const bestPersonal = Math.max(Number(personalRecord) || 0, Number(Scores.getPersonalRecord()) || 0);
+    const score = justPlayed ? Math.floor(world.score) : bestPersonal;
+    const savedInitials = initials || storageGet(CONFIG.storageInitials, 'JUG');
+    let rank = 0;
+    if (justPlayed && world.addedRank) rank = world.addedRank;
+    else if (score > 0) rank = Scores.getRankOf(score, savedInitials, justPlayed ? world.submitId : null);
+    window.StoryShare.openModal({
+      score,
+      initials: savedInitials,
+      rank,
+      character: character || 'chica',
+      bestScore: bestPersonal
+    });
+  };
+
+  if (window.StoryShare) {
+    doOpen();
+  } else {
+    loadStoryShareModules().then(doOpen).catch(() => {});
+  }
 }
 
 function renderFullScores() {
@@ -5088,7 +5203,7 @@ async function main() {
     console.warn('[Game] Carga continuó tras espera:', err);
   }
 
-  try { Music.preload(); } catch (_) {}
+  try { Music.preload('intro'); } catch (_) {}
   layout();
   resetRun();
 
