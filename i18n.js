@@ -28,7 +28,7 @@
       globalRankingTop5: 'RANKING GLOBAL · TOP 5',
       yourBestScore: 'TU MEJOR MARCA',
       viewFullRanking: 'VER RANKING COMPLETO',
-      shareScoreBtn: '📸 Compartir Score',
+      shareScoreBtn: 'Compartir score',
       skipTutorial: 'Saltar tutorial »',
       fullscreen: 'Pantalla completa',
 
@@ -71,7 +71,7 @@
 
       // Game Over & Actions
       playAgain: '▶ Jugar de nuevo',
-      shareScore: '📸 Compartir',
+      shareScore: 'Compartir',
       globalRanking: 'Ranking Global',
       menu: '↩ Menú',
       gameOver: 'PARTIDA FINALIZADA',
@@ -86,21 +86,24 @@
       bonus: '★ BONUS',
       noGlobalScoresYet: '¡Aún sin marcas globales registradas!',
 
-      // Share Story (Instagram)
-      shareModalTitle: 'HISTORIA DE INSTAGRAM',
-      shareModalSubtitle: 'Tu placa 9:16 con QR lista para compartir o guardar',
-      shareBtnAction: 'Compartir en Historia',
-      shareBtnDownload: 'Guardar Imagen',
-      shareBtnCopyLink: 'Copiar Enlace',
+      // Compartir récord (imagen con QR)
+      shareModalTitle: 'COMPARTÍ TU RÉCORD',
+      shareModalSubtitle: 'Ayudame a que NO TE RINDAS llegue a más gente: compartilo con tus amigos',
+      shareBtnAction: 'Compartir',
+      shareBtnDownload: 'Guardar imagen',
+      shareBtnCopyLink: 'Copiar enlace',
       shareCopiedToast: '¡Enlace copiado al portapapeles!',
-      shareGenerating: 'Generando historia…',
+      shareGenerating: 'Preparando imagen…',
       shareStoryCardTitle: '★ NO TE RINDAS ★',
       shareStoryBeatMe: '¿PODÉS SUPERAR MI MARCA?',
-      shareStoryScan: 'ESCANEÁ CON TU CÁMARA PARA JUGAR',
+      shareStoryScan: 'ESCANEÁ Y JUGÁ',
+      shareStoryHelp: 'AYUDAME A LLEGAR A MÁS GENTE · ¡COMPARTÍ!',
       shareStoryScoreLabel: '★ MI RÉCORD ARCADE ★',
-      shareStoryFollow: '📸 Seguinos en Instagram @nellcstudio',
+      shareStoryFollow: 'Seguinos en Instagram @nellcstudio',
       shareTitle: '¡Mi récord en NO TE RINDAS!',
-      shareSuccess: '¡Historia compartida con éxito!',
+      shareText: (score, url) => `¡Hice ${score} puntos en NO TE RINDAS! ¿Podés superarme? Ayudame a que llegue a más gente compartiéndolo. Jugá acá: ${url}`,
+      shareSuccess: '¡Gracias por compartir!',
+      shareDownloaded: '¡Imagen guardada! Compartila en tus redes',
 
       // Tutorial dialogs
       tutorialTitle: 'TUTORIAL · ¡APRENDÉ A JUGAR!',
@@ -127,7 +130,7 @@
       globalRankingTop5: 'GLOBAL LEADERBOARD · TOP 5',
       yourBestScore: 'YOUR BEST SCORE',
       viewFullRanking: 'VIEW FULL RANKING',
-      shareScoreBtn: '📸 Share Score',
+      shareScoreBtn: 'Share score',
       skipTutorial: 'Skip tutorial »',
       fullscreen: 'Fullscreen',
 
@@ -170,7 +173,7 @@
 
       // Game Over & Actions
       playAgain: '▶ Play Again',
-      shareScore: '📸 Share',
+      shareScore: 'Share',
       globalRanking: 'Global Ranking',
       menu: '↩ Menu',
       gameOver: 'GAME OVER',
@@ -185,21 +188,24 @@
       bonus: '★ BONUS',
       noGlobalScoresYet: 'No global scores recorded yet!',
 
-      // Share Story (Instagram)
-      shareModalTitle: 'INSTAGRAM STORY',
-      shareModalSubtitle: 'Your 9:16 card with QR ready to share or save',
-      shareBtnAction: 'Share to Story',
-      shareBtnDownload: 'Save Image',
-      shareBtnCopyLink: 'Copy Link',
+      // Share record (image with QR)
+      shareModalTitle: 'SHARE YOUR RECORD',
+      shareModalSubtitle: 'Help NO TE RINDAS reach more people: share it with your friends',
+      shareBtnAction: 'Share',
+      shareBtnDownload: 'Save image',
+      shareBtnCopyLink: 'Copy link',
       shareCopiedToast: 'Link copied to clipboard!',
-      shareGenerating: 'Generating story…',
+      shareGenerating: 'Preparing image…',
       shareStoryCardTitle: '★ DON\'T GIVE UP ★',
       shareStoryBeatMe: 'CAN YOU BEAT MY RECORD?',
-      shareStoryScan: 'SCAN WITH YOUR CAMERA TO PLAY',
+      shareStoryScan: 'SCAN AND PLAY',
+      shareStoryHelp: 'HELP ME REACH MORE PEOPLE · SHARE IT!',
       shareStoryScoreLabel: '★ MY ARCADE HIGH SCORE ★',
-      shareStoryFollow: '📸 Follow on Instagram @nellcstudio',
+      shareStoryFollow: 'Follow us on Instagram @nellcstudio',
       shareTitle: 'My record in NO TE RINDAS!',
-      shareSuccess: 'Story shared successfully!',
+      shareText: (score, url) => `I scored ${score} points in NO TE RINDAS! Can you beat me? Help me reach more people by sharing it. Play here: ${url}`,
+      shareSuccess: 'Thanks for sharing!',
+      shareDownloaded: 'Image saved! Share it on your socials',
 
       // Tutorial dialogs
       tutorialTitle: 'TUTORIAL · LEARN TO PLAY!',

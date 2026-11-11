@@ -1,17 +1,20 @@
 /**
- * StoryShare · Generador y exportador de Historias de Instagram 9:16 (1080x1920)
- * Permite compartir tu récord de NO TE RINDAS con un código QR interactivo para jugar al instante.
+ * StoryShare · Generador de imagen 9:16 (1080x1920) para compartir el récord en redes
+ * (Instagram, WhatsApp, etc.) con un código QR que lleva directo al juego.
  */
 (function (global) {
   'use strict';
+
+  // Dirección pública del juego: se usa en el QR, en el texto visible y en el mensaje a compartir.
+  const SHARE_URL = 'https://www.noterindasgame.com';
 
   let cachedBlob = null;
   let cachedDataUrl = null;
   let currentShareData = null;
 
-  function t(key, fallback) {
+  function t(key, fallback, ...args) {
     if (global.I18n && typeof global.I18n.t === 'function') {
-      const val = global.I18n.t(key);
+      const val = global.I18n.t(key, ...args);
       if (val && val !== key) return val;
     }
     return fallback || key;
@@ -117,7 +120,7 @@
     const initials = (data.initials || 'JUG').toUpperCase().slice(0, 3);
     const rank = Number(data.rank) || 0;
     const charId = data.character === 'chico' ? 'chico' : 'chica';
-    const playUrl = data.playUrl || (global.location.origin + global.location.pathname);
+    const playUrl = SHARE_URL;
 
     // 1. FONDO NOCTURNO RETRO ARCADE
     const bgGrad = ctx.createLinearGradient(0, 0, 0, H);
@@ -276,7 +279,7 @@
 
     // Rango o etiqueta de puntos
     ctx.shadowBlur = 0;
-    if (rank > 0 && rank <= 10) {
+    if (rank > 0 && rank <= 100) {
       ctx.fillStyle = '#00e676';
       ctx.font = '900 26px monospace, sans-serif';
       ctx.fillText(`★ PUESTO #${rank} EN EL RANKING GLOBAL ★`, W / 2, scoreBoxY + 148);
@@ -312,17 +315,21 @@
     const qrY = qrCardY + 95;
     drawQRCode(ctx, playUrl, qrX, qrY, qrSize);
 
-    // Instrucción para el espectador
+    // Instrucción para el espectador + pedido de ayuda para difundir
     ctx.fillStyle = '#ffffff';
-    ctx.font = '900 26px monospace, sans-serif';
+    ctx.font = '900 30px monospace, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(t('shareStoryScan', 'ESCANEÁ CON TU CÁMARA PARA JUGAR'), W / 2, qrCardY + 415);
+    ctx.fillText(t('shareStoryScan', 'ESCANEÁ Y JUGÁ'), W / 2, qrCardY + 402);
+
+    ctx.fillStyle = '#8ef8d9';
+    ctx.font = '900 22px monospace, sans-serif';
+    ctx.fillText(t('shareStoryHelp', 'AYUDAME A LLEGAR A MÁS GENTE · ¡COMPARTÍ!'), W / 2, qrCardY + 444);
 
     // URL visible
     const displayUrl = playUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
     ctx.fillStyle = '#ffd752';
-    ctx.font = '700 24px monospace, sans-serif';
-    ctx.fillText(displayUrl, W / 2, qrCardY + 460);
+    ctx.font = '900 30px monospace, sans-serif';
+    ctx.fillText(displayUrl, W / 2, qrCardY + 488);
 
     // 5. FOOTER: Instagram Banner @nellcstudio (Y = 1750 a 1840)
     const footY = 1755;
@@ -345,7 +352,7 @@
     ctx.textBaseline = 'middle';
     ctx.shadowBlur = 4;
     ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-    ctx.fillText(t('shareStoryFollow', '📸 Seguinos en Instagram @nellcstudio'), W / 2, footY + footH / 2);
+    ctx.fillText(t('shareStoryFollow', 'Seguinos en Instagram @nellcstudio'), W / 2, footY + footH / 2);
     ctx.restore();
 
     return canvas;
@@ -421,9 +428,9 @@
 
       const score = currentShareData ? currentShareData.score : 0;
       const file = new File([cachedBlob], 'record-no-te-rindas.png', { type: 'image/png' });
-      const playUrl = (currentShareData && currentShareData.playUrl) || (global.location.origin + global.location.pathname);
+      const playUrl = SHARE_URL;
       const shareTitle = t('shareTitle', '¡Mi récord en NO TE RINDAS!');
-      const shareText = t('shareText', `¡Hice ${score} puntos en NO TE RINDAS! ¿Podés superar mi marca? Jugá acá: ${playUrl}`);
+      const shareText = t('shareText', `¡Hice ${score} puntos en NO TE RINDAS! ¿Podés superarme? Ayudame a que llegue a más gente compartiéndolo. Jugá acá: ${playUrl}`, score, playUrl);
 
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         try {
@@ -432,29 +439,29 @@
             title: shareTitle,
             text: shareText
           });
-          showToast(t('shareSuccess', '¡Historia compartida!'));
+          showToast(t('shareSuccess', '¡Gracias por compartir!'));
         } catch (err) {
           if (err.name !== 'AbortError') {
             console.warn('[StoryShare] Falló navigator.share con archivo, descargando fallback:', err);
             downloadBlob(cachedBlob, 'record-no-te-rindas.png');
-            showToast('¡Imagen descargada para compartir!');
+            showToast(t('shareDownloaded', '¡Imagen guardada! Compartila en tus redes'));
           }
         }
       } else {
         // En desktop o navegadores sin soporte de files en navigator.share
         downloadBlob(cachedBlob, 'record-no-te-rindas.png');
-        showToast('¡Imagen 9:16 descargada! Subila a tu historia');
+        showToast(t('shareDownloaded', '¡Imagen guardada! Compartila en tus redes'));
       }
     },
 
     download() {
       if (!cachedBlob) return;
       downloadBlob(cachedBlob, 'record-no-te-rindas.png');
-      showToast('¡Imagen guardada en tu dispositivo!');
+      showToast(t('shareDownloaded', '¡Imagen guardada! Compartila en tus redes'));
     },
 
     async copyLink() {
-      const playUrl = (currentShareData && currentShareData.playUrl) || (global.location.origin + global.location.pathname);
+      const playUrl = SHARE_URL;
       try {
         await navigator.clipboard.writeText(playUrl);
         showToast(t('shareCopiedToast', '¡Enlace copiado al portapapeles!'));
