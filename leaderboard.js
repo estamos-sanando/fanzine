@@ -443,6 +443,9 @@
         // Reinicio administrativo explícito confirmado: limpiar estado global en todos los dispositivos
         this.knownIds.clear();
         this.ownIds.clear();
+        this.pending = [];
+        this._saveOutbox();
+        safeStorageSet(STORAGE_KEYS.personal, 0);
         nextRemote = incoming;
         this.updatedAt = Number(serverUpdatedAt) || Date.now();
       } else {
